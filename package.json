@@ -1,0 +1,32 @@
+{
+  "name": "pulsedesk",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Multi-tenant SaaS for trainers/clubs — trainees, schedules, attendance, payments.",
+  "workspaces": [
+    "backend",
+    "frontend"
+  ],
+  "engines": {
+    "node": ">=24"
+  },
+  "overrides": {
+    "postcss": "^8.5.10",
+    "multer": "2.2.0",
+    "esbuild": "0.28.1"
+  },
+  "scripts": {
+    "dev": "concurrently -n backend,frontend -c blue,green \"npm:dev --workspace backend\" \"npm:dev --workspace frontend\"",
+    "build": "npm run build --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "seed": "npm run seed --workspace backend"
+  },
+  "devDependencies": {
+    "concurrently": "^10.0.3"
+  },
+  "dependencies": {
+    "next": "^16.2.9"
+  }
+}

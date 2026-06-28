@@ -1,0 +1,254 @@
+import { BadRequestException } from '@nestjs/common';
+import { Test, type TestingModule } from '@nestjs/testing';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { randomUUID } from 'node:crypto';
+import { BillingMode } from '@prisma/client';
+import { LocationScopeService } from '@/auth/scope/location-scope.service';
+import { PrismaService } from '@/prisma/prisma.service';
+import { FeesService } from '@/fees/fees.service';
+import { DashboardService } from './dashboard.service';
+
+describe('DashboardService', () => {
+  let service: DashboardService;
+  let fees: FeesService;
+  let prisma: PrismaService;
+  const tenantIds: string[] = [];
+
+  beforeAll(async () => {
+    const moduleRef: TestingModule = await Test.createTestingModule({
+      providers: [DashboardService, FeesService, LocationScopeService, PrismaService],
+    }).compile();
+    service = moduleRef.get(DashboardService);
+    fees = moduleRef.get(FeesService);
+    prisma = moduleRef.get(PrismaService);
+    await prisma.onModuleInit();
+  });
+
+  afterAll(async () => {
+    if (tenantIds.length) {
+      await prisma.tenant.deleteMany({ where: { id: { in: tenantIds } } });
+    }
+    await prisma.onModuleDestroy();
+  });
+
+  async function newTenant() {
+    const tenant = await prisma.tenant.create({
+      data: { name: 'Test', slug: `t-${randomUUID()}` },
+    });
+    tenantIds.push(tenant.id);
+    return tenant;
+  }
+  async function setupClassWithTrainee(tenantId: string) {
+    const trainee = await prisma.trainee.create({
+      data: { tenantId, firstName: 'T', lastName: 'X', dateOfBirth: new Date('2000-01-01') },
+    });
+    const cls = await prisma.class.create({
+      data: {
+        tenantId,
+        name: `Cls-${randomUUID()}`,
+        billingMode: BillingMode.PER_MONTH,
+        monthlyAmount: 100,
+        trainees: { connect: [{ id: trainee.id }] },
+      },
+    });
+    return { traineeId: trainee.id, classId: cls.id };
+  }
+  async function makeFeeWithPayments(
+    tenantId: string,
+    classId: string,
+    traineeId: string,
+    periodStart: string,
+    periodEnd: string,
+    amount: number,
+    payments: Array<{ amount: number; paidAt: string }> = [],
+  ) {
+    const fee = await fees.create(tenantId, {
+      classId,
+      traineeId,
+      amount,
+      periodStart,
+      periodEnd,
+    });
+    for (const p of payments) {
+      await prisma.payment.create({
+        data: {
+          tenantId,
+          feeId: fee.id,
+          amount: p.amount,
+          paidAt: new Date(p.paidAt),
+        },
+      });
+    }
+    return fee;
+  }
+
+  describe('getFeesSummary — explicit range', () => {
+    it('returns one entry per month in [from, to] with zero-fill for months without activity', async () => {
+      const t = await newTenant();
+      const result = await service.getFeesSummary(t.id, {
+        from: '2026-01-01',
+        to: '2026-03-31',
+      });
+      expect(result.map((r) => r.period)).toEqual(['2026-01', '2026-02', '2026-03']);
+      expect(result.every((r) => r.collected === 0 && r.pending === 0)).toBe(true);
+    });
+
+    it('groups fees by Fee.periodStart month and sums amount → pending = billed - collected', async () => {
+      const t = await newTenant();
+      const { classId, traineeId } = await setupClassWithTrainee(t.id);
+      // March: billed 100, collected 30 → pending 70
+      await makeFeeWithPayments(
+        t.id,
+        classId,
+        traineeId,
+        '2026-03-01',
+        '2026-03-31',
+        100,
+        [{ amount: 30, paidAt: '2026-03-15' }],
+      );
+      // April: billed 100, collected 100 → pending 0
+      const trainee2 = await prisma.trainee.create({
+        data: { tenantId: t.id, firstName: 'B', lastName: 'B', dateOfBirth: new Date('2000-01-01') },
+      });
+      await makeFeeWithPayments(
+        t.id,
+        classId,
+        trainee2.id,
+        '2026-04-01',
+        '2026-04-30',
+        100,
+        [{ amount: 100, paidAt: '2026-04-10' }],
+      );
+
+      const result = await service.getFeesSummary(t.id, {
+        from: '2026-03-01',
+        to: '2026-04-30',
+      });
+      expect(result).toEqual([
+        { period: '2026-03', collected: 30, pending: 70 },
+        { period: '2026-04', collected: 100, pending: 0 },
+      ]);
+    });
+
+    it('aggregates multiple payments against the same fee correctly', async () => {
+      const t = await newTenant();
+      const { classId, traineeId } = await setupClassWithTrainee(t.id);
+      await makeFeeWithPayments(
+        t.id,
+        classId,
+        traineeId,
+        '2026-03-01',
+        '2026-03-31',
+        100,
+        [
+          { amount: 40, paidAt: '2026-03-10' },
+          { amount: 35, paidAt: '2026-03-20' },
+        ],
+      );
+      const result = await service.getFeesSummary(t.id, {
+        from: '2026-03-01',
+        to: '2026-03-31',
+      });
+      expect(result).toEqual([{ period: '2026-03', collected: 75, pending: 25 }]);
+    });
+
+    it('excludes fees in other tenants', async () => {
+      const a = await newTenant();
+      const b = await newTenant();
+      const setupB = await setupClassWithTrainee(b.id);
+      await makeFeeWithPayments(
+        b.id,
+        setupB.classId,
+        setupB.traineeId,
+        '2026-03-01',
+        '2026-03-31',
+        500,
+        [{ amount: 500, paidAt: '2026-03-15' }],
+      );
+      const result = await service.getFeesSummary(a.id, {
+        from: '2026-03-01',
+        to: '2026-03-31',
+      });
+      expect(result).toEqual([{ period: '2026-03', collected: 0, pending: 0 }]);
+    });
+
+    it('rejects when "to" is before "from"', async () => {
+      const t = await newTenant();
+      await expect(
+        service.getFeesSummary(t.id, { from: '2026-04-01', to: '2026-03-01' }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    });
+  });
+
+  describe('getFeesSummary — defaults', () => {
+    it('returns 6 contiguous months when no range is provided', async () => {
+      const t = await newTenant();
+      const result = await service.getFeesSummary(t.id, {});
+      expect(result).toHaveLength(6);
+      // Monotonically increasing month keys.
+      const sorted = [...result].sort((a, b) => a.period.localeCompare(b.period));
+      expect(result.map((r) => r.period)).toEqual(sorted.map((r) => r.period));
+    });
+  });
+
+  describe('getCashflowSummary', () => {
+    it('keys collected on Payment.paidAt month, NOT on Fee.periodStart month', async () => {
+      const t = await newTenant();
+      const { classId, traineeId } = await setupClassWithTrainee(t.id);
+      // Fee billed for March, paid in April — under the cash-flow lens, the
+      // April month should show the collection (the billing lens shows it under March).
+      await makeFeeWithPayments(
+        t.id,
+        classId,
+        traineeId,
+        '2026-03-01',
+        '2026-03-31',
+        100,
+        [{ amount: 100, paidAt: '2026-04-12' }],
+      );
+      const result = await service.getCashflowSummary(t.id, {
+        from: '2026-03-01',
+        to: '2026-04-30',
+      });
+      expect(result).toEqual([
+        { period: '2026-03', collected: 0, billed: 100 },
+        { period: '2026-04', collected: 100, billed: 0 },
+      ]);
+    });
+
+    it('zero-fills empty months and rejects bad range', async () => {
+      const t = await newTenant();
+      const empty = await service.getCashflowSummary(t.id, {
+        from: '2026-01-01',
+        to: '2026-02-28',
+      });
+      expect(empty).toEqual([
+        { period: '2026-01', collected: 0, billed: 0 },
+        { period: '2026-02', collected: 0, billed: 0 },
+      ]);
+      await expect(
+        service.getCashflowSummary(t.id, { from: '2026-04-01', to: '2026-03-01' }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it('cross-tenant isolation', async () => {
+      const a = await newTenant();
+      const b = await newTenant();
+      const setupB = await setupClassWithTrainee(b.id);
+      await makeFeeWithPayments(
+        b.id,
+        setupB.classId,
+        setupB.traineeId,
+        '2026-03-01',
+        '2026-03-31',
+        500,
+        [{ amount: 500, paidAt: '2026-03-15' }],
+      );
+      const result = await service.getCashflowSummary(a.id, {
+        from: '2026-03-01',
+        to: '2026-03-31',
+      });
+      expect(result).toEqual([{ period: '2026-03', collected: 0, billed: 0 }]);
+    });
+  });
+});

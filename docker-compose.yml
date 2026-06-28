@@ -1,0 +1,56 @@
+# Base stack = PRODUCTION.
+#   Production:  docker compose -f docker-compose.yml up --build
+#   Development: docker compose up --build   (auto-merges docker-compose.override.yml)
+#
+# Copy .env.docker.example -> .env.docker first (holds backend secrets).
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+      target: prod
+    image: pulsedesk-backend
+    env_file:
+      - .env.docker
+    environment:
+      # SQLite lives on the named volume, outside the image/source tree.
+      DATABASE_URL: file:/data/pulsedesk.db
+      PORT: "4000"
+    ports:
+      - "4000:4000"
+    volumes:
+      - pulsedesk-db:/data
+    restart: unless-stopped
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://localhost:4000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+      target: prod
+      args:
+        # Baked into the browser bundle. Override via shell env for a custom API host:
+        #   NEXT_PUBLIC_API_URL=https://api.example.com docker compose -f docker-compose.yml build
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:4000}
+        NEXT_PUBLIC_DEFAULT_LOCALE: ${NEXT_PUBLIC_DEFAULT_LOCALE:-bg}
+    image: pulsedesk-frontend
+    environment:
+      PORT: "3000"
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  pulsedesk-db:

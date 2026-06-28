@@ -1,0 +1,146 @@
+'use client';
+
+import { Plus } from 'lucide-react';
+import Link from 'next/link';
+import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import { ConfirmDialog } from '@/components/confirm-dialog';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Skeleton } from '@/components/ui/skeleton';
+import { ApiError } from '@/lib/api';
+import { Locations, type Location } from '@/lib/api-resources';
+
+export default function LocationsListPage() {
+  const { t } = useTranslation();
+  const [rows, setRows] = useState<Location[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<Location | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const reload = () => {
+    Locations.list()
+      .then(setRows)
+      .catch((e: unknown) => setError(e instanceof Error ? e.message : 'load failed'));
+  };
+
+  useEffect(reload, []);
+
+  const onDelete = async () => {
+    if (!pendingDelete) return;
+    setBusy(true);
+    try {
+      await Locations.remove(pendingDelete.id);
+      setPendingDelete(null);
+      reload();
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : t('common.errors.generic'));
+      setPendingDelete(null);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">{t('locations.title')}</h1>
+          <p className="text-sm text-muted-foreground">{t('locations.subtitle')}</p>
+        </div>
+        <Button asChild>
+          <Link href="/locations/new">
+            <Plus className="h-4 w-4" />
+            {t('locations.new')}
+          </Link>
+        </Button>
+      </div>
+
+      {error ? (
+        <p role="alert" className="text-sm text-destructive">
+          {error}
+        </p>
+      ) : null}
+
+      <div className="overflow-hidden rounded-lg border bg-card">
+        <table className="w-full text-sm">
+          <thead className="bg-muted/50">
+            <tr>
+              <th className="p-3 text-left font-medium text-muted-foreground">
+                {t('locations.fields.name')}
+              </th>
+              <th className="p-3 text-left font-medium text-muted-foreground">
+                {t('locations.fields.address')}
+              </th>
+              <th className="p-3 text-left font-medium text-muted-foreground">
+                {t('locations.fields.status')}
+              </th>
+              <th className="w-1 p-3"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows === null ? (
+              Array.from({ length: 3 }).map((_, i) => (
+                <tr key={`sk-${i}`} className="border-t">
+                  <td className="p-3">
+                    <Skeleton className="h-4 w-32" />
+                  </td>
+                  <td className="p-3">
+                    <Skeleton className="h-4 w-48" />
+                  </td>
+                  <td className="p-3">
+                    <Skeleton className="h-5 w-16 rounded-full" />
+                  </td>
+                  <td className="p-3"></td>
+                </tr>
+              ))
+            ) : rows.length === 0 ? (
+              <tr>
+                <td colSpan={4} className="p-10 text-center text-sm text-muted-foreground">
+                  {t('locations.empty')}
+                </td>
+              </tr>
+            ) : (
+              rows.map((loc) => (
+                <tr key={loc.id} className="border-t transition-colors hover:bg-muted/30">
+                  <td className="p-3 font-medium">{loc.name}</td>
+                  <td className="p-3 text-muted-foreground">{loc.address ?? '—'}</td>
+                  <td className="p-3">
+                    <Badge variant={loc.isActive ? 'success' : 'secondary'}>
+                      {loc.isActive ? t('common.active') : t('common.inactive')}
+                    </Badge>
+                  </td>
+                  <td className="whitespace-nowrap p-3 text-right">
+                    <Button asChild variant="ghost" size="sm">
+                      <Link href={`/locations/${loc.id}/edit`}>{t('common.edit')}</Link>
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="ml-1 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                      onClick={() => setPendingDelete(loc)}
+                    >
+                      {t('common.delete')}
+                    </Button>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      <ConfirmDialog
+        open={pendingDelete !== null}
+        onOpenChange={(open) => {
+          if (!open) setPendingDelete(null);
+        }}
+        title={t('locations.deleteConfirm', { name: pendingDelete?.name ?? '' })}
+        confirmLabel={t('common.delete')}
+        cancelLabel={t('common.cancel')}
+        onConfirm={onDelete}
+        busy={busy}
+      />
+    </div>
+  );
+}

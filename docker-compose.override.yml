@@ -1,0 +1,45 @@
+# Development overlay — auto-merged by `docker compose up` (no -f needed).
+# Switches both services to their `dev` target, bind-mounts the source for
+# hot-reload, and shields the Linux-built node_modules from the host bind mount.
+
+services:
+  backend:
+    build:
+      target: dev
+    environment:
+      NODE_ENV: development
+      DATABASE_URL: file:/data/pulsedesk.db
+      RUN_SEED: "true"
+      # Hot-reload on Windows/Docker Desktop: host FS events don't reach the
+      # container over bind mounts, so the watchers must poll.
+      CHOKIDAR_USEPOLLING: "true"
+      WATCHPACK_POLLING: "true"
+    command: ["npm", "run", "dev", "--workspace", "backend"]
+    volumes:
+      - .:/app
+      # Anonymous volumes keep the image's Linux node_modules instead of the
+      # host's (Windows-built) ones that the bind mount would otherwise expose.
+      - /app/node_modules
+      - /app/backend/node_modules
+      - /app/frontend/node_modules
+      # SQLite stays on the named volume, never the bind mount (Windows locking).
+      - pulsedesk-db:/data
+
+  frontend:
+    build:
+      target: dev
+    environment:
+      NODE_ENV: development
+      # next dev compiles on the fly, so NEXT_PUBLIC_* are read at runtime here.
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:4000}
+      NEXT_PUBLIC_DEFAULT_LOCALE: ${NEXT_PUBLIC_DEFAULT_LOCALE:-bg}
+      WATCHPACK_POLLING: "true"
+      CHOKIDAR_USEPOLLING: "true"
+    command: ["npm", "run", "dev", "--workspace", "frontend"]
+    volumes:
+      - .:/app
+      - /app/node_modules
+      - /app/backend/node_modules
+      - /app/frontend/node_modules
+      # Keep the Next.js build cache off the host bind mount (perf on Windows).
+      - /app/frontend/.next

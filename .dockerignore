@@ -1,0 +1,54 @@
+# Build context is the repo root for every image. Keep it small and never copy
+# host-built or secret artifacts into the image.
+
+# Dependencies (reinstalled inside the Linux image)
+**/node_modules
+
+# Build outputs (rebuilt inside the image)
+**/dist
+**/build
+**/.next
+**/out
+**/*.tsbuildinfo
+
+# Database files (DB lives on a Docker volume, never baked into an image)
+**/*.db
+**/*.db-journal
+**/*.sqlite
+**/*.sqlite3
+
+# Environment / secrets (passed at runtime via env_file / build args)
+.env
+.env.*
+**/.env
+**/.env.*
+
+# Test / coverage artifacts
+**/coverage
+**/.nyc_output
+
+# Docker artifacts themselves
+Dockerfile
+**/Dockerfile
+docker-compose*.yml
+.dockerignore
+
+# VCS / IDE / OS
+.git
+.gitignore
+.idea
+.vscode
+**/.DS_Store
+**/Thumbs.db
+
+# Logs & caches
+**/*.log
+**/.cache
+**/.turbo
+**/.eslintcache
+
+# Docs (not needed at build time)
+*.md
+
+# Misc
+*.zip

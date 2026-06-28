@@ -1,0 +1,437 @@
+// PulseDesk schema. Designed for SQLite dev / Postgres or MySQL prod.
+// Conventions kept portable: cuid IDs, no SQLite-only types, no @db.* annotations,
+// no provider-specific functions. Enums are stored as strings under SQLite (Prisma
+// will materialize real enum types when the provider switches to Postgres).
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = []
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// === ENUMS ===
+
+enum UserRole {
+  SUPER_ADMIN
+  ADMIN
+  EMPLOYEE
+  CUSTOMER
+}
+
+enum BillingMode {
+  PER_MONTH
+  PER_SESSION
+}
+
+enum ContactRelationship {
+  PARENT
+  GUARDIAN
+  GRANDPARENT
+  SIBLING
+  OTHER
+}
+
+enum SessionStatus {
+  SCHEDULED
+  COMPLETED
+  CANCELLED
+}
+
+enum AttendanceStatus {
+  PENDING
+  PRESENT
+  ABSENT
+  EXCUSED
+}
+
+// Customer-side intent — written by trainees / their guardians, never by trainers.
+// Admin/trainer cells of the attendance grid use AttendanceStatus.
+enum AttendanceRsvp {
+  CONFIRMED
+  DECLINED
+  RESCHEDULE_REQUESTED
+}
+
+enum DayOfWeek {
+  MON
+  TUE
+  WED
+  THU
+  FRI
+  SAT
+  SUN
+}
+
+enum FeeStatus {
+  UNPAID
+  PARTIAL
+  PAID
+}
+
+// === MODELS ===
+
+model Language {
+  id        String   @id @default(cuid())
+  code      String   @unique // BCP-47 short code, e.g. "en", "bg"
+  name      String
+  isDefault Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Tenant {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users          User[]
+  locations      Location[]
+  classes        Class[]
+  trainees       Trainee[]
+  contactPersons ContactPerson[]
+  sessions       Session[]
+  attendances    Attendance[]
+  classSchedules ClassSchedule[]
+  fees           Fee[]
+  payments       Payment[]
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  firstName    String?
+  lastName     String?
+  role         UserRole
+  isActive     Boolean  @default(true)
+
+  // SUPER_ADMIN has tenantId = null. All other roles must be tenant-scoped.
+  tenantId String?
+  tenant   Tenant? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  refreshTokens       RefreshToken[]
+  passwordResetTokens PasswordResetToken[]
+
+  // Locations a trainer (EMPLOYEE) is assigned to.
+  locations Location[] @relation("UserLocations")
+
+  // Classes a trainer (EMPLOYEE) teaches.
+  taughtClasses Class[] @relation("ClassTrainers")
+
+  // The trainee profile this user *is* (adult Customer with their own login).
+  traineeAccount Trainee? @relation("TraineeAccount")
+
+  // Trainees this user is a guardian for (Customer guardian → child trainees).
+  guardedTrainees Trainee[] @relation("TraineeGuardians")
+
+  // Sessions this user is teaching (per-session trainer roster, may differ from class trainers).
+  sessionsTaught Session[] @relation("SessionTrainers")
+
+  // Audit trail — attendance rows this user marked.
+  attendancesMarked Attendance[] @relation("AttendanceMarkedBy")
+
+  // Audit trail — payments this user recorded.
+  paymentsRecorded Payment[] @relation("PaymentRecordedBy")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Email is globally unique — one email maps to exactly one account (any tenant or super admin).
+  @@index([tenantId])
+}
+
+model RefreshToken {
+  id        String    @id @default(cuid())
+  tokenHash String    @unique
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+// One-time password-reset tokens. Pattern mirrors RefreshToken: we store sha256 of the
+// raw token, never the raw token itself. The raw token is only ever sent in the email
+// link. Issuing a new reset for a user marks any prior unused tokens as used so only
+// the latest link is valid.
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  tokenHash String    @unique
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model Location {
+  id        String   @id @default(cuid())
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name      String
+  address   String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  trainers       User[]          @relation("UserLocations")
+  trainees       Trainee[]       @relation("TraineeLocations")
+  classes        Class[]         @relation("ClassLocations")
+  sessions       Session[]
+  classSchedules ClassSchedule[]
+
+  @@unique([tenantId, name])
+  @@index([tenantId])
+}
+
+model Class {
+  id            String      @id @default(cuid())
+  tenantId      String
+  tenant        Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name          String
+  description   String?
+  billingMode   BillingMode
+  // Set when billingMode = PER_MONTH (fixed monthly fee per trainee).
+  monthlyAmount Decimal?
+  // Set when billingMode = PER_SESSION.
+  sessionPrice  Decimal?
+  isActive      Boolean     @default(true)
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  locations Location[]      @relation("ClassLocations")
+  trainers  User[]          @relation("ClassTrainers")
+  trainees  Trainee[]       @relation("ClassTrainees")
+  sessions  Session[]
+  schedules ClassSchedule[]
+  fees      Fee[]
+
+  @@unique([tenantId, name])
+  @@index([tenantId])
+}
+
+model Trainee {
+  id          String   @id @default(cuid())
+  tenantId    String
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  firstName   String
+  lastName    String
+  dateOfBirth DateTime
+  phone       String?
+  email       String?
+  notes       String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Optional: trainee may have their own User account (adult learner).
+  userId String? @unique
+  user   User?   @relation("TraineeAccount", fields: [userId], references: [id], onDelete: SetNull)
+
+  // Many-to-many — a trainee can have multiple guardians; a guardian (User) can manage many trainees.
+  guardians User[] @relation("TraineeGuardians")
+
+  locations   Location[]      @relation("TraineeLocations")
+  classes     Class[]         @relation("ClassTrainees")
+  contacts    ContactPerson[]
+  attendances Attendance[]
+  fees        Fee[]
+
+  @@index([tenantId])
+  @@index([tenantId, lastName])
+}
+
+model ContactPerson {
+  id           String              @id @default(cuid())
+  tenantId     String
+  tenant       Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  traineeId    String
+  trainee      Trainee             @relation(fields: [traineeId], references: [id], onDelete: Cascade)
+  firstName    String
+  lastName     String
+  relationship ContactRelationship
+  phone        String?
+  email        String?
+  isPrimary    Boolean             @default(false)
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+
+  @@index([tenantId])
+  @@index([traineeId])
+}
+
+model Session {
+  id         String        @id @default(cuid())
+  tenantId   String
+  tenant     Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  classId    String
+  class      Class         @relation(fields: [classId], references: [id], onDelete: Cascade)
+  locationId String
+  location   Location      @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  startsAt   DateTime
+  endsAt     DateTime
+  status     SessionStatus @default(SCHEDULED)
+  notes      String?
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
+
+  // Per-session trainer roster — defaults to the class's trainers at creation time,
+  // but admins can override (e.g., to assign a substitute) without editing the class.
+  trainers User[] @relation("SessionTrainers")
+
+  attendances Attendance[]
+  fees        Fee[]
+
+  @@index([tenantId])
+  @@index([tenantId, startsAt])
+  @@index([classId])
+  @@index([locationId])
+}
+
+model Attendance {
+  id          String           @id @default(cuid())
+  tenantId    String
+  tenant      Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  sessionId   String
+  session     Session          @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  traineeId   String
+  trainee     Trainee          @relation(fields: [traineeId], references: [id], onDelete: Cascade)
+
+  // Trainer/admin record of what actually happened. PENDING until a trainer marks it.
+  status      AttendanceStatus @default(PENDING)
+
+  // Customer-side intent (trainee or guardian RSVP). Independent of `status`.
+  traineeRsvp AttendanceRsvp?
+
+  notes        String?
+  markedAt     DateTime?
+
+  // Audit pointer — preserves referential integrity while the user exists.
+  // Becomes NULL on user deletion (GDPR right-to-erasure).
+  markedById   String?
+  markedBy     User?    @relation("AttendanceMarkedBy", fields: [markedById], references: [id], onDelete: SetNull)
+
+  // Denormalized snapshot at mark-time. Survives user deletion and renames.
+  // The service writes both this and `markedById` in the same transaction.
+  markedByEmailSnapshot String?
+  markedByNameSnapshot  String?
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // One attendance row per (session, trainee).
+  @@unique([sessionId, traineeId])
+  @@index([tenantId])
+  @@index([sessionId])
+  @@index([traineeId])
+}
+
+// Recurring weekly slot for a class. Templates only — never queried as schedule events
+// directly. The "Generate sessions" admin flow materializes concrete Session rows from
+// these for a given date range. Pattern changes don't retroactively affect already-
+// generated sessions.
+model ClassSchedule {
+  id         String    @id @default(cuid())
+  tenantId   String
+  tenant     Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  classId    String
+  class      Class     @relation(fields: [classId], references: [id], onDelete: Cascade)
+  locationId String
+  location   Location  @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  dayOfWeek  DayOfWeek
+  // 24-hour "HH:MM" — portable across providers, validated in the service.
+  startTime  String
+  endTime    String
+  isActive   Boolean   @default(true)
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  @@index([tenantId])
+  @@index([classId])
+  @@index([locationId])
+}
+
+// Fee charged to a trainee for a class. Two flavors driven by Class.billingMode:
+//   - PER_MONTH: sessionId = null. periodStart/periodEnd cover the chosen month
+//     (admins generally pick "first day of month" → "last day"). Bulk-generated
+//     in one shot per (trainee, class, period).
+//   - PER_SESSION: sessionId is set; periodStart/periodEnd typically equal the
+//     session's startsAt/endsAt date. Bulk-generated for a session range.
+// Idempotency is enforced in the service (bulk-load + Set lookup), not via DB
+// uniques — Prisma + SQLite don't support partial uniques cleanly.
+model Fee {
+  id        String    @id @default(cuid())
+  tenantId  String
+  tenant    Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  classId   String
+  class     Class     @relation(fields: [classId], references: [id], onDelete: Cascade)
+
+  traineeId String
+  trainee   Trainee   @relation(fields: [traineeId], references: [id], onDelete: Cascade)
+
+  // Optional — set only for PER_SESSION fees.
+  sessionId String?
+  session   Session?  @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+
+  // Inclusive period this fee covers. Stored as DateTime (UTC midnight) for portability.
+  periodStart DateTime
+  periodEnd   DateTime
+
+  amount    Decimal
+  status    FeeStatus @default(UNPAID)
+  notes     String?
+
+  payments  Payment[]
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@index([tenantId])
+  @@index([tenantId, status])
+  @@index([tenantId, periodStart])
+  @@index([classId])
+  @@index([traineeId])
+  @@index([sessionId])
+}
+
+// A single manual payment recorded against a fee. Multiple payments per fee allowed
+// (partial payments). On insert/delete the FeesService recomputes Fee.status.
+model Payment {
+  id        String   @id @default(cuid())
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  feeId     String
+  fee       Fee      @relation(fields: [feeId], references: [id], onDelete: Cascade)
+
+  amount    Decimal
+  paidAt    DateTime
+  method    String?
+  notes     String?
+
+  // Audit pointer + denormalized snapshot — same pattern as Attendance.markedBy.
+  recordedById            String?
+  recordedBy              User?   @relation("PaymentRecordedBy", fields: [recordedById], references: [id], onDelete: SetNull)
+  recordedByEmailSnapshot String?
+  recordedByNameSnapshot  String?
+
+  createdAt DateTime @default(now())
+
+  @@index([tenantId])
+  @@index([feeId])
+  @@index([tenantId, paidAt])
+}

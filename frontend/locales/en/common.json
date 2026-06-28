@@ -1,0 +1,398 @@
+{
+  "app": {
+    "name": "PulseDesk",
+    "tagline": "Manage trainees, schedules, attendance and payments."
+  },
+  "language": {
+    "switcher": "Language",
+    "en": "English",
+    "bg": "Bulgarian"
+  },
+  "theme": {
+    "switcher": "Theme",
+    "light": "Light",
+    "dark": "Dark",
+    "system": "System"
+  },
+  "home": {
+    "welcome": "Welcome to PulseDesk",
+    "signIn": "Sign in"
+  },
+  "nav": {
+    "aria": "Primary navigation",
+    "dashboard": "Dashboard",
+    "locations": "Locations",
+    "classes": "Classes",
+    "schedules": "Schedules",
+    "sessions": "Sessions",
+    "trainees": "Trainees",
+    "fees": "Fees",
+    "users": "Users",
+    "logout": "Sign out"
+  },
+  "common": {
+    "save": "Save",
+    "saving": "Saving…",
+    "cancel": "Cancel",
+    "edit": "Edit",
+    "delete": "Delete",
+    "remove": "Remove",
+    "loading": "Loading…",
+    "active": "Active",
+    "inactive": "Inactive",
+    "errors": {
+      "required": "This field is required.",
+      "generic": "Something went wrong. Please try again."
+    }
+  },
+  "a11y": {
+    "showPassword": "Show password",
+    "hidePassword": "Hide password"
+  },
+  "login": {
+    "title": "Sign in",
+    "description": "Enter your email and password.",
+    "submit": "Sign in",
+    "submitting": "Signing in…",
+    "forgotPassword": "Forgot your password?",
+    "resetSuccess": "Password updated — sign in to continue.",
+    "fields": {
+      "email": "Email",
+      "password": "Password"
+    },
+    "errors": {
+      "email": "Enter a valid email address.",
+      "password": "Password is required.",
+      "invalid": "Invalid credentials.",
+      "generic": "Something went wrong. Please try again."
+    }
+  },
+  "forgotPassword": {
+    "title": "Forgot your password?",
+    "description": "Enter your email and we'll send you a link to choose a new one.",
+    "submit": "Send reset link",
+    "submitting": "Sending…",
+    "fields": { "email": "Email" },
+    "success": "If an account exists for that email, you'll receive instructions shortly.",
+    "errors": {
+      "email": "Enter a valid email address.",
+      "generic": "Something went wrong. Please try again."
+    },
+    "backToLogin": "Back to sign in"
+  },
+  "resetPassword": {
+    "title": "Choose a new password",
+    "description": "Pick a strong password you don't use elsewhere.",
+    "submit": "Reset password",
+    "submitting": "Saving…",
+    "fields": {
+      "newPassword": "New password",
+      "confirmPassword": "Confirm password"
+    },
+    "errors": {
+      "length": "Password must be at least 8 characters.",
+      "match": "Passwords do not match.",
+      "invalidLink": "This reset link is invalid or has expired.",
+      "generic": "Something went wrong. Please try again."
+    },
+    "requestNewLink": "Request a new link"
+  },
+  "dashboard": {
+    "title": "Dashboard",
+    "subtitle": "Quick overview of your tenant.",
+    "welcome": {
+      "title": "Welcome",
+      "body": "Phase 2 surface is wired. Manage your locations, classes and trainees from the sidebar.",
+      "charts": "Collected vs. pending fees charts will appear here in Phase 4."
+    }
+  },
+  "locations": {
+    "title": "Locations",
+    "subtitle": "Places where classes happen.",
+    "new": "New location",
+    "edit": "Edit location",
+    "formTitle": "Location details",
+    "empty": "No locations yet.",
+    "deleteConfirm": "Delete location \"{{name}}\"?",
+    "fields": {
+      "name": "Name",
+      "address": "Address",
+      "status": "Status",
+      "active": "Active"
+    },
+    "errors": {
+      "duplicate": "A location with this name already exists."
+    }
+  },
+  "classes": {
+    "title": "Classes",
+    "subtitle": "Class definitions and pricing.",
+    "new": "New class",
+    "edit": "Edit class",
+    "formTitle": "Class details",
+    "empty": "No classes yet.",
+    "deleteConfirm": "Delete class \"{{name}}\"?",
+    "noLocations": "No locations available — create one first.",
+    "noTrainees": "No trainees available — create one first.",
+    "billingImmutable": "(immutable after creation)",
+    "fields": {
+      "name": "Name",
+      "description": "Description",
+      "billingMode": "Billing mode",
+      "price": "Price",
+      "monthlyAmount": "Monthly amount per trainee",
+      "sessionPrice": "Price per session",
+      "locations": "Locations",
+      "trainees": "Trainees",
+      "status": "Status",
+      "active": "Active"
+    },
+    "billing": {
+      "PER_MONTH": "Per month",
+      "PER_SESSION": "Per session"
+    },
+    "priceUnit": {
+      "month": "month",
+      "session": "session"
+    },
+    "errors": {
+      "duplicate": "A class with this name already exists."
+    }
+  },
+  "sessions": {
+    "title": "Sessions",
+    "subtitle": "Concrete classroom occurrences with attendance.",
+    "new": "New session",
+    "edit": "Edit session",
+    "formTitle": "Session details",
+    "empty": "No sessions yet.",
+    "deleteConfirm": "Delete this session? Attendance rows will be removed.",
+    "markAttendance": "Mark attendance",
+    "fields": {
+      "class": "Class",
+      "location": "Location",
+      "startsAt": "Starts at",
+      "endsAt": "Ends at",
+      "status": "Status",
+      "trainers": "Trainers",
+      "trainersHint": "Leave empty to inherit the class's trainers.",
+      "notes": "Notes"
+    },
+    "status": {
+      "SCHEDULED": "Scheduled",
+      "COMPLETED": "Completed",
+      "CANCELLED": "Cancelled"
+    },
+    "errors": {
+      "endsBeforeStarts": "End time must be after start time."
+    }
+  },
+  "schedules": {
+    "title": "Class schedules",
+    "subtitle": "Weekly recurring slots used to generate sessions.",
+    "new": "New schedule",
+    "edit": "Edit schedule",
+    "formTitle": "Schedule details",
+    "empty": "No schedules yet.",
+    "deleteConfirm": "Delete this schedule? Already-generated sessions are unaffected.",
+    "generate": "Generate sessions",
+    "generateDescription": "Materialize concrete sessions for a date range from active schedules.",
+    "generated": "Created {{created}} session(s); skipped {{skipped}} duplicate(s).",
+    "fields": {
+      "class": "Class",
+      "location": "Location",
+      "dayOfWeek": "Day of week",
+      "startTime": "Start time (HH:MM)",
+      "endTime": "End time (HH:MM)",
+      "from": "From",
+      "to": "To",
+      "classFilter": "Limit to class (optional)"
+    },
+    "days": {
+      "MON": "Monday",
+      "TUE": "Tuesday",
+      "WED": "Wednesday",
+      "THU": "Thursday",
+      "FRI": "Friday",
+      "SAT": "Saturday",
+      "SUN": "Sunday"
+    },
+    "errors": {
+      "timeFormat": "Use HH:MM (24-hour).",
+      "endsBeforeStarts": "End time must be after start time.",
+      "dateRange": "End date must be on or after start date."
+    }
+  },
+  "attendance": {
+    "title": "Mark attendance",
+    "subtitle": "Tap a status per trainee, then save all changes.",
+    "saveAll": "Save all",
+    "savedAt": "Saved {{updated}} row(s).",
+    "empty": "No trainees enrolled in this session yet.",
+    "addTrainee": "Add a trainee…",
+    "addTraineeCta": "Add",
+    "allEnrolled": "Every active trainee is already on this session.",
+    "fields": {
+      "trainee": "Trainee",
+      "status": "Status",
+      "rsvp": "Customer RSVP",
+      "marker": "Last marked by"
+    },
+    "status": {
+      "PENDING": "Pending",
+      "PRESENT": "Present",
+      "ABSENT": "Absent",
+      "EXCUSED": "Excused"
+    },
+    "rsvp": {
+      "CONFIRMED": "Confirmed",
+      "DECLINED": "Declined",
+      "RESCHEDULE_REQUESTED": "Wants to reschedule"
+    }
+  },
+  "chart": {
+    "billingTitle": "Collected vs Pending fees",
+    "billingDescription": "Both keyed off Fee period — for fees billed in each month, how much we've received vs. what's still owed.",
+    "cashflowTitle": "Cash-flow vs Billed",
+    "cashflowDescription": "Collected by payment date, billed by fee period — independent month buckets.",
+    "lensAria": "Chart lens",
+    "lens": {
+      "billing": "Billing",
+      "cashflow": "Cash-flow"
+    },
+    "from": "From",
+    "to": "To",
+    "period": "Period",
+    "collected": "Collected",
+    "pending": "Pending",
+    "billed": "Billed",
+    "empty": "No data in this range."
+  },
+  "fees": {
+    "title": "Fees",
+    "subtitle": "Per-trainee charges and payment status.",
+    "new": "New fee",
+    "edit": "Edit fee",
+    "formTitle": "Fee details",
+    "empty": "No fees yet — generate or create one above.",
+    "deleteConfirm": "Delete this fee? Payments will also be removed.",
+    "search": "Search trainee or class…",
+    "currency": "EUR",
+    "filters": {
+      "status": "Status",
+      "all": "All",
+      "periodFrom": "Period from",
+      "periodTo": "Period to"
+    },
+    "fields": {
+      "trainee": "Trainee",
+      "class": "Class",
+      "amount": "Amount",
+      "period": "Period",
+      "periodStart": "Period start",
+      "periodEnd": "Period end",
+      "status": "Status",
+      "notes": "Notes",
+      "outstanding": "Outstanding"
+    },
+    "status": {
+      "UNPAID": "Unpaid",
+      "PARTIAL": "Partial",
+      "PAID": "Paid"
+    },
+    "generateMonthly": {
+      "title": "Generate monthly fees",
+      "description": "Create one fee per trainee per PER_MONTH class for the chosen period.",
+      "submit": "Generate"
+    },
+    "generateSession": {
+      "title": "Generate per-session fees",
+      "description": "Create one fee per (trainee, session) for PER_SESSION classes in a date range.",
+      "submit": "Generate"
+    },
+    "generated": "Created {{created}} fee(s); skipped {{skipped}} duplicate(s).",
+    "errors": {
+      "endsBeforeStarts": "Period end must be on or after period start.",
+      "amount": "Amount must be a positive number."
+    }
+  },
+  "payments": {
+    "title": "Payments",
+    "ledger": "Payment ledger",
+    "empty": "No payments yet.",
+    "deleteConfirm": "Remove this payment? The fee status will be recomputed.",
+    "fields": {
+      "amount": "Amount",
+      "paidAt": "Paid at",
+      "method": "Method",
+      "notes": "Notes",
+      "recordedBy": "Recorded by"
+    },
+    "addTitle": "Record a payment"
+  },
+  "portal": {
+    "navSchedule": "Schedule",
+    "navFees": "Fees",
+    "feesTitle": "My fees",
+    "feesSubtitle": "Charges and payments for you and your trainees.",
+    "feesEmpty": "No fees yet.",
+    "paid": "Paid",
+    "outstanding": "Outstanding",
+    "noPayments": "No payments recorded yet.",
+    "scheduleTitle": "My schedule",
+    "scheduleSubtitle": "Upcoming sessions for you and your trainees.",
+    "empty": "No upcoming sessions yet.",
+    "rsvpSaved": "RSVP saved.",
+    "rsvpFailed": "Could not update RSVP.",
+    "rsvpFor": "RSVP for {{name}}",
+    "rsvp": {
+      "CONFIRMED": "Confirmed",
+      "DECLINED": "Decline",
+      "RESCHEDULE_REQUESTED": "Reschedule"
+    }
+  },
+  "trainees": {
+    "title": "Trainees",
+    "subtitle": "Members of your tenant.",
+    "new": "New trainee",
+    "edit": "Edit trainee",
+    "formTitle": "Trainee details",
+    "empty": "No trainees yet.",
+    "noClasses": "No classes available — create one first.",
+    "deleteConfirm": "Delete trainee \"{{name}}\"?",
+    "fields": {
+      "firstName": "First name",
+      "lastName": "Last name",
+      "dateOfBirth": "Date of birth",
+      "phone": "Phone",
+      "email": "Email",
+      "notes": "Notes",
+      "locations": "Locations",
+      "classes": "Classes",
+      "age": "Age",
+      "status": "Status",
+      "active": "Active"
+    },
+    "contacts": {
+      "legend": "Guardian contacts",
+      "minorHelp": "This trainee is under 18, so at least one guardian contact is required.",
+      "empty": "No contacts yet — add one below.",
+      "add": "+ Add contact",
+      "required": "At least one contact is required for trainees under 18.",
+      "deleteConfirm": "Remove this contact?",
+      "firstName": "First name",
+      "lastName": "Last name",
+      "relationship": "Relationship",
+      "phone": "Phone",
+      "email": "Email",
+      "primary": "Primary contact",
+      "relationships": {
+        "PARENT": "Parent",
+        "GUARDIAN": "Guardian",
+        "GRANDPARENT": "Grandparent",
+        "SIBLING": "Sibling",
+        "OTHER": "Other"
+      }
+    }
+  }
+}
