@@ -15,28 +15,36 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useTranslation } from 'react-i18next';
 import { BrandMark } from '@/components/brand-mark';
+import { useAuth } from '@/components/auth-provider';
+import type { UserRole } from '@/lib/auth-storage';
 import { cn } from '@/lib/utils';
 
 interface NavItem {
   href: string;
   labelKey: string;
   icon: LucideIcon;
+  // When set, only these roles see the item. Omitted = visible to every dashboard user.
+  roles?: UserRole[];
 }
 
 const NAV_ITEMS: NavItem[] = [
   { href: '/dashboard', labelKey: 'nav.dashboard', icon: LayoutDashboard },
   { href: '/locations', labelKey: 'nav.locations', icon: MapPin },
   { href: '/classes', labelKey: 'nav.classes', icon: Dumbbell },
-  { href: '/schedules', labelKey: 'nav.schedules', icon: CalendarDays },
+  { href: '/schedules', labelKey: 'nav.schedules', icon: CalendarDays, roles: ['SUPER_ADMIN', 'ADMIN'] },
   { href: '/sessions', labelKey: 'nav.sessions', icon: Clock },
   { href: '/trainees', labelKey: 'nav.trainees', icon: Users },
   { href: '/fees', labelKey: 'nav.fees', icon: Receipt },
-  { href: '/users', labelKey: 'nav.users', icon: UserCog },
+  { href: '/users', labelKey: 'nav.users', icon: UserCog, roles: ['SUPER_ADMIN', 'ADMIN'] },
 ];
 
 export function Sidebar() {
   const { t } = useTranslation();
   const pathname = usePathname();
+  const { user } = useAuth();
+  const navItems = NAV_ITEMS.filter(
+    (item) => !item.roles || (user != null && item.roles.includes(user.role)),
+  );
 
   return (
     <nav
@@ -50,7 +58,7 @@ export function Sidebar() {
         </Link>
       </div>
       <ul className="flex flex-1 flex-col gap-0.5 p-3">
-        {NAV_ITEMS.map((item) => {
+        {navItems.map((item) => {
           const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
           const Icon = item.icon;
           return (

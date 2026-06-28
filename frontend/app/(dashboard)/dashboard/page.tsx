@@ -4,8 +4,10 @@ import { CalendarClock, Dumbbell, MapPin } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { FeesChart } from '@/components/fees-chart';
+import { useAuth } from '@/components/auth-provider';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
+import { isManager } from '@/lib/permissions';
 import { Classes, Locations, Sessions } from '@/lib/api-resources';
 
 interface StatProps {
@@ -49,6 +51,8 @@ function endOfWeek(d: Date): Date {
 
 export default function DashboardHomePage() {
   const { t } = useTranslation();
+  const { user } = useAuth();
+  const admin = isManager(user?.role);
   const [stats, setStats] = useState<{
     locations: number | null;
     activeClasses: number | null;
@@ -106,7 +110,7 @@ export default function DashboardHomePage() {
         />
       </div>
 
-      <FeesChart />
+      {admin ? <FeesChart /> : null}
     </div>
   );
 }

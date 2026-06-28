@@ -30,7 +30,7 @@ trap 'rm -f "$LIST"' EXIT
       \) -prune -o \
     -type f \
         ! -name '*.db' ! -name '*.db-journal' ! -name '*.sqlite' ! -name '*.sqlite3' \
-        ! -name '*.tsbuildinfo' ! -name '*.log' ! -name '.eslintcache' \
+        ! -name '*.tsbuildinfo' ! -name '*.log' ! -name '.eslintcache' ! -name '*.stackdump' \
         -print
 ) | sed 's|^\./||' | sort > "$LIST"
 

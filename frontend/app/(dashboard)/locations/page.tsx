@@ -5,14 +5,18 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ConfirmDialog } from '@/components/confirm-dialog';
+import { useAuth } from '@/components/auth-provider';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ApiError } from '@/lib/api';
+import { isManager } from '@/lib/permissions';
 import { Locations, type Location } from '@/lib/api-resources';
 
 export default function LocationsListPage() {
   const { t } = useTranslation();
+  const { user } = useAuth();
+  const admin = isManager(user?.role);
   const [rows, setRows] = useState<Location[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<Location | null>(null);
@@ -48,12 +52,14 @@ export default function LocationsListPage() {
           <h1 className="text-2xl font-semibold tracking-tight">{t('locations.title')}</h1>
           <p className="text-sm text-muted-foreground">{t('locations.subtitle')}</p>
         </div>
-        <Button asChild>
-          <Link href="/locations/new">
-            <Plus className="h-4 w-4" />
-            {t('locations.new')}
-          </Link>
-        </Button>
+        {admin ? (
+          <Button asChild>
+            <Link href="/locations/new">
+              <Plus className="h-4 w-4" />
+              {t('locations.new')}
+            </Link>
+          </Button>
+        ) : null}
       </div>
 
       {error ? (
@@ -111,17 +117,21 @@ export default function LocationsListPage() {
                     </Badge>
                   </td>
                   <td className="whitespace-nowrap p-3 text-right">
-                    <Button asChild variant="ghost" size="sm">
-                      <Link href={`/locations/${loc.id}/edit`}>{t('common.edit')}</Link>
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="ml-1 text-destructive hover:bg-destructive/10 hover:text-destructive"
-                      onClick={() => setPendingDelete(loc)}
-                    >
-                      {t('common.delete')}
-                    </Button>
+                    {admin ? (
+                      <>
+                        <Button asChild variant="ghost" size="sm">
+                          <Link href={`/locations/${loc.id}/edit`}>{t('common.edit')}</Link>
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="ml-1 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                          onClick={() => setPendingDelete(loc)}
+                        >
+                          {t('common.delete')}
+                        </Button>
+                      </>
+                    ) : null}
                   </td>
                 </tr>
               ))

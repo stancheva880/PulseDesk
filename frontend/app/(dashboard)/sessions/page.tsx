@@ -5,10 +5,12 @@ import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ConfirmDialog } from '@/components/confirm-dialog';
+import { useAuth } from '@/components/auth-provider';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ApiError } from '@/lib/api';
+import { isManager } from '@/lib/permissions';
 import {
   Classes,
   Locations,
@@ -20,6 +22,8 @@ import {
 
 export default function SessionsListPage() {
   const { t } = useTranslation();
+  const { user } = useAuth();
+  const admin = isManager(user?.role);
   const [rows, setRows] = useState<SessionRow[] | null>(null);
   const [classes, setClasses] = useState<ClassRow[]>([]);
   const [locations, setLocations] = useState<Location[]>([]);
@@ -87,12 +91,14 @@ export default function SessionsListPage() {
           <h1 className="text-2xl font-semibold tracking-tight">{t('sessions.title')}</h1>
           <p className="text-sm text-muted-foreground">{t('sessions.subtitle')}</p>
         </div>
-        <Button asChild>
-          <Link href="/sessions/new">
-            <Plus className="h-4 w-4" />
-            {t('sessions.new')}
-          </Link>
-        </Button>
+        {admin ? (
+          <Button asChild>
+            <Link href="/sessions/new">
+              <Plus className="h-4 w-4" />
+              {t('sessions.new')}
+            </Link>
+          </Button>
+        ) : null}
       </div>
 
       {error ? (
@@ -146,17 +152,21 @@ export default function SessionsListPage() {
                         {t('sessions.markAttendance')}
                       </Link>
                     </Button>
-                    <Button asChild variant="ghost" size="sm" className="ml-1">
-                      <Link href={`/sessions/${s.id}/edit`}>{t('common.edit')}</Link>
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="ml-1 text-destructive hover:bg-destructive/10 hover:text-destructive"
-                      onClick={() => setPendingDelete(s)}
-                    >
-                      {t('common.delete')}
-                    </Button>
+                    {admin ? (
+                      <>
+                        <Button asChild variant="ghost" size="sm" className="ml-1">
+                          <Link href={`/sessions/${s.id}/edit`}>{t('common.edit')}</Link>
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="ml-1 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                          onClick={() => setPendingDelete(s)}
+                        >
+                          {t('common.delete')}
+                        </Button>
+                      </>
+                    ) : null}
                   </td>
                 </tr>
               ))

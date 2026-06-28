@@ -14,6 +14,7 @@ import {
 } from '@tanstack/react-table';
 import { Plus } from 'lucide-react';
 import { ConfirmDialog } from '@/components/confirm-dialog';
+import { useAuth } from '@/components/auth-provider';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -21,6 +22,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ApiError } from '@/lib/api';
+import { isManager } from '@/lib/permissions';
 import {
   Classes,
   Fees,
@@ -46,6 +48,8 @@ interface FeeRowVM {
 
 export default function FeesListPage() {
   const { t } = useTranslation();
+  const { user } = useAuth();
+  const admin = isManager(user?.role);
   const [fees, setFees] = useState<FeeRow[] | null>(null);
   const [trainees, setTrainees] = useState<Trainee[]>([]);
   const [classes, setClasses] = useState<ClassRow[]>([]);
@@ -177,27 +181,31 @@ export default function FeesListPage() {
           return <Badge variant={feeStatusVariant(status)}>{t(`fees.status.${status}`)}</Badge>;
         },
       },
-      {
-        id: 'actions',
-        header: '',
-        cell: ({ row }) => (
-          <div className="flex justify-end gap-1">
-            <Button asChild variant="ghost" size="sm">
-              <Link href={`/fees/${row.original.fee.id}`}>{t('common.edit')}</Link>
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="text-destructive hover:bg-destructive/10 hover:text-destructive"
-              onClick={() => setPendingDelete(row.original.fee)}
-            >
-              {t('common.delete')}
-            </Button>
-          </div>
-        ),
-      },
+      ...(admin
+        ? [
+            {
+              id: 'actions',
+              header: '',
+              cell: ({ row }) => (
+                <div className="flex justify-end gap-1">
+                  <Button asChild variant="ghost" size="sm">
+                    <Link href={`/fees/${row.original.fee.id}`}>{t('common.edit')}</Link>
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                    onClick={() => setPendingDelete(row.original.fee)}
+                  >
+                    {t('common.delete')}
+                  </Button>
+                </div>
+              ),
+            } satisfies ColumnDef<FeeRowVM>,
+          ]
+        : []),
     ],
-    [t, classNameById, traineeNameById],
+    [t, classNameById, traineeNameById, admin],
   );
 
   const table = useReactTable({
@@ -219,12 +227,14 @@ export default function FeesListPage() {
           <h1 className="text-2xl font-semibold tracking-tight">{t('fees.title')}</h1>
           <p className="text-sm text-muted-foreground">{t('fees.subtitle')}</p>
         </div>
-        <Button asChild>
-          <Link href="/fees/new">
-            <Plus className="h-4 w-4" />
-            {t('fees.new')}
-          </Link>
-        </Button>
+        {admin ? (
+          <Button asChild>
+            <Link href="/fees/new">
+              <Plus className="h-4 w-4" />
+              {t('fees.new')}
+            </Link>
+          </Button>
+        ) : null}
       </div>
 
       {error ? (
@@ -233,10 +243,12 @@ export default function FeesListPage() {
         </p>
       ) : null}
 
-      <div className="grid gap-4 md:grid-cols-2">
-        <GenerateMonthlyCard onGenerated={reload} classes={classes} />
-        <GenerateSessionCard onGenerated={reload} classes={classes} />
-      </div>
+      {admin ? (
+        <div className="grid gap-4 md:grid-cols-2">
+          <GenerateMonthlyCard onGenerated={reload} classes={classes} />
+          <GenerateSessionCard onGenerated={reload} classes={classes} />
+        </div>
+      ) : null}
 
       <Card>
         <CardHeader>

@@ -16,9 +16,11 @@ import {
   Classes,
   Locations,
   Trainees,
+  Users,
   type ClassDetail,
   type Location,
   type Trainee,
+  type UserRow,
 } from '@/lib/api-resources';
 
 // Edit form: billingMode is shown but read-only (immutable per backend invariant).
@@ -30,6 +32,7 @@ const schema = z.object({
   sessionPrice: z.string(),
   locationIds: z.array(z.string()),
   traineeIds: z.array(z.string()),
+  trainerIds: z.array(z.string()),
   isActive: z.boolean(),
 });
 type FormValues = z.infer<typeof schema>;
@@ -49,6 +52,7 @@ export default function EditClassPage() {
   const [cls, setCls] = useState<ClassDetail | null>(null);
   const [locations, setLocations] = useState<Location[]>([]);
   const [trainees, setTrainees] = useState<Trainee[]>([]);
+  const [employees, setEmployees] = useState<UserRow[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
@@ -66,16 +70,18 @@ export default function EditClassPage() {
       sessionPrice: '',
       locationIds: [],
       traineeIds: [],
+      trainerIds: [],
       isActive: true,
     },
   });
 
   useEffect(() => {
-    Promise.all([Classes.get(id), Locations.list(), Trainees.list()])
-      .then(([detail, locs, trs]) => {
+    Promise.all([Classes.get(id), Locations.list(), Trainees.list(), Users.list()])
+      .then(([detail, locs, trs, us]) => {
         setCls(detail);
         setLocations(locs);
         setTrainees(trs);
+        setEmployees(us.filter((u) => u.role === 'EMPLOYEE'));
         reset({
           name: detail.name,
           description: detail.description ?? '',
@@ -83,6 +89,7 @@ export default function EditClassPage() {
           sessionPrice: detail.sessionPrice ?? '',
           locationIds: detail.locations.map((l) => l.id),
           traineeIds: detail.trainees.map((tr) => tr.id),
+          trainerIds: detail.trainers.map((tr) => tr.id),
           isActive: detail.isActive,
         });
       })
@@ -102,6 +109,7 @@ export default function EditClassPage() {
           cls.billingMode === 'PER_SESSION' ? parsePositive(values.sessionPrice) : undefined,
         locationIds: values.locationIds,
         traineeIds: values.traineeIds,
+        trainerIds: values.trainerIds,
         isActive: values.isActive,
       });
       router.replace('/classes');
@@ -210,6 +218,31 @@ export default function EditClassPage() {
                             {...register('traineeIds')}
                           />
                           {tr.firstName} {tr.lastName}
+                        </label>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </fieldset>
+              <fieldset className="space-y-2 rounded-md border p-3">
+                <legend className="px-1 text-sm font-medium">
+                  {t('classes.fields.trainers')}
+                </legend>
+                <p className="text-xs text-muted-foreground">{t('classes.fields.trainersHint')}</p>
+                {employees.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">{t('classes.noTrainers')}</p>
+                ) : (
+                  <ul className="space-y-1">
+                    {employees.map((emp) => (
+                      <li key={emp.id}>
+                        <label className="flex items-center gap-2 text-sm">
+                          <input
+                            type="checkbox"
+                            value={emp.id}
+                            className="size-4"
+                            {...register('trainerIds')}
+                          />
+                          {[emp.firstName, emp.lastName].filter(Boolean).join(' ') || emp.email}
                         </label>
                       </li>
                     ))}

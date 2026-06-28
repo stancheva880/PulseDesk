@@ -4,6 +4,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { randomUUID } from 'node:crypto';
 import { AttendanceStatus, BillingMode, SessionStatus, UserRole } from '@prisma/client';
 import { LocationScopeService } from '@/auth/scope/location-scope.service';
+import type { AuthenticatedUser } from '@/auth/types/jwt-payload';
 import { PrismaService } from '@/prisma/prisma.service';
 import { ClassesService } from './classes.service';
 
@@ -350,6 +351,81 @@ describe('ClassesService', () => {
       });
       await expect(
         service.update(b.id, inA.id, { name: 'Hijacked' }),
+      ).rejects.toBeInstanceOf(NotFoundException);
+    });
+  });
+
+  describe('EMPLOYEE scoping (list + findById)', () => {
+    function employeeViewer(tenantId: string, userId: string): AuthenticatedUser {
+      return { id: userId, email: 'e@x', role: UserRole.EMPLOYEE, tenantId };
+    }
+
+    it('lists only classes the employee teaches', async () => {
+      const t = await newTenant();
+      const trainer = await newUser(t.id, UserRole.EMPLOYEE);
+      const mine = await service.create(t.id, {
+        name: `Mine-${randomUUID()}`,
+        billingMode: BillingMode.PER_SESSION,
+        sessionPrice: 10,
+        trainerIds: [trainer.id],
+      });
+      await service.create(t.id, {
+        name: `Other-${randomUUID()}`,
+        billingMode: BillingMode.PER_SESSION,
+        sessionPrice: 10,
+      });
+      const list = await service.list(t.id, employeeViewer(t.id, trainer.id));
+      expect(list.map((c) => c.id)).toEqual([mine.id]);
+    });
+
+    it('also lists a class the employee does not teach but has a session in', async () => {
+      const t = await newTenant();
+      const loc = await newLocation(t.id);
+      const trainer = await newUser(t.id, UserRole.EMPLOYEE);
+      const cls = await service.create(t.id, {
+        name: `Sub-${randomUUID()}`,
+        billingMode: BillingMode.PER_SESSION,
+        sessionPrice: 10,
+        locationIds: [loc.id],
+      });
+      await prisma.session.create({
+        data: {
+          tenantId: t.id,
+          classId: cls.id,
+          locationId: loc.id,
+          startsAt: new Date('2026-06-01T18:00:00.000Z'),
+          endsAt: new Date('2026-06-01T19:00:00.000Z'),
+          status: SessionStatus.SCHEDULED,
+          trainers: { connect: { id: trainer.id } },
+        },
+      });
+      const list = await service.list(t.id, employeeViewer(t.id, trainer.id));
+      expect(list.map((c) => c.id)).toContain(cls.id);
+    });
+
+    it('findById returns a class the employee teaches', async () => {
+      const t = await newTenant();
+      const trainer = await newUser(t.id, UserRole.EMPLOYEE);
+      const mine = await service.create(t.id, {
+        name: `Mine-${randomUUID()}`,
+        billingMode: BillingMode.PER_SESSION,
+        sessionPrice: 10,
+        trainerIds: [trainer.id],
+      });
+      const fetched = await service.findById(t.id, mine.id, employeeViewer(t.id, trainer.id));
+      expect(fetched.id).toBe(mine.id);
+    });
+
+    it('findById throws NotFound for a class the employee neither teaches nor has a session in', async () => {
+      const t = await newTenant();
+      const trainer = await newUser(t.id, UserRole.EMPLOYEE);
+      const other = await service.create(t.id, {
+        name: `Other-${randomUUID()}`,
+        billingMode: BillingMode.PER_SESSION,
+        sessionPrice: 10,
+      });
+      await expect(
+        service.findById(t.id, other.id, employeeViewer(t.id, trainer.id)),
       ).rejects.toBeInstanceOf(NotFoundException);
     });
   });

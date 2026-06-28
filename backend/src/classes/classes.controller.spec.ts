@@ -19,6 +19,7 @@ const PASSWORD = 'TestPass123!';
 interface TestActor {
   tenantId: string;
   locationId: string;
+  userId: string;
   accessToken: string;
 }
 
@@ -74,7 +75,12 @@ describe('ClassesController (e2e-ish)', () => {
       },
     });
     const tokens = await auth.login(user);
-    return { tenantId: tenant.id, locationId: location.id, accessToken: tokens.accessToken };
+    return {
+      tenantId: tenant.id,
+      locationId: location.id,
+      userId: user.id,
+      accessToken: tokens.accessToken,
+    };
   }
 
   describe('POST /classes', () => {
@@ -131,12 +137,23 @@ describe('ClassesController (e2e-ish)', () => {
   });
 
   describe('GET /classes', () => {
-    it('employee can list classes', async () => {
+    it('employee lists only classes they teach', async () => {
       const a = await setupActor(UserRole.EMPLOYEE);
+      // A class the employee teaches → visible.
       await prisma.class.create({
         data: {
           tenantId: a.tenantId,
-          name: 'C1',
+          name: 'Mine',
+          billingMode: BillingMode.PER_SESSION,
+          sessionPrice: 5,
+          trainers: { connect: [{ id: a.userId }] },
+        },
+      });
+      // A class they don't teach (and have no session in) → hidden.
+      await prisma.class.create({
+        data: {
+          tenantId: a.tenantId,
+          name: 'NotMine',
           billingMode: BillingMode.PER_SESSION,
           sessionPrice: 5,
         },
@@ -145,7 +162,7 @@ describe('ClassesController (e2e-ish)', () => {
         .get('/classes')
         .set('Authorization', `Bearer ${a.accessToken}`)
         .expect(200);
-      expect(res.body.map((c: { name: string }) => c.name)).toEqual(['C1']);
+      expect(res.body.map((c: { name: string }) => c.name)).toEqual(['Mine']);
     });
 
     it('isolates classes across tenants', async () => {

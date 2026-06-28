@@ -5,15 +5,19 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ConfirmDialog } from '@/components/confirm-dialog';
+import { useAuth } from '@/components/auth-provider';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ApiError } from '@/lib/api';
 import { calculateAge } from '@/lib/age';
+import { isManager } from '@/lib/permissions';
 import { Trainees, type Trainee } from '@/lib/api-resources';
 
 export default function TraineesListPage() {
   const { t } = useTranslation();
+  const { user } = useAuth();
+  const admin = isManager(user?.role);
   const [rows, setRows] = useState<Trainee[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<Trainee | null>(null);
@@ -49,12 +53,14 @@ export default function TraineesListPage() {
           <h1 className="text-2xl font-semibold tracking-tight">{t('trainees.title')}</h1>
           <p className="text-sm text-muted-foreground">{t('trainees.subtitle')}</p>
         </div>
-        <Button asChild>
-          <Link href="/trainees/new">
-            <Plus className="h-4 w-4" />
-            {t('trainees.new')}
-          </Link>
-        </Button>
+        {admin ? (
+          <Button asChild>
+            <Link href="/trainees/new">
+              <Plus className="h-4 w-4" />
+              {t('trainees.new')}
+            </Link>
+          </Button>
+        ) : null}
       </div>
 
       {error ? (
@@ -105,17 +111,21 @@ export default function TraineesListPage() {
                     </Badge>
                   </td>
                   <td className="whitespace-nowrap p-3 text-right">
-                    <Button asChild variant="ghost" size="sm">
-                      <Link href={`/trainees/${tr.id}/edit`}>{t('common.edit')}</Link>
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="ml-1 text-destructive hover:bg-destructive/10 hover:text-destructive"
-                      onClick={() => setPendingDelete(tr)}
-                    >
-                      {t('common.delete')}
-                    </Button>
+                    {admin ? (
+                      <>
+                        <Button asChild variant="ghost" size="sm">
+                          <Link href={`/trainees/${tr.id}/edit`}>{t('common.edit')}</Link>
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="ml-1 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                          onClick={() => setPendingDelete(tr)}
+                        >
+                          {t('common.delete')}
+                        </Button>
+                      </>
+                    ) : null}
                   </td>
                 </tr>
               ))

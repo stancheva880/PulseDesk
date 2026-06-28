@@ -15,9 +15,11 @@ import { ApiError } from '@/lib/api';
 import {
   Locations,
   Sessions,
+  Users,
   type Location,
   type SessionDetail,
   type SessionStatus,
+  type UserRow,
 } from '@/lib/api-resources';
 
 const SESSION_STATUSES = ['SCHEDULED', 'COMPLETED', 'CANCELLED'] as const satisfies readonly SessionStatus[];
@@ -28,6 +30,7 @@ const schema = z
     startsAt: z.string().min(1),
     endsAt: z.string().min(1),
     status: z.enum(SESSION_STATUSES),
+    trainerIds: z.array(z.string()),
     notes: z.string().max(2000).optional(),
   })
   .refine((v) => new Date(v.endsAt).getTime() > new Date(v.startsAt).getTime(), {
@@ -55,6 +58,7 @@ export default function EditSessionPage() {
 
   const [session, setSession] = useState<SessionDetail | null>(null);
   const [locations, setLocations] = useState<Location[]>([]);
+  const [employees, setEmployees] = useState<UserRow[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
@@ -71,20 +75,23 @@ export default function EditSessionPage() {
       startsAt: '',
       endsAt: '',
       status: 'SCHEDULED',
+      trainerIds: [],
       notes: '',
     },
   });
 
   useEffect(() => {
-    Promise.all([Sessions.get(id), Locations.list()])
-      .then(([detail, locs]) => {
+    Promise.all([Sessions.get(id), Locations.list(), Users.list()])
+      .then(([detail, locs, us]) => {
         setSession(detail);
         setLocations(locs);
+        setEmployees(us.filter((u) => u.role === 'EMPLOYEE'));
         reset({
           locationId: detail.locationId,
           startsAt: isoToLocal(detail.startsAt),
           endsAt: isoToLocal(detail.endsAt),
           status: detail.status,
+          trainerIds: detail.trainers.map((tr) => tr.id),
           notes: detail.notes ?? '',
         });
       })
@@ -99,6 +106,7 @@ export default function EditSessionPage() {
         startsAt: localToIso(values.startsAt),
         endsAt: localToIso(values.endsAt),
         status: values.status,
+        trainerIds: values.trainerIds,
         notes: values.notes || undefined,
       });
       router.replace('/sessions');
@@ -194,6 +202,34 @@ export default function EditSessionPage() {
                   ))}
                 </select>
               </div>
+
+              <fieldset className="space-y-2 rounded-md border p-3">
+                <legend className="px-1 text-sm font-medium">
+                  {t('sessions.fields.trainers')}
+                </legend>
+                <p className="text-xs text-muted-foreground">
+                  {t('sessions.fields.trainersHint')}
+                </p>
+                {employees.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">{t('sessions.fields.noTrainers')}</p>
+                ) : (
+                  <ul className="space-y-1">
+                    {employees.map((emp) => (
+                      <li key={emp.id}>
+                        <label className="flex items-center gap-2 text-sm">
+                          <input
+                            type="checkbox"
+                            value={emp.id}
+                            className="size-4"
+                            {...register('trainerIds')}
+                          />
+                          {[emp.firstName, emp.lastName].filter(Boolean).join(' ') || emp.email}
+                        </label>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </fieldset>
 
               <div className="space-y-1.5">
                 <Label htmlFor="notes">{t('sessions.fields.notes')}</Label>

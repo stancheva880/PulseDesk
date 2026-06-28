@@ -134,6 +134,7 @@
     "deleteConfirm": "Delete class \"{{name}}\"?",
     "noLocations": "No locations available — create one first.",
     "noTrainees": "No trainees available — create one first.",
+    "noTrainers": "No employees available — create one first.",
     "billingImmutable": "(immutable after creation)",
     "fields": {
       "name": "Name",
@@ -144,6 +145,8 @@
       "sessionPrice": "Price per session",
       "locations": "Locations",
       "trainees": "Trainees",
+      "trainers": "Trainers",
+      "trainersHint": "Default trainers for new sessions of this class.",
       "status": "Status",
       "active": "Active"
     },
@@ -176,6 +179,7 @@
       "status": "Status",
       "trainers": "Trainers",
       "trainersHint": "Leave empty to inherit the class's trainers.",
+      "noTrainers": "No employees available — create one first.",
       "notes": "Notes"
     },
     "status": {

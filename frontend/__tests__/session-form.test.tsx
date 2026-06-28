@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, waitFor } from '@testing-library/react';
-import EditClassPage from '@/app/(dashboard)/classes/[id]/edit/page';
+import EditSessionPage from '@/app/(dashboard)/sessions/[id]/edit/page';
 import { AuthProvider } from '@/components/auth-provider';
 import { I18nProvider } from '@/components/i18n-provider';
 import { writeStoredTokens } from '@/lib/auth-storage';
@@ -8,8 +8,8 @@ import { writeStoredTokens } from '@/lib/auth-storage';
 const replace = vi.fn();
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ replace, push: vi.fn(), back: vi.fn() }),
-  useParams: () => ({ id: 'class-1' }),
-  usePathname: () => '/classes/class-1/edit',
+  useParams: () => ({ id: 'session-1' }),
+  usePathname: () => '/sessions/session-1/edit',
 }));
 
 function buildJwt(payload: Record<string, unknown>): string {
@@ -25,26 +25,27 @@ function jsonResponse(status: number, body: unknown): Response {
   });
 }
 
-const CLASS_DETAIL = {
-  id: 'class-1',
+const SESSION_DETAIL = {
+  id: 'session-1',
   tenantId: 't',
-  name: 'Yoga',
-  description: null,
-  billingMode: 'PER_SESSION',
-  monthlyAmount: null,
-  sessionPrice: '10',
-  isActive: true,
+  classId: 'c',
+  locationId: 'loc-1',
+  startsAt: '2026-06-01T18:00:00.000Z',
+  endsAt: '2026-06-01T19:00:00.000Z',
+  status: 'SCHEDULED',
+  notes: null,
   createdAt: '',
   updatedAt: '',
-  locations: [],
+  class: { id: 'c', name: 'Yoga 101', billingMode: 'PER_SESSION' },
+  location: { id: 'loc-1', name: 'Studio A' },
+  // emp-1 is the session's current trainer; emp-2 is a substitute we'll add.
   trainers: [{ id: 'emp-1', firstName: 'Tina', lastName: 'Trainer', email: 'tina@x' }],
-  trainees: [{ id: 'tr-1', firstName: 'Ada', lastName: 'Lovelace' }],
 };
-const TRAINEES = [
-  { id: 'tr-1', firstName: 'Ada', lastName: 'Lovelace' },
-  { id: 'tr-2', firstName: 'Bob', lastName: 'Builder' },
+
+const LOCATIONS = [
+  { id: 'loc-1', tenantId: 't', name: 'Studio A', address: null, isActive: true, createdAt: '', updatedAt: '' },
 ];
-// /users returns the whole tenant roster; only EMPLOYEE rows should become trainer checkboxes.
+
 const USERS = [
   {
     id: 'u-admin', email: 'admin@x', firstName: 'Adam', lastName: 'Admin',
@@ -64,13 +65,13 @@ function renderPage() {
   return render(
     <I18nProvider>
       <AuthProvider>
-        <EditClassPage />
+        <EditSessionPage />
       </AuthProvider>
     </I18nProvider>,
   );
 }
 
-describe('EditClassPage — roster management', () => {
+describe('EditSessionPage — trainer assignment', () => {
   let patchBody: Record<string, unknown> | null = null;
 
   beforeEach(() => {
@@ -84,13 +85,12 @@ describe('EditClassPage — roster management', () => {
     vi.spyOn(globalThis, 'fetch').mockImplementation((input, init) => {
       const url = typeof input === 'string' ? input : (input as Request).url;
       const method = init?.method ?? 'GET';
-      if (url.includes('/classes/class-1') && method === 'PATCH') {
+      if (url.includes('/sessions/session-1') && method === 'PATCH') {
         patchBody = init?.body ? JSON.parse(init.body as string) : null;
-        return Promise.resolve(jsonResponse(200, CLASS_DETAIL));
+        return Promise.resolve(jsonResponse(200, SESSION_DETAIL));
       }
-      if (url.includes('/classes/class-1')) return Promise.resolve(jsonResponse(200, CLASS_DETAIL));
-      if (url.includes('/trainees')) return Promise.resolve(jsonResponse(200, TRAINEES));
-      if (url.includes('/locations')) return Promise.resolve(jsonResponse(200, []));
+      if (url.includes('/sessions/session-1')) return Promise.resolve(jsonResponse(200, SESSION_DETAIL));
+      if (url.includes('/locations')) return Promise.resolve(jsonResponse(200, LOCATIONS));
       if (url.includes('/users')) return Promise.resolve(jsonResponse(200, USERS));
       return Promise.resolve(jsonResponse(200, {}));
     });
@@ -100,28 +100,7 @@ describe('EditClassPage — roster management', () => {
     vi.restoreAllMocks();
   });
 
-  it('pre-checks enrolled trainees and sends traineeIds on save', async () => {
-    const { container } = renderPage();
-
-    const tr1 = await waitFor(() => {
-      const el = container.querySelector<HTMLInputElement>('input[value="tr-1"]');
-      if (!el) throw new Error('roster checkbox not rendered');
-      return el;
-    });
-    const tr2 = container.querySelector<HTMLInputElement>('input[value="tr-2"]')!;
-    expect(tr1.checked).toBe(true); // already enrolled per ClassDetail.trainees
-    expect(tr2.checked).toBe(false);
-
-    fireEvent.click(tr2);
-    fireEvent.click(container.querySelector('button[type="submit"]')!);
-
-    await waitFor(() => {
-      expect(patchBody).not.toBeNull();
-      expect((patchBody!.traineeIds as string[]).slice().sort()).toEqual(['tr-1', 'tr-2']);
-    });
-  });
-
-  it('lists only EMPLOYEE users as trainers, pre-checks current ones, and sends trainerIds', async () => {
+  it('lists only EMPLOYEE users, pre-checks current trainers, and sends trainerIds on save', async () => {
     const { container } = renderPage();
 
     const emp1 = await waitFor(() => {
@@ -130,12 +109,12 @@ describe('EditClassPage — roster management', () => {
       return el;
     });
     const emp2 = container.querySelector<HTMLInputElement>('input[value="emp-2"]')!;
-    // ADMIN-role users must not appear as assignable trainers.
+    // ADMIN users are never offered as trainers.
     expect(container.querySelector('input[value="u-admin"]')).toBeNull();
-    expect(emp1.checked).toBe(true); // already a trainer per ClassDetail.trainers
+    expect(emp1.checked).toBe(true); // prefilled from SessionDetail.trainers
     expect(emp2.checked).toBe(false);
 
-    fireEvent.click(emp2);
+    fireEvent.click(emp2); // add a substitute
     fireEvent.click(container.querySelector('button[type="submit"]')!);
 
     await waitFor(() => {

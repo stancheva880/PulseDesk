@@ -4,12 +4,14 @@ import { useParams, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ConfirmDialog } from '@/components/confirm-dialog';
+import { useAuth } from '@/components/auth-provider';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { ApiError } from '@/lib/api';
+import { isManager } from '@/lib/permissions';
 import {
   Fees,
   Payments,
@@ -20,6 +22,8 @@ import { cn } from '@/lib/utils';
 
 export default function FeeDetailPage() {
   const { t } = useTranslation();
+  const { user } = useAuth();
+  const admin = isManager(user?.role);
   const router = useRouter();
   const params = useParams<{ id: string }>();
   const id = params.id;
@@ -174,6 +178,7 @@ export default function FeeDetailPage() {
                     min="0"
                     value={editAmount}
                     onChange={(e) => setEditAmount(e.target.value)}
+                    disabled={!admin}
                   />
                 </div>
                 <div className="space-y-1.5">
@@ -189,16 +194,19 @@ export default function FeeDetailPage() {
                     rows={3}
                     value={editNotes}
                     onChange={(e) => setEditNotes(e.target.value)}
+                    disabled={!admin}
                   />
                 </div>
                 {editError ? (
                   <p className="text-sm text-destructive sm:col-span-2">{editError}</p>
                 ) : null}
-                <div className="sm:col-span-2">
-                  <Button type="submit" disabled={editBusy}>
-                    {editBusy ? t('common.saving') : t('common.save')}
-                  </Button>
-                </div>
+                {admin ? (
+                  <div className="sm:col-span-2">
+                    <Button type="submit" disabled={editBusy}>
+                      {editBusy ? t('common.saving') : t('common.save')}
+                    </Button>
+                  </div>
+                ) : null}
               </form>
             </CardContent>
           </Card>
@@ -238,14 +246,16 @@ export default function FeeDetailPage() {
                             {p.recordedByEmailSnapshot ?? '—'}
                           </td>
                           <td className="p-3 text-right">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="text-destructive hover:bg-destructive/10 hover:text-destructive"
-                              onClick={() => setPendingPaymentDelete(p)}
-                            >
-                              {t('common.delete')}
-                            </Button>
+                            {admin ? (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                                onClick={() => setPendingPaymentDelete(p)}
+                              >
+                                {t('common.delete')}
+                              </Button>
+                            ) : null}
                           </td>
                         </tr>
                       ))}
@@ -254,6 +264,7 @@ export default function FeeDetailPage() {
                 </div>
               )}
 
+              {admin ? (
               <div>
                 <h3 className="mb-2 text-sm font-medium">{t('payments.addTitle')}</h3>
                 <form className="grid gap-3 sm:grid-cols-2" onSubmit={onAddPayment} noValidate>
@@ -308,6 +319,7 @@ export default function FeeDetailPage() {
                   </div>
                 </form>
               </div>
+              ) : null}
             </CardContent>
           </Card>
         </>

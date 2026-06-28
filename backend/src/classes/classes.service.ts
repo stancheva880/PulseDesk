@@ -20,30 +20,40 @@ export class ClassesService {
     private readonly scope: LocationScopeService,
   ) {}
 
-  async list(tenantId: string, user?: AuthenticatedUser): Promise<Class[]> {
-    const allowedIds = user ? await this.scope.getAccessibleLocationIds(user, tenantId) : null;
-    return this.prisma.class.findMany({
-      where: {
+  // Build the tenant + role-scoped where clause shared by list() and findById().
+  // EMPLOYEE (trainer) is scoped to classes they teach, plus classes of any session they're a
+  // trainer on (so substitute sessions still resolve their class). ADMIN is location-scoped.
+  private async scopedWhere(
+    tenantId: string,
+    user?: AuthenticatedUser,
+  ): Promise<Prisma.ClassWhereInput> {
+    if (user?.role === UserRole.EMPLOYEE) {
+      return {
         tenantId,
-        ...(allowedIds === null
-          ? {}
-          : { locations: { some: { id: { in: allowedIds } } } }),
-      },
+        OR: [
+          { trainers: { some: { id: user.id } } },
+          { sessions: { some: { trainers: { some: { id: user.id } } } } },
+        ],
+      };
+    }
+    const allowedIds = user ? await this.scope.getAccessibleLocationIds(user, tenantId) : null;
+    return {
+      tenantId,
+      ...(allowedIds === null ? {} : { locations: { some: { id: { in: allowedIds } } } }),
+    };
+  }
+
+  async list(tenantId: string, user?: AuthenticatedUser): Promise<Class[]> {
+    return this.prisma.class.findMany({
+      where: await this.scopedWhere(tenantId, user),
       orderBy: { name: 'asc' },
       take: DEFAULT_LIST_TAKE,
     });
   }
 
   async findById(tenantId: string, id: string, user?: AuthenticatedUser) {
-    const allowedIds = user ? await this.scope.getAccessibleLocationIds(user, tenantId) : null;
     const cls = await this.prisma.class.findFirst({
-      where: {
-        id,
-        tenantId,
-        ...(allowedIds === null
-          ? {}
-          : { locations: { some: { id: { in: allowedIds } } } }),
-      },
+      where: { id, ...(await this.scopedWhere(tenantId, user)) },
       include: {
         locations: { select: { id: true, name: true } },
         trainers: { select: { id: true, firstName: true, lastName: true, email: true } },

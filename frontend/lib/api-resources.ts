@@ -90,6 +90,7 @@ export interface CreateClassInput {
   sessionPrice?: number;
   locationIds?: string[];
   traineeIds?: string[];
+  trainerIds?: string[];
 }
 export type UpdateClassInput = Partial<Omit<CreateClassInput, 'billingMode'>> & {
   isActive?: boolean;

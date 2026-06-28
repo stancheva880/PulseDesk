@@ -12,7 +12,15 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { ApiError } from '@/lib/api';
-import { Classes, Locations, Trainees, type Location, type Trainee } from '@/lib/api-resources';
+import {
+  Classes,
+  Locations,
+  Trainees,
+  Users,
+  type Location,
+  type Trainee,
+  type UserRow,
+} from '@/lib/api-resources';
 
 // monthlyAmount/sessionPrice are kept as raw strings to dodge a
 // zod-input-vs-output type mismatch with @hookform/resolvers; we coerce + validate
@@ -26,6 +34,7 @@ const schema = z
     sessionPrice: z.string(),
     locationIds: z.array(z.string()),
     traineeIds: z.array(z.string()),
+    trainerIds: z.array(z.string()),
   })
   .refine((v) => v.billingMode !== 'PER_MONTH' || v.monthlyAmount.trim() !== '', {
     path: ['monthlyAmount'],
@@ -50,10 +59,14 @@ export default function NewClassPage() {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [locations, setLocations] = useState<Location[]>([]);
   const [trainees, setTrainees] = useState<Trainee[]>([]);
+  const [employees, setEmployees] = useState<UserRow[]>([]);
 
   useEffect(() => {
     Locations.list().then(setLocations).catch(() => setLocations([]));
     Trainees.list().then(setTrainees).catch(() => setTrainees([]));
+    Users.list()
+      .then((us) => setEmployees(us.filter((u) => u.role === 'EMPLOYEE')))
+      .catch(() => setEmployees([]));
   }, []);
 
   const {
@@ -71,6 +84,7 @@ export default function NewClassPage() {
       sessionPrice: '',
       locationIds: [],
       traineeIds: [],
+      trainerIds: [],
     },
   });
 
@@ -89,6 +103,7 @@ export default function NewClassPage() {
           values.billingMode === 'PER_SESSION' ? parsePositive(values.sessionPrice) : undefined,
         locationIds: values.locationIds.length ? values.locationIds : undefined,
         traineeIds: values.traineeIds.length ? values.traineeIds : undefined,
+        trainerIds: values.trainerIds.length ? values.trainerIds : undefined,
       });
       router.replace('/classes');
     } catch (e) {
@@ -202,6 +217,30 @@ export default function NewClassPage() {
                           {...register('traineeIds')}
                         />
                         {tr.firstName} {tr.lastName}
+                      </label>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </fieldset>
+
+            <fieldset className="space-y-2 rounded-md border p-3">
+              <legend className="px-1 text-sm font-medium">{t('classes.fields.trainers')}</legend>
+              <p className="text-xs text-muted-foreground">{t('classes.fields.trainersHint')}</p>
+              {employees.length === 0 ? (
+                <p className="text-sm text-muted-foreground">{t('classes.noTrainers')}</p>
+              ) : (
+                <ul className="space-y-1">
+                  {employees.map((emp) => (
+                    <li key={emp.id}>
+                      <label className="flex items-center gap-2 text-sm">
+                        <input
+                          type="checkbox"
+                          value={emp.id}
+                          className="size-4"
+                          {...register('trainerIds')}
+                        />
+                        {[emp.firstName, emp.lastName].filter(Boolean).join(' ') || emp.email}
                       </label>
                     </li>
                   ))}

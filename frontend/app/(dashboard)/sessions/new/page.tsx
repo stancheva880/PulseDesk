@@ -16,8 +16,10 @@ import {
   Classes,
   Locations,
   Sessions,
+  Users,
   type ClassRow,
   type Location,
+  type UserRow,
 } from '@/lib/api-resources';
 
 // `datetime-local` produces "YYYY-MM-DDTHH:MM" without a timezone — we treat it as
@@ -28,6 +30,7 @@ const schema = z
     locationId: z.string().min(1),
     startsAt: z.string().min(1),
     endsAt: z.string().min(1),
+    trainerIds: z.array(z.string()),
     notes: z.string().max(2000).optional(),
   })
   .refine((v) => new Date(v.endsAt).getTime() > new Date(v.startsAt).getTime(), {
@@ -46,17 +49,20 @@ export default function NewSessionPage() {
   const router = useRouter();
   const [classes, setClasses] = useState<ClassRow[]>([]);
   const [locations, setLocations] = useState<Location[]>([]);
+  const [employees, setEmployees] = useState<UserRow[]>([]);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
   useEffect(() => {
-    Promise.all([Classes.list(), Locations.list()])
-      .then(([c, l]) => {
+    Promise.all([Classes.list(), Locations.list(), Users.list()])
+      .then(([c, l, us]) => {
         setClasses(c);
         setLocations(l);
+        setEmployees(us.filter((u) => u.role === 'EMPLOYEE'));
       })
       .catch(() => {
         setClasses([]);
         setLocations([]);
+        setEmployees([]);
       });
   }, []);
 
@@ -72,6 +78,7 @@ export default function NewSessionPage() {
       locationId: '',
       startsAt: '',
       endsAt: '',
+      trainerIds: [],
       notes: '',
     },
   });
@@ -84,6 +91,7 @@ export default function NewSessionPage() {
         locationId: values.locationId,
         startsAt: localToIso(values.startsAt),
         endsAt: localToIso(values.endsAt),
+        trainerIds: values.trainerIds.length ? values.trainerIds : undefined,
         notes: values.notes || undefined,
       });
       router.replace('/sessions');
@@ -172,6 +180,30 @@ export default function NewSessionPage() {
                 ) : null}
               </div>
             </div>
+
+            <fieldset className="space-y-2 rounded-md border p-3">
+              <legend className="px-1 text-sm font-medium">{t('sessions.fields.trainers')}</legend>
+              <p className="text-xs text-muted-foreground">{t('sessions.fields.trainersHint')}</p>
+              {employees.length === 0 ? (
+                <p className="text-sm text-muted-foreground">{t('sessions.fields.noTrainers')}</p>
+              ) : (
+                <ul className="space-y-1">
+                  {employees.map((emp) => (
+                    <li key={emp.id}>
+                      <label className="flex items-center gap-2 text-sm">
+                        <input
+                          type="checkbox"
+                          value={emp.id}
+                          className="size-4"
+                          {...register('trainerIds')}
+                        />
+                        {[emp.firstName, emp.lastName].filter(Boolean).join(' ') || emp.email}
+                      </label>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </fieldset>
 
             <div className="space-y-1.5">
               <Label htmlFor="notes">{t('sessions.fields.notes')}</Label>
