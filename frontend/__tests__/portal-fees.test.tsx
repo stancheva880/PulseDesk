@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event';
 import PortalFeesPage from '@/app/(portal)/portal/fees/page';
 import { AuthProvider } from '@/components/auth-provider';
 import { I18nProvider } from '@/components/i18n-provider';
-import { writeStoredTokens } from '@/lib/auth-storage';
+import { setAccessToken } from '@/lib/auth-storage';
 
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ replace: vi.fn(), push: vi.fn(), back: vi.fn() }),
@@ -78,10 +78,7 @@ function renderPage() {
 describe('PortalFeesPage', () => {
   beforeEach(() => {
     const exp = Math.floor(Date.now() / 1000) + 600;
-    writeStoredTokens({
-      accessToken: buildJwt({ sub: 'u', email: 'cust@x', role: 'CUSTOMER', tenantId: 't', exp }),
-      refreshToken: 'R',
-    });
+    setAccessToken(buildJwt({ sub: 'u', email: 'cust@x', role: 'CUSTOMER', tenantId: 't', exp }));
   });
   afterEach(() => {
     vi.restoreAllMocks();

@@ -7,11 +7,24 @@ import {
 import { BillingMode, Prisma, UserRole, type Class } from '@prisma/client';
 import { backfillFutureSessions } from '@/attendances/attendance-backfill';
 import { LocationScopeService } from '@/auth/scope/location-scope.service';
+import { connectMany, isUniqueConstraintError, setMany } from '@/common/prisma-relations';
+import { searchVariants } from '@/common/search-variants';
+import { assertLocationIds, assertTraineeIds, assertTrainerIds } from '@/common/tenant-guards';
 import type { AuthenticatedUser } from '@/auth/types/jwt-payload';
-import { DEFAULT_LIST_TAKE } from '@/common/dto/paginated-result';
+import {
+  buildPaginatedResult,
+  normalizePagination,
+  type PaginatedResult,
+  type PaginationInput,
+} from '@/common/dto/paginated-result';
 import { PrismaService } from '@/prisma/prisma.service';
 import type { CreateClassDto } from './dto/create-class.dto';
 import type { UpdateClassDto } from './dto/update-class.dto';
+
+export interface ClassListFilters {
+  isActive?: boolean;
+  search?: string;
+}
 
 @Injectable()
 export class ClassesService {
@@ -25,9 +38,9 @@ export class ClassesService {
   // trainer on (so substitute sessions still resolve their class). ADMIN is location-scoped.
   private async scopedWhere(
     tenantId: string,
-    user?: AuthenticatedUser,
+    user: AuthenticatedUser,
   ): Promise<Prisma.ClassWhereInput> {
-    if (user?.role === UserRole.EMPLOYEE) {
+    if (user.role === UserRole.EMPLOYEE) {
       return {
         tenantId,
         OR: [
@@ -36,22 +49,44 @@ export class ClassesService {
         ],
       };
     }
-    const allowedIds = user ? await this.scope.getAccessibleLocationIds(user, tenantId) : null;
     return {
       tenantId,
-      ...(allowedIds === null ? {} : { locations: { some: { id: { in: allowedIds } } } }),
+      ...(await this.scope.locationsWhere(user, tenantId)),
     };
   }
 
-  async list(tenantId: string, user?: AuthenticatedUser): Promise<Class[]> {
-    return this.prisma.class.findMany({
-      where: await this.scopedWhere(tenantId, user),
-      orderBy: { name: 'asc' },
-      take: DEFAULT_LIST_TAKE,
-    });
+  async list(
+    tenantId: string,
+    user: AuthenticatedUser,
+    pagination?: PaginationInput,
+    filters?: ClassListFilters,
+  ): Promise<PaginatedResult<Class>> {
+    // The filter sits on top of the scoped where rather than inside scopedWhere(), which
+    // findById() shares: reading one class by id must not depend on whether it is active.
+    // The search clause goes in `AND` so it narrows the scoped where instead of replacing any
+    // part of it — same rule as GET /users and GET /trainees.
+    const search = searchVariants(filters?.search ?? '');
+    const where: Prisma.ClassWhereInput = {
+      ...(await this.scopedWhere(tenantId, user)),
+      ...(filters?.isActive === undefined ? {} : { isActive: filters.isActive }),
+      ...(search.length > 0
+        ? { AND: [{ OR: search.map((v) => ({ name: { contains: v } })) }] }
+        : {}),
+    };
+    const p = normalizePagination(pagination);
+    const [items, total] = await this.prisma.$transaction([
+      this.prisma.class.findMany({
+        where,
+        orderBy: { name: 'asc' },
+        skip: p.skip,
+        take: p.take,
+      }),
+      this.prisma.class.count({ where }),
+    ]);
+    return buildPaginatedResult(items, total, p);
   }
 
-  async findById(tenantId: string, id: string, user?: AuthenticatedUser) {
+  async findById(tenantId: string, id: string, user: AuthenticatedUser) {
     const cls = await this.prisma.class.findFirst({
       where: { id, ...(await this.scopedWhere(tenantId, user)) },
       include: {
@@ -64,13 +99,13 @@ export class ClassesService {
     return cls;
   }
 
-  async create(tenantId: string, dto: CreateClassDto, user?: AuthenticatedUser): Promise<Class> {
+  async create(tenantId: string, dto: CreateClassDto, user: AuthenticatedUser): Promise<Class> {
     this.assertCreateBillingConsistent(dto);
 
-    await this.assertLocationIds(tenantId, dto.locationIds);
-    if (user) await this.scope.assertLocationsAllowed(user, tenantId, dto.locationIds ?? []);
-    await this.assertTrainerIds(tenantId, dto.trainerIds);
-    await this.assertTraineeIds(tenantId, dto.traineeIds);
+    await assertLocationIds(this.prisma, tenantId, dto.locationIds);
+    await this.scope.assertLocationsAllowed(user, tenantId, dto.locationIds ?? []);
+    await assertTrainerIds(this.prisma, tenantId, dto.trainerIds);
+    await assertTraineeIds(this.prisma, tenantId, dto.traineeIds);
 
     try {
       return await this.prisma.class.create({
@@ -88,7 +123,11 @@ export class ClassesService {
       });
     } catch (e) {
       if (isUniqueConstraintError(e)) {
-        throw new ConflictException(`Class "${dto.name}" already exists`);
+        throw new ConflictException({
+          message: `Class "${dto.name}" already exists`,
+          code: 'CLASS_NAME_TAKEN',
+          params: { name: dto.name },
+        });
       }
       throw e;
     }
@@ -98,26 +137,27 @@ export class ClassesService {
     tenantId: string,
     id: string,
     dto: UpdateClassDto,
-    user?: AuthenticatedUser,
+    user: AuthenticatedUser,
   ): Promise<Class> {
-    await this.findById(tenantId, id, user);
-    const existing = await this.prisma.class.findFirst({ where: { id, tenantId } });
-    if (!existing) throw new NotFoundException(`Class ${id} not found`);
+    const existing = await this.findById(tenantId, id, user);
 
-    if (dto.billingMode !== undefined && dto.billingMode !== existing.billingMode) {
-      throw new BadRequestException('billingMode is immutable after class creation');
-    }
     if (dto.monthlyAmount !== undefined && existing.billingMode !== BillingMode.PER_MONTH) {
-      throw new BadRequestException('monthlyAmount is only valid on PER_MONTH classes');
+      throw new BadRequestException({
+        message: 'monthlyAmount is only valid on PER_MONTH classes',
+        code: 'CLASS_MONTHLY_ONLY_PER_MONTH',
+      });
     }
     if (dto.sessionPrice !== undefined && existing.billingMode !== BillingMode.PER_SESSION) {
-      throw new BadRequestException('sessionPrice is only valid on PER_SESSION classes');
+      throw new BadRequestException({
+        message: 'sessionPrice is only valid on PER_SESSION classes',
+        code: 'CLASS_SESSION_PRICE_ONLY_PER_SESSION',
+      });
     }
 
-    await this.assertLocationIds(tenantId, dto.locationIds);
-    if (user) await this.scope.assertLocationsAllowed(user, tenantId, dto.locationIds ?? []);
-    await this.assertTrainerIds(tenantId, dto.trainerIds);
-    await this.assertTraineeIds(tenantId, dto.traineeIds);
+    await assertLocationIds(this.prisma, tenantId, dto.locationIds);
+    await this.scope.assertLocationsAllowed(user, tenantId, dto.locationIds ?? []);
+    await assertTrainerIds(this.prisma, tenantId, dto.trainerIds);
+    await assertTraineeIds(this.prisma, tenantId, dto.traineeIds);
 
     const data: Prisma.ClassUpdateInput = {};
     if (dto.name !== undefined) data.name = dto.name;
@@ -140,13 +180,16 @@ export class ClassesService {
       });
     } catch (e) {
       if (isUniqueConstraintError(e)) {
-        throw new ConflictException('Class name already in use');
+        throw new ConflictException({
+          message: 'Class name already in use',
+          code: 'CLASS_NAME_IN_USE',
+        });
       }
       throw e;
     }
   }
 
-  async delete(tenantId: string, id: string, user?: AuthenticatedUser): Promise<void> {
+  async delete(tenantId: string, id: string, user: AuthenticatedUser): Promise<void> {
     await this.findById(tenantId, id, user);
     await this.prisma.class.delete({ where: { id } });
   }
@@ -154,56 +197,32 @@ export class ClassesService {
   private assertCreateBillingConsistent(dto: CreateClassDto): void {
     if (dto.billingMode === BillingMode.PER_MONTH) {
       if (dto.monthlyAmount == null) {
-        throw new BadRequestException('monthlyAmount is required when billingMode is PER_MONTH');
+        throw new BadRequestException({
+          message: 'monthlyAmount is required when billingMode is PER_MONTH',
+          code: 'CLASS_MONTHLY_REQUIRED',
+        });
       }
       if (dto.sessionPrice != null) {
-        throw new BadRequestException('sessionPrice must be omitted when billingMode is PER_MONTH');
+        throw new BadRequestException({
+          message: 'sessionPrice must be omitted when billingMode is PER_MONTH',
+          code: 'CLASS_SESSION_PRICE_FORBIDDEN',
+        });
       }
     } else {
       if (dto.sessionPrice == null) {
-        throw new BadRequestException('sessionPrice is required when billingMode is PER_SESSION');
+        throw new BadRequestException({
+          message: 'sessionPrice is required when billingMode is PER_SESSION',
+          code: 'CLASS_SESSION_PRICE_REQUIRED',
+        });
       }
       if (dto.monthlyAmount != null) {
-        throw new BadRequestException('monthlyAmount must be omitted when billingMode is PER_SESSION');
+        throw new BadRequestException({
+          message: 'monthlyAmount must be omitted when billingMode is PER_SESSION',
+          code: 'CLASS_MONTHLY_FORBIDDEN',
+        });
       }
     }
   }
 
-  private async assertLocationIds(tenantId: string, ids?: string[]): Promise<void> {
-    if (!ids || ids.length === 0) return;
-    const found = await this.prisma.location.count({ where: { id: { in: ids }, tenantId } });
-    if (found !== ids.length) {
-      throw new BadRequestException('Some locationIds are invalid or not in your tenant');
-    }
-  }
-
-  private async assertTrainerIds(tenantId: string, ids?: string[]): Promise<void> {
-    if (!ids || ids.length === 0) return;
-    const found = await this.prisma.user.count({
-      where: { id: { in: ids }, tenantId, role: UserRole.EMPLOYEE },
-    });
-    if (found !== ids.length) {
-      throw new BadRequestException('Some trainerIds are not employees in your tenant');
-    }
-  }
-
-  private async assertTraineeIds(tenantId: string, ids?: string[]): Promise<void> {
-    if (!ids || ids.length === 0) return;
-    const found = await this.prisma.trainee.count({ where: { id: { in: ids }, tenantId } });
-    if (found !== ids.length) {
-      throw new BadRequestException('Some traineeIds are invalid or not in your tenant');
-    }
-  }
 }
 
-function connectMany(ids?: string[]) {
-  return ids && ids.length > 0 ? { connect: ids.map((id) => ({ id })) } : undefined;
-}
-
-function setMany(ids: string[]) {
-  return { set: ids.map((id) => ({ id })) };
-}
-
-function isUniqueConstraintError(e: unknown): boolean {
-  return e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002';
-}

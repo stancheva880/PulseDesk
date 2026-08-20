@@ -6,14 +6,19 @@ import {
 import { DayOfWeek, Prisma, type ClassSchedule } from '@prisma/client';
 import { LocationScopeService } from '@/auth/scope/location-scope.service';
 import type { AuthenticatedUser } from '@/auth/types/jwt-payload';
-import { DEFAULT_LIST_TAKE } from '@/common/dto/paginated-result';
+import {
+  buildPaginatedResult,
+  normalizePagination,
+  type PaginatedResult,
+  type PaginationInput,
+} from '@/common/dto/paginated-result';
 import { PrismaService } from '@/prisma/prisma.service';
+import { endOfDayLocal, startOfDayLocal } from '@/common/dates';
+import type { GenerateResult } from '@/common/generate-result';
+import { assertClassInTenant, assertLocationInTenant } from '@/common/tenant-guards';
 import { SessionsService } from '@/sessions/sessions.service';
 import type { CreateClassScheduleDto } from './dto/create-class-schedule.dto';
-import type {
-  GenerateSessionsDto,
-  GenerateSessionsResult,
-} from './dto/generate-sessions.dto';
+import type { GenerateSessionsDto } from './dto/generate-sessions.dto';
 import type { UpdateClassScheduleDto } from './dto/update-class-schedule.dto';
 
 // Standard JS Date.getDay(): Sunday=0 ... Saturday=6.
@@ -35,29 +40,38 @@ export class ClassSchedulesService {
     private readonly scope: LocationScopeService,
   ) {}
 
-  async list(tenantId: string, user?: AuthenticatedUser): Promise<ClassSchedule[]> {
-    const allowedIds = user ? await this.scope.getAccessibleLocationIds(user, tenantId) : null;
-    return this.prisma.classSchedule.findMany({
-      where: {
-        tenantId,
-        ...(allowedIds === null ? {} : { locationId: { in: allowedIds } }),
-      },
-      orderBy: [{ dayOfWeek: 'asc' }, { startTime: 'asc' }],
-      take: DEFAULT_LIST_TAKE,
-    });
+  async list(
+    tenantId: string,
+    user: AuthenticatedUser,
+    pagination?: PaginationInput,
+  ): Promise<PaginatedResult<ClassSchedule>> {
+    const where = {
+      tenantId,
+      ...(await this.scope.locationWhere(user, tenantId)),
+    };
+    const p = normalizePagination(pagination);
+    const [items, total] = await this.prisma.$transaction([
+      this.prisma.classSchedule.findMany({
+        where,
+        orderBy: [{ dayOfWeek: 'asc' }, { startTime: 'asc' }],
+        skip: p.skip,
+        take: p.take,
+      }),
+      this.prisma.classSchedule.count({ where }),
+    ]);
+    return buildPaginatedResult(items, total, p);
   }
 
   async findById(
     tenantId: string,
     id: string,
-    user?: AuthenticatedUser,
+    user: AuthenticatedUser,
   ): Promise<ClassSchedule> {
-    const allowedIds = user ? await this.scope.getAccessibleLocationIds(user, tenantId) : null;
     const sched = await this.prisma.classSchedule.findFirst({
       where: {
         id,
         tenantId,
-        ...(allowedIds === null ? {} : { locationId: { in: allowedIds } }),
+        ...(await this.scope.locationWhere(user, tenantId)),
       },
     });
     if (!sched) throw new NotFoundException(`ClassSchedule ${id} not found`);
@@ -67,12 +81,12 @@ export class ClassSchedulesService {
   async create(
     tenantId: string,
     dto: CreateClassScheduleDto,
-    user?: AuthenticatedUser,
+    user: AuthenticatedUser,
   ): Promise<ClassSchedule> {
     assertTimeOrder(dto.startTime, dto.endTime);
-    await this.assertClassInTenant(tenantId, dto.classId);
-    await this.assertLocationInTenant(tenantId, dto.locationId);
-    if (user) await this.scope.assertLocationAllowed(user, tenantId, dto.locationId);
+    await assertClassInTenant(this.prisma, tenantId, dto.classId);
+    await assertLocationInTenant(this.prisma, tenantId, dto.locationId);
+    await this.scope.assertLocationsAllowed(user, tenantId, [dto.locationId]);
 
     return this.prisma.classSchedule.create({
       data: {
@@ -91,7 +105,7 @@ export class ClassSchedulesService {
     tenantId: string,
     id: string,
     dto: UpdateClassScheduleDto,
-    user?: AuthenticatedUser,
+    user: AuthenticatedUser,
   ): Promise<ClassSchedule> {
     const existing = await this.findById(tenantId, id, user);
     const newStart = dto.startTime ?? existing.startTime;
@@ -99,8 +113,8 @@ export class ClassSchedulesService {
     assertTimeOrder(newStart, newEnd);
 
     if (dto.locationId !== undefined) {
-      await this.assertLocationInTenant(tenantId, dto.locationId);
-      if (user) await this.scope.assertLocationAllowed(user, tenantId, dto.locationId);
+      await assertLocationInTenant(this.prisma, tenantId, dto.locationId);
+      await this.scope.assertLocationsAllowed(user, tenantId, [dto.locationId]);
     }
 
     const data: Prisma.ClassScheduleUpdateInput = {};
@@ -113,7 +127,7 @@ export class ClassSchedulesService {
     return this.prisma.classSchedule.update({ where: { id }, data });
   }
 
-  async delete(tenantId: string, id: string, user?: AuthenticatedUser): Promise<void> {
+  async delete(tenantId: string, id: string, user: AuthenticatedUser): Promise<void> {
     await this.findById(tenantId, id, user);
     await this.prisma.classSchedule.delete({ where: { id } });
   }
@@ -122,9 +136,8 @@ export class ClassSchedulesService {
   async generateSessions(
     tenantId: string,
     dto: GenerateSessionsDto,
-    user?: AuthenticatedUser,
-  ): Promise<GenerateSessionsResult> {
-    const allowedIds = user ? await this.scope.getAccessibleLocationIds(user, tenantId) : null;
+    user: AuthenticatedUser,
+  ): Promise<GenerateResult> {
     const fromDate = parseDateOnly(dto.from);
     const toDate = parseDateOnly(dto.to);
     if (Number.isNaN(fromDate.getTime()) || Number.isNaN(toDate.getTime())) {
@@ -139,14 +152,14 @@ export class ClassSchedulesService {
         tenantId,
         isActive: true,
         ...(dto.classId ? { classId: dto.classId } : {}),
-        ...(allowedIds === null ? {} : { locationId: { in: allowedIds } }),
+        ...(await this.scope.locationWhere(user, tenantId)),
       },
     });
     if (schedules.length === 0) return { created: 0, skipped: 0 };
 
     // Bulk-load existing sessions in the range (one query, then in-memory dedup).
-    const rangeStart = startOfDay(fromDate);
-    const rangeEnd = endOfDay(toDate);
+    const rangeStart = startOfDayLocal(fromDate);
+    const rangeEnd = endOfDayLocal(toDate);
     const existing = await this.prisma.session.findMany({
       where: {
         tenantId,
@@ -200,26 +213,14 @@ export class ClassSchedulesService {
     return { created, skipped };
   }
 
-  // ---- internal validators ----
-
-  private async assertClassInTenant(tenantId: string, classId: string): Promise<void> {
-    const found = await this.prisma.class.count({ where: { id: classId, tenantId } });
-    if (!found) {
-      throw new BadRequestException('classId is invalid or not in your tenant');
-    }
-  }
-
-  private async assertLocationInTenant(tenantId: string, locationId: string): Promise<void> {
-    const found = await this.prisma.location.count({ where: { id: locationId, tenantId } });
-    if (!found) {
-      throw new BadRequestException('locationId is invalid or not in your tenant');
-    }
-  }
 }
 
 function assertTimeOrder(start: string, end: string): void {
   if (toMinutes(start) >= toMinutes(end)) {
-    throw new BadRequestException('endTime must be after startTime');
+    throw new BadRequestException({
+      message: 'endTime must be after startTime',
+      code: 'SCHEDULE_END_BEFORE_START',
+    });
   }
 }
 
@@ -239,18 +240,6 @@ function parseDateOnly(s: string): Date {
   // Treat as local date midnight to align with combineDateAndTime above.
   const d = new Date(`${s}T00:00:00`);
   return d;
-}
-
-function startOfDay(d: Date): Date {
-  const x = new Date(d);
-  x.setHours(0, 0, 0, 0);
-  return x;
-}
-
-function endOfDay(d: Date): Date {
-  const x = new Date(d);
-  x.setHours(23, 59, 59, 999);
-  return x;
 }
 
 function addDays(d: Date, n: number): Date {

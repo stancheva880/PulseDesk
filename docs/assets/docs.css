@@ -1,0 +1,259 @@
+/* PulseDesk user documentation — one stylesheet for every page.
+   No JavaScript, no external assets: the files open straight from disk. */
+
+:root {
+  --bg: #ffffff;
+  --fg: #1c1c1e;
+  --muted: #5b6470;
+  --line: #e2e5ea;
+  --card: #f7f8fa;
+  --accent: #1f6feb;
+  --ok: #11743a;
+  --warn: #8a5300;
+  --warn-bg: #fff6e5;
+  --stop: #a11a1a;
+  --stop-bg: #fdecec;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #14161a;
+    --fg: #e8eaed;
+    --muted: #a2abb8;
+    --line: #2b3038;
+    --card: #1b1e24;
+    --accent: #6fa8ff;
+    --ok: #5ed08c;
+    --warn: #ffcc7a;
+    --warn-bg: #2c2313;
+    --stop: #ff9c9c;
+    --stop-bg: #2c1618;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0 auto;
+  padding: 2rem 1.25rem 5rem;
+  max-width: 56rem;
+  background: var(--bg);
+  color: var(--fg);
+  font: 16px/1.65 -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+a {
+  color: var(--accent);
+}
+
+h1 {
+  font-size: 1.9rem;
+  line-height: 1.25;
+  margin: 0.4rem 0 0.3rem;
+}
+
+h2 {
+  font-size: 1.35rem;
+  margin: 2.4rem 0 0.6rem;
+  padding-bottom: 0.3rem;
+  border-bottom: 1px solid var(--line);
+}
+
+h3 {
+  font-size: 1.05rem;
+  margin: 1.6rem 0 0.4rem;
+}
+
+p,
+li {
+  max-width: 46rem;
+}
+
+.lead {
+  font-size: 1.05rem;
+  color: var(--muted);
+  margin-top: 0;
+}
+
+/* --- header nav --- */
+
+.topnav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+  align-items: baseline;
+  padding-bottom: 0.9rem;
+  margin-bottom: 1.4rem;
+  border-bottom: 1px solid var(--line);
+  font-size: 0.9rem;
+}
+
+.topnav .home {
+  font-weight: 600;
+}
+
+.topnav .spacer {
+  flex: 1 1 auto;
+}
+
+.topnav .lang {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 0.1rem 0.7rem;
+  text-decoration: none;
+}
+
+.crumbs {
+  color: var(--muted);
+  font-size: 0.9rem;
+  margin: 0 0 1.5rem;
+}
+
+/* --- role cards on the hub --- */
+
+.cards {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  margin: 1.25rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.cards li {
+  max-width: none;
+  border: 1px solid var(--line);
+  border-radius: 0.6rem;
+  background: var(--card);
+  padding: 1rem 1.1rem;
+}
+
+.cards h3 {
+  margin: 0 0 0.3rem;
+}
+
+.cards p {
+  margin: 0 0 0.7rem;
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+
+.cards .go {
+  font-size: 0.9rem;
+}
+
+/* --- tables --- */
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 1rem 0;
+  font-size: 0.94rem;
+}
+
+th,
+td {
+  border: 1px solid var(--line);
+  padding: 0.5rem 0.65rem;
+  text-align: left;
+  vertical-align: top;
+}
+
+th {
+  background: var(--card);
+}
+
+/* --- callouts --- */
+
+.note,
+.warn,
+.stop {
+  border-left: 4px solid var(--accent);
+  background: var(--card);
+  border-radius: 0 0.4rem 0.4rem 0;
+  padding: 0.75rem 1rem;
+  margin: 1.1rem 0;
+}
+
+.warn {
+  border-left-color: var(--warn);
+  background: var(--warn-bg);
+  color: var(--warn);
+}
+
+.stop {
+  border-left-color: var(--stop);
+  background: var(--stop-bg);
+  color: var(--stop);
+}
+
+.note strong,
+.warn strong,
+.stop strong {
+  display: block;
+}
+
+/* --- step-by-step blocks --- */
+
+.story {
+  border: 1px solid var(--line);
+  border-radius: 0.6rem;
+  padding: 0.4rem 1.1rem 1rem;
+  margin: 1.2rem 0;
+}
+
+.story h3 {
+  margin-top: 1rem;
+}
+
+.story ol {
+  padding-left: 1.3rem;
+}
+
+.story li {
+  margin: 0.35rem 0;
+}
+
+.ui {
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.yes {
+  color: var(--ok);
+  font-weight: 600;
+}
+
+.no {
+  color: var(--stop);
+  font-weight: 600;
+}
+
+footer {
+  margin-top: 3.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+@media print {
+  body {
+    max-width: none;
+    padding: 0;
+    color: #000;
+    background: #fff;
+  }
+
+  .topnav,
+  footer {
+    display: none;
+  }
+
+  a {
+    color: #000;
+    text-decoration: none;
+  }
+}

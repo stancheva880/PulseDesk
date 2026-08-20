@@ -1,6 +1,8 @@
+import { SUPER_ADMIN_USER as su } from '@/test-utils/auth-user';
 import type { INestApplication } from '@nestjs/common';
 import { ValidationPipe } from '@nestjs/common';
-import { ConfigModule } from '@nestjs/config';
+import { ConfigModule, ConfigService } from '@nestjs/config';
+import { Reflector } from '@nestjs/core';
 import { Test, type TestingModule } from '@nestjs/testing';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { randomUUID } from 'node:crypto';
@@ -12,8 +14,10 @@ import { AuthService } from '@/auth/auth.service';
 import { LocationScopeModule } from '@/auth/scope/location-scope.module';
 import { PrismaModule } from '@/prisma/prisma.module';
 import { PrismaService } from '@/prisma/prisma.service';
+import { ResponseSchemaInterceptor } from '@/common/response-schema.interceptor';
 import { FeesModule } from './fees.module';
 import { FeesService } from './fees.service';
+import { createTestUser } from '@/test-utils/create-user';
 
 const PASSWORD = 'TestPass123!';
 
@@ -40,6 +44,11 @@ describe('CustomerFeesController (e2e-ish)', () => {
     app.useGlobalPipes(
       new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }),
     );
+    // AppModule registers this as an APP_INTERCEPTOR; this spec builds its own module graph,
+    // so it wires the interceptor the same way it wires the ValidationPipe above.
+    app.useGlobalInterceptors(
+      new ResponseSchemaInterceptor(app.get(Reflector), app.get(ConfigService)),
+    );
     await app.init();
     prisma = moduleRef.get(PrismaService);
     auth = moduleRef.get(AuthService);
@@ -59,13 +68,11 @@ describe('CustomerFeesController (e2e-ish)', () => {
       data: { name: 'Test', slug: `t-${randomUUID()}` },
     });
     tenantIds.push(tenant.id);
-    const user = await prisma.user.create({
-      data: {
-        email: `${randomUUID()}@x`,
-        passwordHash: await auth.hashPassword(PASSWORD),
-        role: UserRole.CUSTOMER,
-        tenantId: tenant.id,
-      },
+    const user = await createTestUser(prisma, {
+      email: `${randomUUID()}@x`,
+      passwordHash: await auth.hashPassword(PASSWORD),
+      role: UserRole.CUSTOMER,
+      tenantId: tenant.id,
     });
     const tokens = await auth.login(user);
     return { tenantId: tenant.id, userId: user.id, accessToken: tokens.accessToken };
@@ -106,14 +113,14 @@ describe('CustomerFeesController (e2e-ish)', () => {
         amount: 100,
         periodStart: '2026-03-01',
         periodEnd: '2026-03-31',
-      });
+      }, su);
       await fees.create(c.tenantId, {
         classId: cls.id,
         traineeId: stranger.id,
         amount: 100,
         periodStart: '2026-03-01',
         periodEnd: '2026-03-31',
-      });
+      }, su);
       await prisma.payment.create({
         data: { tenantId: c.tenantId, feeId: ownFee.id, amount: 50, paidAt: new Date('2026-03-15') },
       });
@@ -121,6 +128,7 @@ describe('CustomerFeesController (e2e-ish)', () => {
       const res = await request(server)
         .get('/me/fees')
         .set('Authorization', `Bearer ${c.accessToken}`)
+        .set('X-Tenant-Id', c.tenantId)
         .expect(200);
       expect(res.body).toHaveLength(1);
       expect(res.body[0].traineeId).toBe(own.id);
@@ -134,18 +142,17 @@ describe('CustomerFeesController (e2e-ish)', () => {
         data: { name: 'Test', slug: `t-${randomUUID()}` },
       });
       tenantIds.push(tenant.id);
-      const admin = await prisma.user.create({
-        data: {
-          email: `${randomUUID()}@x`,
-          passwordHash: await auth.hashPassword(PASSWORD),
-          role: UserRole.ADMIN,
-          tenantId: tenant.id,
-        },
+      const admin = await createTestUser(prisma, {
+        email: `${randomUUID()}@x`,
+        passwordHash: await auth.hashPassword(PASSWORD),
+        role: UserRole.ADMIN,
+        tenantId: tenant.id,
       });
       const tokens = await auth.login(admin);
       await request(server)
         .get('/me/fees')
         .set('Authorization', `Bearer ${tokens.accessToken}`)
+        .set('X-Tenant-Id', tenant.id)
         .expect(403);
     });
   });

@@ -21,7 +21,7 @@ export interface PaginationInput {
   pageSize?: number;
 }
 
-export interface NormalizedPagination {
+interface NormalizedPagination {
   page: number;
   pageSize: number;
   skip: number;
@@ -45,7 +45,8 @@ export function buildPaginatedResult<T>(
   total: number,
   pagination: NormalizedPagination,
 ): PaginatedResult<T> {
-  const totalPages = pagination.pageSize === 0 ? 0 : Math.ceil(total / pagination.pageSize);
+  // normalizePagination clamps pageSize to >= 1, so no divide-by-zero guard needed.
+  const totalPages = Math.ceil(total / pagination.pageSize);
   return {
     items,
     page: pagination.page,

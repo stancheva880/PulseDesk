@@ -4,9 +4,7 @@
     "tagline": "Manage trainees, schedules, attendance and payments."
   },
   "language": {
-    "switcher": "Language",
-    "en": "English",
-    "bg": "Bulgarian"
+    "switcher": "Language"
   },
   "theme": {
     "switcher": "Theme",
@@ -31,10 +29,16 @@
     "logout": "Sign out"
   },
   "common": {
+    "search": {
+      "person": "Search by name or email…",
+      "byName": "Search by name…",
+      "noMatches": "No matches"
+    },
     "save": "Save",
     "saving": "Saving…",
     "cancel": "Cancel",
     "edit": "Edit",
+    "view": "View",
     "delete": "Delete",
     "remove": "Remove",
     "loading": "Loading…",
@@ -42,12 +46,51 @@
     "inactive": "Inactive",
     "errors": {
       "required": "This field is required.",
-      "generic": "Something went wrong. Please try again."
+      "generic": "Something went wrong. Please try again.",
+      "amount": "Amount must be a positive number with at most 2 decimal places, up to 1,000,000."
+    },
+    "pagination": {
+      "summary": "Page {{page}} of {{totalPages}} ({{total}} total)",
+      "previous": "Previous",
+      "next": "Next"
     }
+  },
+  "errors": {
+    "FEE_PAYMENT_EXCEEDS_BALANCE": "Payment of {{amount}} exceeds the outstanding balance of {{balance}} on this fee.",
+    "FEE_AMOUNT_BELOW_PAID": "Amount {{amount}} is below the {{paid}} already recorded against this fee.",
+    "FEE_PERIOD_ORDER": "The period end must be on or after the period start.",
+    "FEE_PERIOD_FILTER_ORDER": "The filter end date must be on or after the start date.",
+    "TRAINEE_MINOR_NEEDS_CONTACT": "At least one contact person is required for trainees under 18.",
+    "TRAINEE_USER_ALREADY_LINKED": "That user is already linked to another trainee.",
+    "CLASS_NAME_TAKEN": "Class “{{name}}” already exists.",
+    "CLASS_NAME_IN_USE": "Class name already in use.",
+    "CLASS_MONTHLY_ONLY_PER_MONTH": "A monthly amount is only valid on classes billed per month.",
+    "CLASS_SESSION_PRICE_ONLY_PER_SESSION": "A session price is only valid on classes billed per session.",
+    "CLASS_MONTHLY_REQUIRED": "A monthly amount is required when billing is per month.",
+    "CLASS_SESSION_PRICE_FORBIDDEN": "Do not set a session price when billing is per month.",
+    "CLASS_SESSION_PRICE_REQUIRED": "A session price is required when billing is per session.",
+    "CLASS_MONTHLY_FORBIDDEN": "Do not set a monthly amount when billing is per session.",
+    "LOCATION_NAME_TAKEN": "Location “{{name}}” already exists.",
+    "LOCATION_NAME_IN_USE": "Location name already in use.",
+    "USER_NEEDS_LOCATION": "This role needs at least one location.",
+    "USER_ALREADY_MEMBER": "That account is already a member of this club.",
+    "USER_ATTACH_SUPER_ADMIN": "A super administrator account cannot be added to a club.",
+    "USER_DEACTIVATED": "That account is deactivated. Reactivate it before adding it to a club.",
+    "USER_EMAIL_TAKEN": "That email address is already in use.",
+    "USER_INVITE_NOT_PENDING": "Only a pending invite can be re-sent.",
+    "TENANT_ADMIN_IS_SUPER_ADMIN": "A super administrator account cannot become a club administrator.",
+    "TENANT_ADMIN_DEACTIVATED": "That account is deactivated. Reactivate it before making it a club administrator.",
+    "TENANT_SLUG_TAKEN": "A club with the identifier “{{slug}}” already exists.",
+    "ATTENDANCE_TRAINEE_ALREADY_ON_SESSION": "That trainee is already on this session.",
+    "SCHEDULE_END_BEFORE_START": "The end time must be after the start time.",
+    "SESSION_END_BEFORE_START": "The session end must be after its start.",
+    "AUTH_RESET_LINK_INVALID": "Invalid or expired reset link."
   },
   "a11y": {
     "showPassword": "Show password",
-    "hidePassword": "Hide password"
+    "hidePassword": "Hide password",
+    "clearStartDate": "Clear start date",
+    "clearEndDate": "Clear end date"
   },
   "login": {
     "title": "Sign in",
@@ -65,6 +108,55 @@
       "password": "Password is required.",
       "invalid": "Invalid credentials.",
       "generic": "Something went wrong. Please try again."
+    },
+    "pickTenant": {
+      "title": "Choose a club",
+      "description": "Your account belongs to several clubs. Pick which one to enter.",
+      "roles": {
+        "SUPER_ADMIN": "Super Administrator",
+        "ADMIN": "Administrator",
+        "EMPLOYEE": "Employee",
+        "CUSTOMER": "Customer"
+      }
+    }
+  },
+  "users": {
+    "title": "Users",
+    "subtitle": "Manage members of the current club.",
+    "new": "New user",
+    "empty": "No users yet.",
+    "edit": "Edit user",
+    "formTitle": "User details",
+    "attachedExisting": "Existing account added to your club — their password is unchanged.",
+    "status": {
+      "pending": "Pending invite"
+    },
+    "resendInvite": "Resend invite",
+    "resendSent": "Invite re-sent to {{email}}.",
+    "resendFailed": "Could not send the invite to {{email}}. Try again.",
+    "fields": {
+      "email": "Email",
+      "name": "Name",
+      "password": "Password",
+      "passwordOptional": "New password (leave blank to keep)",
+      "firstName": "First name",
+      "lastName": "Last name",
+      "phone": "Phone",
+      "role": "Role",
+      "locations": "Locations",
+      "locationsPlaceholder": "Select locations…",
+      "noLocations": "No locations available — create one first.",
+      "status": "Status",
+      "active": "Active"
+    },
+    "errors": {
+      "locationRequired": "Pick at least one location for this role."
+    },
+    "deleteConfirm": "Delete user {{email}}?",
+    "removeConfirm": {
+      "title": "Remove {{email}} from your club?",
+      "description": "Their account and memberships in other clubs are unaffected.",
+      "confirm": "Remove from club"
     }
   },
   "forgotPassword": {
@@ -72,7 +164,9 @@
     "description": "Enter your email and we'll send you a link to choose a new one.",
     "submit": "Send reset link",
     "submitting": "Sending…",
-    "fields": { "email": "Email" },
+    "fields": {
+      "email": "Email"
+    },
     "success": "If an account exists for that email, you'll receive instructions shortly.",
     "errors": {
       "email": "Enter a valid email address.",
@@ -97,14 +191,17 @@
     },
     "requestNewLink": "Request a new link"
   },
+  "acceptInvite": {
+    "title": "Set your password",
+    "description": "Choose a password to finish setting up your PulseDesk account.",
+    "submit": "Set password",
+    "errors": {
+      "invalidLink": "This invite link is invalid or has expired."
+    }
+  },
   "dashboard": {
     "title": "Dashboard",
-    "subtitle": "Quick overview of your tenant.",
-    "welcome": {
-      "title": "Welcome",
-      "body": "Phase 2 surface is wired. Manage your locations, classes and trainees from the sidebar.",
-      "charts": "Collected vs. pending fees charts will appear here in Phase 4."
-    }
+    "subtitle": "Quick overview of your club."
   },
   "locations": {
     "title": "Locations",
@@ -252,7 +349,8 @@
       "CONFIRMED": "Confirmed",
       "DECLINED": "Declined",
       "RESCHEDULE_REQUESTED": "Wants to reschedule"
-    }
+    },
+    "truncated": "The list is incomplete. The server sends at most 100 rows for one session, and this session has more. Save marks only the rows you see — mark the others after you divide the session."
   },
   "chart": {
     "billingTitle": "Collected vs Pending fees",
@@ -270,7 +368,13 @@
     "collected": "Collected",
     "pending": "Pending",
     "billed": "Billed",
-    "empty": "No data in this range."
+    "empty": "No data in this range.",
+    "errors": {
+      "dateRange": "End date must be on or after start date.",
+      "rangeTooLarge": "The range cannot be longer than {{months}} months."
+    },
+    "showingPeriod": "Showing: {{from}} – {{to}}",
+    "showingMonth": "Showing: {{month}}"
   },
   "fees": {
     "title": "Fees",
@@ -283,10 +387,16 @@
     "search": "Search trainee or class…",
     "currency": "EUR",
     "filters": {
+      "title": "Filters",
       "status": "Status",
+      "class": "Class",
+      "month": "Month",
       "all": "All",
-      "periodFrom": "Period from",
-      "periodTo": "Period to"
+      "outstanding": "Outstanding"
+    },
+    "unbilled": {
+      "title": "Trainees with no fee for this month: {{n}}",
+      "hint": "These trainees are enrolled in the class but have no fee for the selected month. Use “Generate monthly fees” to create it."
     },
     "fields": {
       "trainee": "Trainee",
@@ -316,12 +426,10 @@
     },
     "generated": "Created {{created}} fee(s); skipped {{skipped}} duplicate(s).",
     "errors": {
-      "endsBeforeStarts": "Period end must be on or after period start.",
-      "amount": "Amount must be a positive number."
+      "endsBeforeStarts": "Period end must be on or after period start."
     }
   },
   "payments": {
-    "title": "Payments",
     "ledger": "Payment ledger",
     "empty": "No payments yet.",
     "deleteConfirm": "Remove this payment? The fee status will be recomputed.",
@@ -332,7 +440,8 @@
       "notes": "Notes",
       "recordedBy": "Recorded by"
     },
-    "addTitle": "Record a payment"
+    "addTitle": "Record a payment",
+    "payRest": "Pay the rest"
   },
   "portal": {
     "navSchedule": "Schedule",
@@ -357,7 +466,7 @@
   },
   "trainees": {
     "title": "Trainees",
-    "subtitle": "Members of your tenant.",
+    "subtitle": "Members of your club.",
     "new": "New trainee",
     "edit": "Edit trainee",
     "formTitle": "Trainee details",
@@ -375,7 +484,14 @@
       "classes": "Classes",
       "age": "Age",
       "status": "Status",
-      "active": "Active"
+      "active": "Active",
+      "linkedAccount": "Linked customer account",
+      "linkedAccountNone": "—",
+      "guardians": "Guardians"
+    },
+    "linking": {
+      "noCustomers": "No customer accounts in this club yet.",
+      "conflict": "That account is already linked to another trainee."
     },
     "contacts": {
       "legend": "Guardian contacts",
@@ -397,6 +513,40 @@
         "SIBLING": "Sibling",
         "OTHER": "Other"
       }
+    }
+  },
+  "tenants": {
+    "selector": "Club",
+    "switcher": "Club",
+    "none": "— select a club —",
+    "new": "New club",
+    "formTitle": "New club details",
+    "subtitle": "Creates the club, its first location and its administrator in one step.",
+    "fields": {
+      "name": "Club name",
+      "slug": "Identifier",
+      "slugHint": "Lowercase letters, digits and hyphens — for example sofia-judo.",
+      "locationName": "First location",
+      "locationAddress": "Location address",
+      "adminEmail": "Administrator email",
+      "adminFirstName": "First name",
+      "adminLastName": "Last name"
+    },
+    "errors": {
+      "slugFormat": "Use lowercase letters, digits and hyphens."
+    },
+    "prompt": {
+      "title": "No club selected",
+      "body": "Select a club in the top bar to see its data."
+    },
+    "loadFailed": {
+      "title": "The system cannot load the clubs",
+      "body": "Check your connection. Then reload the page."
+    },
+    "inviteFailed": {
+      "title": "The club is created, but the email did not go out",
+      "body": "The invite to {{email}} did not go out. The administrator has no password until they open the invite. Send the invite again from the Users page.",
+      "continue": "Go to the club"
     }
   }
 }

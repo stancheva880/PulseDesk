@@ -16,15 +16,34 @@ import {
 export type FeeRowWithPaid = Fee & { paid: string };
 import { LocationScopeService } from '@/auth/scope/location-scope.service';
 import type { AuthenticatedUser } from '@/auth/types/jwt-payload';
-import { DEFAULT_LIST_TAKE } from '@/common/dto/paginated-result';
+import {
+  buildPaginatedResult,
+  DEFAULT_LIST_TAKE,
+  normalizePagination,
+  type PaginatedResult,
+  type PaginationInput,
+} from '@/common/dto/paginated-result';
 import { PrismaService } from '@/prisma/prisma.service';
+import { assertDateOrder, endOfDayUtc, startOfDayUtc } from '@/common/dates';
+import { assertClassInTenant, assertTraineeInTenant } from '@/common/tenant-guards';
 import type { CreateFeeDto } from './dto/create-fee.dto';
 import type { UpdateFeeDto } from './dto/update-fee.dto';
 import type { GenerateMonthlyFeesDto } from './dto/generate-monthly-fees.dto';
+import { OUTSTANDING, type FeeStatusFilter } from './dto/list-fees-query.dto';
 import type { GenerateSessionFeesDto } from './dto/generate-session-fees.dto';
 
+/** One enrolled (class, trainee) pair with no fee for the period yet. */
+export interface UnbilledEntry {
+  classId: string;
+  className: string;
+  traineeId: string;
+  traineeFirstName: string;
+  traineeLastName: string;
+  amount: Prisma.Decimal;
+}
+
 export interface FeeListFilters {
-  status?: FeeStatus;
+  status?: FeeStatusFilter;
   classId?: string;
   traineeId?: string;
   // Inclusive window matched against Fee.periodStart.
@@ -32,10 +51,7 @@ export interface FeeListFilters {
   periodStartTo?: string;
 }
 
-export interface GenerateResult {
-  created: number;
-  skipped: number;
-}
+import type { GenerateResult } from '@/common/generate-result';
 
 @Injectable()
 export class FeesService {
@@ -47,56 +63,64 @@ export class FeesService {
   async list(
     tenantId: string,
     filters: FeeListFilters = {},
-    user?: AuthenticatedUser,
-  ): Promise<FeeRowWithPaid[]> {
+    user: AuthenticatedUser,
+    pagination?: PaginationInput,
+  ): Promise<PaginatedResult<FeeRowWithPaid>> {
     const where: Prisma.FeeWhereInput = { tenantId };
-    if (filters.status) where.status = filters.status;
+    // OUTSTANDING is not a column value — it is "still owes", i.e. anything but PAID.
+    if (filters.status === OUTSTANDING) where.status = { not: FeeStatus.PAID };
+    else if (filters.status) where.status = filters.status;
     if (filters.classId) where.classId = filters.classId;
     if (filters.traineeId) where.traineeId = filters.traineeId;
     if (filters.periodStartFrom || filters.periodStartTo) {
       const range: Prisma.DateTimeFilter = {};
       if (filters.periodStartFrom) range.gte = new Date(filters.periodStartFrom);
       if (filters.periodStartTo) range.lte = new Date(filters.periodStartTo);
+      if (range.gte && range.lte) {
+        assertDateOrder(range.gte as Date, range.lte as Date, {
+          strict: false,
+          message: 'periodStartTo must be on or after periodStartFrom',
+          code: 'FEE_PERIOD_FILTER_ORDER',
+        });
+      }
       where.periodStart = range;
     }
 
-    if (user) {
-      const allowedIds = await this.scope.getAccessibleLocationIds(user, tenantId);
-      if (allowedIds !== null) {
-        where.class = { locations: { some: { id: { in: allowedIds } } } };
-      }
-    }
+    const scoped = await this.scope.locationsWhere(user, tenantId);
+    if (scoped.locations) where.class = scoped;
 
-    const fees = await this.prisma.fee.findMany({
-      where,
-      orderBy: [{ periodStart: 'desc' }, { createdAt: 'desc' }],
-      take: DEFAULT_LIST_TAKE,
-    });
-    if (fees.length === 0) return [];
+    const p = normalizePagination(pagination);
+    const [fees, total] = await this.prisma.$transaction([
+      this.prisma.fee.findMany({
+        where,
+        orderBy: [{ periodStart: 'desc' }, { createdAt: 'desc' }],
+        skip: p.skip,
+        take: p.take,
+      }),
+      this.prisma.fee.count({ where }),
+    ]);
+    if (fees.length === 0) return buildPaginatedResult([], total, p);
 
-    // One aggregate query for the entire result set — O(1) round trips, not O(n).
+    // One aggregate query for the current page — O(1) round trips, not O(n).
     const sums = await this.prisma.payment.groupBy({
       by: ['feeId'],
       where: { feeId: { in: fees.map((f) => f.id) } },
       _sum: { amount: true },
     });
-    const paidByFeeId = new Map<string, Prisma.Decimal>(
-      sums.map((s) => [s.feeId, s._sum.amount ?? new Prisma.Decimal(0)]),
+    const paidByFeeId = new Map<string, string>(
+      sums.map((s) => [s.feeId, (s._sum.amount ?? new Prisma.Decimal(0)).toString()]),
     );
-    return fees.map((f) => ({
+    const items = fees.map((f) => ({
       ...f,
-      paid: (paidByFeeId.get(f.id) ?? new Prisma.Decimal(0)).toString(),
+      paid: paidByFeeId.get(f.id) ?? '0',
     }));
+    return buildPaginatedResult(items, total, p);
   }
 
-  async findById(tenantId: string, id: string, user?: AuthenticatedUser) {
+  async findById(tenantId: string, id: string, user: AuthenticatedUser) {
     const where: Prisma.FeeWhereInput = { id, tenantId };
-    if (user) {
-      const allowedIds = await this.scope.getAccessibleLocationIds(user, tenantId);
-      if (allowedIds !== null) {
-        where.class = { locations: { some: { id: { in: allowedIds } } } };
-      }
-    }
+    const scoped = await this.scope.locationsWhere(user, tenantId);
+    if (scoped.locations) where.class = scoped;
     const fee = await this.prisma.fee.findFirst({
       where,
       include: {
@@ -115,34 +139,28 @@ export class FeesService {
     tenantId: string,
     classId: string,
   ): Promise<void> {
-    const allowedIds = await this.scope.getAccessibleLocationIds(user, tenantId);
-    if (allowedIds === null) return;
+    const scoped = await this.scope.locationsWhere(user, tenantId);
+    if (!scoped.locations) return;
     const ok = await this.prisma.class.count({
-      where: {
-        id: classId,
-        tenantId,
-        locations: { some: { id: { in: allowedIds } } },
-      },
+      where: { id: classId, tenantId, ...scoped },
     });
     if (!ok) throw new NotFoundException(`Class ${classId} not found`);
   }
 
-  async create(tenantId: string, dto: CreateFeeDto, user?: AuthenticatedUser): Promise<Fee> {
+  async create(tenantId: string, dto: CreateFeeDto, user: AuthenticatedUser): Promise<Fee> {
     const periodStart = new Date(dto.periodStart);
     const periodEnd = new Date(dto.periodEnd);
     assertPeriod(periodStart, periodEnd);
 
-    await this.assertClassInTenant(tenantId, dto.classId);
-    if (user) await this.assertClassAccessible(user, tenantId, dto.classId);
-    await this.assertTraineeInTenant(tenantId, dto.traineeId);
-    if (dto.sessionId) await this.assertSessionInTenant(tenantId, dto.sessionId);
+    await assertClassInTenant(this.prisma, tenantId, dto.classId);
+    await this.assertClassAccessible(user, tenantId, dto.classId);
+    await assertTraineeInTenant(this.prisma, tenantId, dto.traineeId);
 
     return this.prisma.fee.create({
       data: {
         tenantId,
         classId: dto.classId,
         traineeId: dto.traineeId,
-        sessionId: dto.sessionId,
         periodStart,
         periodEnd,
         amount: new Prisma.Decimal(dto.amount),
@@ -155,11 +173,9 @@ export class FeesService {
     tenantId: string,
     id: string,
     dto: UpdateFeeDto,
-    user?: AuthenticatedUser,
+    user: AuthenticatedUser,
   ): Promise<Fee> {
-    if (user) await this.findById(tenantId, id, user);
-    const existing = await this.prisma.fee.findFirst({ where: { id, tenantId } });
-    if (!existing) throw new NotFoundException(`Fee ${id} not found`);
+    const existing = await this.findById(tenantId, id, user);
 
     const newStart = dto.periodStart ? new Date(dto.periodStart) : existing.periodStart;
     const newEnd = dto.periodEnd ? new Date(dto.periodEnd) : existing.periodEnd;
@@ -171,29 +187,54 @@ export class FeesService {
     if (dto.periodEnd !== undefined) data.periodEnd = newEnd;
     if (dto.notes !== undefined) data.notes = dto.notes ?? null;
 
-    return this.prisma.fee.update({ where: { id }, data });
+    return this.prisma.$transaction(async (tx) => {
+      // The second door into an overpaid fee: no payment is added, the fee shrinks under what has
+      // already been taken. Same rule as PaymentsService.record — the ledger is the fixed point,
+      // so correcting a fee downwards means deleting the payment that no longer fits first.
+      if (dto.amount !== undefined) {
+        const paid = await this.paidTotalInTransaction(tx, id);
+        if (paid.gt(dto.amount)) {
+          throw new BadRequestException({
+            message: `Amount ${dto.amount} is below the ${paid} already recorded against this fee`,
+            code: 'FEE_AMOUNT_BELOW_PAID',
+            params: { amount: dto.amount, paid: paid.toString() },
+          });
+        }
+      }
+      const updated = await tx.fee.update({ where: { id }, data });
+      if (dto.amount === undefined) return updated;
+      // A new amount changes what "paid in full" means, so the status has to follow it: below the
+      // paid total the fee is settled, above it a PAID fee owes money again. Until now only the
+      // payment paths recomputed, so an edited amount left the status stale.
+      await this.recomputeStatusInTransaction(tx, id);
+      // Re-read, so the response carries the recomputed status rather than the row as written.
+      return tx.fee.findUniqueOrThrow({ where: { id } });
+    });
   }
 
-  async delete(tenantId: string, id: string, user?: AuthenticatedUser): Promise<void> {
-    if (user) await this.findById(tenantId, id, user);
-    const found = await this.prisma.fee.count({ where: { id, tenantId } });
-    if (!found) throw new NotFoundException(`Fee ${id} not found`);
+  async delete(tenantId: string, id: string, user: AuthenticatedUser): Promise<void> {
+    await this.findById(tenantId, id, user);
     await this.prisma.fee.delete({ where: { id } });
   }
 
-  // --- bulk generate (PER_MONTH) ---
-  async generateMonthly(
+  /**
+   * The enrolled (class, trainee) pairs that have no PER_MONTH fee for this period yet.
+   *
+   * Shared by generateMonthly, which creates them, and by listUnbilled, which only reports
+   * them. One query path on purpose: a preview computed separately would eventually disagree
+   * with what generating actually does, and the disagreement would be invisible.
+   */
+  private async collectUnbilled(
     tenantId: string,
     dto: GenerateMonthlyFeesDto,
-    user?: AuthenticatedUser,
-  ): Promise<GenerateResult> {
-    const allowedIds = user ? await this.scope.getAccessibleLocationIds(user, tenantId) : null;
+    user: AuthenticatedUser,
+  ): Promise<{ periodStart: Date; periodEnd: Date; gaps: UnbilledEntry[]; skipped: number }> {
     const periodStart = new Date(dto.periodStart);
     const periodEnd = new Date(dto.periodEnd);
     assertPeriod(periodStart, periodEnd);
 
-    if (dto.classId) await this.assertClassInTenant(tenantId, dto.classId);
-    if (dto.classId && user) await this.assertClassAccessible(user, tenantId, dto.classId);
+    if (dto.classId) await assertClassInTenant(this.prisma, tenantId, dto.classId);
+    if (dto.classId) await this.assertClassAccessible(user, tenantId, dto.classId);
 
     // Load all PER_MONTH classes (optionally filtered) with their enrolled trainees.
     const classes = await this.prisma.class.findMany({
@@ -203,12 +244,10 @@ export class FeesService {
         ...(dto.classId ? { id: dto.classId } : {}),
         // Skip classes without a monthlyAmount — they have no fee to charge.
         monthlyAmount: { not: null },
-        ...(allowedIds === null
-          ? {}
-          : { locations: { some: { id: { in: allowedIds } } } }),
+        ...(await this.scope.locationsWhere(user, tenantId)),
       },
       include: {
-        trainees: { select: { id: true } },
+        trainees: { select: { id: true, firstName: true, lastName: true } },
       },
     });
 
@@ -225,9 +264,8 @@ export class FeesService {
     });
     const existingKeys = new Set(existing.map((e) => `${e.classId}|${e.traineeId}`));
 
-    let created = 0;
+    const gaps: UnbilledEntry[] = [];
     let skipped = 0;
-    const toCreate: Prisma.FeeCreateManyInput[] = [];
 
     for (const cls of classes) {
       if (cls.monthlyAmount == null) continue;
@@ -237,30 +275,65 @@ export class FeesService {
           skipped += 1;
           continue;
         }
-        toCreate.push({
-          tenantId,
+        gaps.push({
           classId: cls.id,
+          className: cls.name,
           traineeId: tr.id,
-          periodStart,
-          periodEnd,
+          traineeFirstName: tr.firstName,
+          traineeLastName: tr.lastName,
           amount: cls.monthlyAmount,
         });
         existingKeys.add(key);
-        created += 1;
       }
     }
+    return { periodStart, periodEnd, gaps, skipped };
+  }
 
-    if (toCreate.length) {
+  /**
+   * Read-only counterpart of generateMonthly. A trainee nobody billed has no fee row, so no
+   * status filter on GET /fees can ever surface them — this is the other half of "who has
+   * not paid". Plain array, not a page: the result is bounded by one period's enrolment.
+   */
+  async listUnbilled(
+    tenantId: string,
+    dto: GenerateMonthlyFeesDto,
+    user: AuthenticatedUser,
+  ): Promise<UnbilledEntry[]> {
+    const { gaps } = await this.collectUnbilled(tenantId, dto, user);
+    return gaps;
+  }
+
+  // --- bulk generate (PER_MONTH) ---
+  async generateMonthly(
+    tenantId: string,
+    dto: GenerateMonthlyFeesDto,
+    user: AuthenticatedUser,
+  ): Promise<GenerateResult> {
+    const { periodStart, periodEnd, gaps, skipped } = await this.collectUnbilled(
+      tenantId,
+      dto,
+      user,
+    );
+
+    if (gaps.length) {
+      const toCreate: Prisma.FeeCreateManyInput[] = gaps.map((g) => ({
+        tenantId,
+        classId: g.classId,
+        traineeId: g.traineeId,
+        periodStart,
+        periodEnd,
+        amount: g.amount,
+      }));
       await this.prisma.fee.createMany({ data: toCreate });
     }
-    return { created, skipped };
+    return { created: gaps.length, skipped };
   }
 
   // --- bulk generate (PER_SESSION) ---
   async generateSessionFees(
     tenantId: string,
     dto: GenerateSessionFeesDto,
-    user?: AuthenticatedUser,
+    user: AuthenticatedUser,
   ): Promise<GenerateResult> {
     const from = new Date(dto.from);
     const to = new Date(dto.to);
@@ -271,22 +344,21 @@ export class FeesService {
     ) {
       throw new BadRequestException('"to" must be on or after "from"');
     }
-    if (dto.classId) await this.assertClassInTenant(tenantId, dto.classId);
-    if (dto.classId && user) await this.assertClassAccessible(user, tenantId, dto.classId);
-    const allowedIds = user ? await this.scope.getAccessibleLocationIds(user, tenantId) : null;
+    if (dto.classId) await assertClassInTenant(this.prisma, tenantId, dto.classId);
+    if (dto.classId) await this.assertClassAccessible(user, tenantId, dto.classId);
 
     // Sessions in range whose class is PER_SESSION (with sessionPrice set), include
     // class.trainees so we can iterate enrolled trainees per session.
     const sessions = await this.prisma.session.findMany({
       where: {
         tenantId,
-        startsAt: { gte: from, lte: endOfDay(to) },
+        startsAt: { gte: from, lte: endOfDayUtc(to) },
         ...(dto.classId ? { classId: dto.classId } : {}),
         class: {
           billingMode: BillingMode.PER_SESSION,
           sessionPrice: { not: null },
         },
-        ...(allowedIds === null ? {} : { locationId: { in: allowedIds } }),
+        ...(await this.scope.locationWhere(user, tenantId)),
       },
       include: {
         class: {
@@ -315,8 +387,8 @@ export class FeesService {
 
     for (const session of sessions) {
       if (session.class.sessionPrice == null) continue;
-      const dayStart = startOfDay(session.startsAt);
-      const dayEnd = endOfDay(session.startsAt);
+      const dayStart = startOfDayUtc(session.startsAt);
+      const dayEnd = endOfDayUtc(session.startsAt);
       for (const tr of session.class.trainees) {
         const key = `${session.id}|${tr.id}`;
         if (existingKeys.has(key)) {
@@ -374,6 +446,21 @@ export class FeesService {
   // --- helpers used by PaymentsService ---
 
   /**
+   * Sum of a fee's Payment rows, read inside the caller's transaction. One place answers "how much
+   * has been taken", so the overpayment guards and the status recompute cannot disagree.
+   */
+  async paidTotalInTransaction(
+    tx: Prisma.TransactionClient,
+    feeId: string,
+  ): Promise<Prisma.Decimal> {
+    const agg = await tx.payment.aggregate({
+      where: { feeId },
+      _sum: { amount: true },
+    });
+    return agg._sum.amount ?? new Prisma.Decimal(0);
+  }
+
+  /**
    * Recompute Fee.status from the sum of its Payment rows, inside the given transaction.
    * Called from PaymentsService after insert/delete.
    */
@@ -383,13 +470,12 @@ export class FeesService {
   ): Promise<void> {
     const fee = await tx.fee.findUnique({ where: { id: feeId } });
     if (!fee) return;
-    const agg = await tx.payment.aggregate({
-      where: { feeId },
-      _sum: { amount: true },
-    });
-    const totalPaid = agg._sum.amount ?? new Prisma.Decimal(0);
+    const totalPaid = await this.paidTotalInTransaction(tx, feeId);
     let status: FeeStatus;
-    if (totalPaid.gte(fee.amount)) status = FeeStatus.PAID;
+    // `eq`, not `gte`, matching PRD.md:39 and CLAUDE.md's Phase 4 rule. `gte` used to be how this
+    // coped with a total above the amount — a case FeeStatus cannot express and the guards in
+    // `update` and `PaymentsService.record` now prevent, so the exact comparison is reachable.
+    if (totalPaid.eq(fee.amount)) status = FeeStatus.PAID;
     else if (totalPaid.gt(0)) status = FeeStatus.PARTIAL;
     else status = FeeStatus.UNPAID;
     if (status !== fee.status) {
@@ -397,39 +483,12 @@ export class FeesService {
     }
   }
 
-  // --- internal validators ---
-
-  private async assertClassInTenant(tenantId: string, classId: string): Promise<void> {
-    const found = await this.prisma.class.count({ where: { id: classId, tenantId } });
-    if (!found) throw new BadRequestException('classId is invalid or not in your tenant');
-  }
-  private async assertTraineeInTenant(tenantId: string, traineeId: string): Promise<void> {
-    const found = await this.prisma.trainee.count({ where: { id: traineeId, tenantId } });
-    if (!found) throw new BadRequestException('traineeId is invalid or not in your tenant');
-  }
-  private async assertSessionInTenant(tenantId: string, sessionId: string): Promise<void> {
-    const found = await this.prisma.session.count({ where: { id: sessionId, tenantId } });
-    if (!found) throw new BadRequestException('sessionId is invalid or not in your tenant');
-  }
 }
 
 function assertPeriod(periodStart: Date, periodEnd: Date): void {
-  if (
-    Number.isNaN(periodStart.getTime()) ||
-    Number.isNaN(periodEnd.getTime()) ||
-    periodEnd.getTime() < periodStart.getTime()
-  ) {
-    throw new BadRequestException('periodEnd must be on or after periodStart');
-  }
-}
-
-function startOfDay(d: Date): Date {
-  const x = new Date(d);
-  x.setUTCHours(0, 0, 0, 0);
-  return x;
-}
-function endOfDay(d: Date): Date {
-  const x = new Date(d);
-  x.setUTCHours(23, 59, 59, 999);
-  return x;
+  assertDateOrder(periodStart, periodEnd, {
+    strict: false,
+    message: 'periodEnd must be on or after periodStart',
+    code: 'FEE_PERIOD_ORDER',
+  });
 }

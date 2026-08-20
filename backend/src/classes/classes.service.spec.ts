@@ -1,3 +1,4 @@
+import { SUPER_ADMIN_USER as su } from '@/test-utils/auth-user';
 import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
 import { Test, type TestingModule } from '@nestjs/testing';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -7,6 +8,7 @@ import { LocationScopeService } from '@/auth/scope/location-scope.service';
 import type { AuthenticatedUser } from '@/auth/types/jwt-payload';
 import { PrismaService } from '@/prisma/prisma.service';
 import { ClassesService } from './classes.service';
+import { createTestUser } from '@/test-utils/create-user';
 
 describe('ClassesService', () => {
   let service: ClassesService;
@@ -42,13 +44,11 @@ describe('ClassesService', () => {
   }
 
   async function newUser(tenantId: string, role: UserRole) {
-    return prisma.user.create({
-      data: {
-        tenantId,
-        email: `${randomUUID()}@test.local`,
-        passwordHash: 'x',
-        role,
-      },
+    return createTestUser(prisma, {
+      tenantId,
+      email: `${randomUUID()}@test.local`,
+      passwordHash: 'x',
+      role,
     });
   }
 
@@ -70,7 +70,7 @@ describe('ClassesService', () => {
         name: 'Beginner Tennis',
         billingMode: BillingMode.PER_MONTH,
         monthlyAmount: 100,
-      });
+      }, su);
       expect(cls.billingMode).toBe(BillingMode.PER_MONTH);
       expect(Number(cls.monthlyAmount)).toBe(100);
       expect(cls.sessionPrice).toBeNull();
@@ -82,7 +82,7 @@ describe('ClassesService', () => {
         name: 'Drop-in Yoga',
         billingMode: BillingMode.PER_SESSION,
         sessionPrice: 25,
-      });
+      }, su);
       expect(cls.billingMode).toBe(BillingMode.PER_SESSION);
       expect(Number(cls.sessionPrice)).toBe(25);
       expect(cls.monthlyAmount).toBeNull();
@@ -94,7 +94,7 @@ describe('ClassesService', () => {
         service.create(t.id, {
           name: 'X',
           billingMode: BillingMode.PER_MONTH,
-        }),
+        }, su),
       ).rejects.toBeInstanceOf(BadRequestException);
     });
 
@@ -106,7 +106,7 @@ describe('ClassesService', () => {
           billingMode: BillingMode.PER_MONTH,
           monthlyAmount: 100,
           sessionPrice: 10,
-        }),
+        }, su),
       ).rejects.toBeInstanceOf(BadRequestException);
     });
 
@@ -116,7 +116,7 @@ describe('ClassesService', () => {
         service.create(t.id, {
           name: 'X',
           billingMode: BillingMode.PER_SESSION,
-        }),
+        }, su),
       ).rejects.toBeInstanceOf(BadRequestException);
     });
   });
@@ -131,7 +131,7 @@ describe('ClassesService', () => {
         billingMode: BillingMode.PER_SESSION,
         sessionPrice: 10,
         locationIds: [loc.id],
-      });
+      }, su);
       const future = new Date();
       future.setFullYear(future.getFullYear() + 1);
       const session = await prisma.session.create({
@@ -145,7 +145,7 @@ describe('ClassesService', () => {
         },
       });
 
-      await service.update(t.id, cls.id, { traineeIds: [tr.id] });
+      await service.update(t.id, cls.id, { traineeIds: [tr.id] }, su);
 
       const rows = await prisma.attendance.findMany({
         where: { sessionId: session.id, traineeId: tr.id },
@@ -165,8 +165,8 @@ describe('ClassesService', () => {
         billingMode: BillingMode.PER_MONTH,
         monthlyAmount: 50,
         locationIds: [loc1.id, loc2.id],
-      });
-      const fetched = await service.findById(t.id, cls.id);
+      }, su);
+      const fetched = await service.findById(t.id, cls.id, su);
       expect(fetched.locations.map((l) => l.name).sort()).toEqual(['Gym', 'Pool']);
     });
 
@@ -180,7 +180,7 @@ describe('ClassesService', () => {
           billingMode: BillingMode.PER_MONTH,
           monthlyAmount: 50,
           locationIds: [inB.id],
-        }),
+        }, su),
       ).rejects.toBeInstanceOf(BadRequestException);
     });
 
@@ -193,7 +193,7 @@ describe('ClassesService', () => {
           billingMode: BillingMode.PER_MONTH,
           monthlyAmount: 50,
           trainerIds: [admin.id],
-        }),
+        }, su),
       ).rejects.toBeInstanceOf(BadRequestException);
     });
 
@@ -205,8 +205,8 @@ describe('ClassesService', () => {
         billingMode: BillingMode.PER_MONTH,
         monthlyAmount: 50,
         trainerIds: [trainer.id],
-      });
-      const fetched = await service.findById(t.id, cls.id);
+      }, su);
+      const fetched = await service.findById(t.id, cls.id, su);
       expect(fetched.trainers.map((u) => u.id)).toEqual([trainer.id]);
     });
 
@@ -220,7 +220,7 @@ describe('ClassesService', () => {
           billingMode: BillingMode.PER_MONTH,
           monthlyAmount: 50,
           traineeIds: [traineeB.id],
-        }),
+        }, su),
       ).rejects.toBeInstanceOf(BadRequestException);
     });
   });
@@ -232,13 +232,13 @@ describe('ClassesService', () => {
         name: 'Yoga',
         billingMode: BillingMode.PER_SESSION,
         sessionPrice: 20,
-      });
+      }, su);
       await expect(
         service.create(t.id, {
           name: 'Yoga',
           billingMode: BillingMode.PER_SESSION,
           sessionPrice: 20,
-        }),
+        }, su),
       ).rejects.toBeInstanceOf(ConflictException);
     });
 
@@ -249,13 +249,13 @@ describe('ClassesService', () => {
         name: 'Yoga',
         billingMode: BillingMode.PER_SESSION,
         sessionPrice: 20,
-      });
+      }, su);
       await expect(
         service.create(b.id, {
           name: 'Yoga',
           billingMode: BillingMode.PER_SESSION,
           sessionPrice: 20,
-        }),
+        }, su),
       ).resolves.toBeDefined();
     });
 
@@ -266,14 +266,14 @@ describe('ClassesService', () => {
         name: 'A-Class',
         billingMode: BillingMode.PER_SESSION,
         sessionPrice: 10,
-      });
+      }, su);
       await service.create(b.id, {
         name: 'B-Class',
         billingMode: BillingMode.PER_SESSION,
         sessionPrice: 10,
-      });
-      const list = await service.list(a.id);
-      expect(list.map((c) => c.name)).toEqual(['A-Class']);
+      }, su);
+      const list = await service.list(a.id, su);
+      expect(list.items.map((c) => c.name)).toEqual(['A-Class']);
     });
 
     it('findById throws NotFound for cross-tenant fetches', async () => {
@@ -283,8 +283,8 @@ describe('ClassesService', () => {
         name: 'A-Class',
         billingMode: BillingMode.PER_SESSION,
         sessionPrice: 10,
-      });
-      await expect(service.findById(b.id, inA.id)).rejects.toBeInstanceOf(NotFoundException);
+      }, su);
+      await expect(service.findById(b.id, inA.id, su)).rejects.toBeInstanceOf(NotFoundException);
     });
   });
 
@@ -295,23 +295,15 @@ describe('ClassesService', () => {
         name: 'Y',
         billingMode: BillingMode.PER_SESSION,
         sessionPrice: 10,
-      });
-      const updated = await service.update(t.id, cls.id, { name: 'Y2', isActive: false });
+      }, su);
+      const updated = await service.update(t.id, cls.id, { name: 'Y2', isActive: false }, su);
       expect(updated.name).toBe('Y2');
       expect(updated.isActive).toBe(false);
     });
 
-    it('rejects changing billingMode after creation', async () => {
-      const t = await newTenant();
-      const cls = await service.create(t.id, {
-        name: 'X',
-        billingMode: BillingMode.PER_MONTH,
-        monthlyAmount: 100,
-      });
-      await expect(
-        service.update(t.id, cls.id, { billingMode: BillingMode.PER_SESSION }),
-      ).rejects.toBeInstanceOf(BadRequestException);
-    });
+    // 'rejects changing billingMode after creation' deleted in TKT-0010 (PRD-0003):
+    // billingMode is no longer an UpdateClassDto field, so the change is rejected at the
+    // HTTP validation layer — covered by classes.controller.spec 'rejects billingMode change'.
 
     it('rejects setting sessionPrice on a PER_MONTH class', async () => {
       const t = await newTenant();
@@ -319,9 +311,9 @@ describe('ClassesService', () => {
         name: 'X',
         billingMode: BillingMode.PER_MONTH,
         monthlyAmount: 100,
-      });
+      }, su);
       await expect(
-        service.update(t.id, cls.id, { sessionPrice: 5 }),
+        service.update(t.id, cls.id, { sessionPrice: 5 }, su),
       ).rejects.toBeInstanceOf(BadRequestException);
     });
 
@@ -335,9 +327,9 @@ describe('ClassesService', () => {
         billingMode: BillingMode.PER_SESSION,
         sessionPrice: 10,
         locationIds: [loc1.id, loc2.id],
-      });
-      await service.update(t.id, cls.id, { locationIds: [loc3.id] });
-      const fetched = await service.findById(t.id, cls.id);
+      }, su);
+      await service.update(t.id, cls.id, { locationIds: [loc3.id] }, su);
+      const fetched = await service.findById(t.id, cls.id, su);
       expect(fetched.locations.map((l) => l.name)).toEqual(['C']);
     });
 
@@ -348,9 +340,9 @@ describe('ClassesService', () => {
         name: 'X',
         billingMode: BillingMode.PER_SESSION,
         sessionPrice: 10,
-      });
+      }, su);
       await expect(
-        service.update(b.id, inA.id, { name: 'Hijacked' }),
+        service.update(b.id, inA.id, { name: 'Hijacked' }, su),
       ).rejects.toBeInstanceOf(NotFoundException);
     });
   });
@@ -368,14 +360,14 @@ describe('ClassesService', () => {
         billingMode: BillingMode.PER_SESSION,
         sessionPrice: 10,
         trainerIds: [trainer.id],
-      });
+      }, su);
       await service.create(t.id, {
         name: `Other-${randomUUID()}`,
         billingMode: BillingMode.PER_SESSION,
         sessionPrice: 10,
-      });
+      }, su);
       const list = await service.list(t.id, employeeViewer(t.id, trainer.id));
-      expect(list.map((c) => c.id)).toEqual([mine.id]);
+      expect(list.items.map((c) => c.id)).toEqual([mine.id]);
     });
 
     it('also lists a class the employee does not teach but has a session in', async () => {
@@ -387,7 +379,7 @@ describe('ClassesService', () => {
         billingMode: BillingMode.PER_SESSION,
         sessionPrice: 10,
         locationIds: [loc.id],
-      });
+      }, su);
       await prisma.session.create({
         data: {
           tenantId: t.id,
@@ -400,7 +392,7 @@ describe('ClassesService', () => {
         },
       });
       const list = await service.list(t.id, employeeViewer(t.id, trainer.id));
-      expect(list.map((c) => c.id)).toContain(cls.id);
+      expect(list.items.map((c) => c.id)).toContain(cls.id);
     });
 
     it('findById returns a class the employee teaches', async () => {
@@ -411,7 +403,7 @@ describe('ClassesService', () => {
         billingMode: BillingMode.PER_SESSION,
         sessionPrice: 10,
         trainerIds: [trainer.id],
-      });
+      }, su);
       const fetched = await service.findById(t.id, mine.id, employeeViewer(t.id, trainer.id));
       expect(fetched.id).toBe(mine.id);
     });
@@ -423,7 +415,7 @@ describe('ClassesService', () => {
         name: `Other-${randomUUID()}`,
         billingMode: BillingMode.PER_SESSION,
         sessionPrice: 10,
-      });
+      }, su);
       await expect(
         service.findById(t.id, other.id, employeeViewer(t.id, trainer.id)),
       ).rejects.toBeInstanceOf(NotFoundException);
@@ -437,9 +429,9 @@ describe('ClassesService', () => {
         name: 'X',
         billingMode: BillingMode.PER_SESSION,
         sessionPrice: 10,
-      });
-      await service.delete(t.id, cls.id);
-      await expect(service.findById(t.id, cls.id)).rejects.toBeInstanceOf(NotFoundException);
+      }, su);
+      await service.delete(t.id, cls.id, su);
+      await expect(service.findById(t.id, cls.id, su)).rejects.toBeInstanceOf(NotFoundException);
     });
 
     it('throws NotFound when deleting a class from another tenant', async () => {
@@ -449,8 +441,8 @@ describe('ClassesService', () => {
         name: 'X',
         billingMode: BillingMode.PER_SESSION,
         sessionPrice: 10,
-      });
-      await expect(service.delete(b.id, inA.id)).rejects.toBeInstanceOf(NotFoundException);
+      }, su);
+      await expect(service.delete(b.id, inA.id, su)).rejects.toBeInstanceOf(NotFoundException);
     });
   });
 });

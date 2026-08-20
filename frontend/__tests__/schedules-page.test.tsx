@@ -1,0 +1,73 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { render, screen } from '@testing-library/react';
+import SchedulesListPage from '@/app/(dashboard)/schedules/page';
+import { AuthProvider } from '@/components/auth-provider';
+import { I18nProvider } from '@/components/i18n-provider';
+import { setAccessToken } from '@/lib/auth-storage';
+
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ replace: vi.fn(), push: vi.fn(), back: vi.fn() }),
+  usePathname: () => '/schedules',
+}));
+
+function buildJwt(payload: Record<string, unknown>): string {
+  const header = btoa(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).replace(/=/g, '');
+  const body = btoa(JSON.stringify(payload)).replace(/=/g, '');
+  return `${header}.${body}.signature`;
+}
+function jsonResponse(status: number, body: unknown): Response {
+  return new Response(body == null ? '' : JSON.stringify(body), {
+    status,
+    headers: { 'Content-Type': 'application/json' },
+  });
+}
+function paged<T>(items: T[]): unknown {
+  return { items, page: 1, pageSize: 25, total: items.length, totalPages: 1 };
+}
+
+const SCHEDULES = [
+  {
+    id: 'sch-1', tenantId: 't', classId: 'c1', locationId: 'loc-1',
+    dayOfWeek: 'TUE', startTime: '10:00', endTime: '11:30', isActive: true,
+    createdAt: '', updatedAt: '',
+  },
+];
+const CLASSES = [{ id: 'c1', tenantId: 't', name: 'Yoga', billingMode: 'PER_MONTH', isActive: true }];
+const LOCATIONS = [{ id: 'loc-1', tenantId: 't', name: 'Main Hall', address: null, isActive: true }];
+
+describe('SchedulesListPage', () => {
+  beforeEach(() => {
+    const exp = Math.floor(Date.now() / 1000) + 600;
+    setAccessToken(buildJwt({ sub: 'u', email: 'a@b', role: 'ADMIN', tenantId: 't', exp }));
+    vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
+      const url = typeof input === 'string' ? input : (input as Request).url;
+      if (url.includes('/class-schedules')) return Promise.resolve(jsonResponse(200, paged(SCHEDULES)));
+      if (url.includes('/classes')) return Promise.resolve(jsonResponse(200, paged(CLASSES)));
+      if (url.includes('/locations')) return Promise.resolve(jsonResponse(200, paged(LOCATIONS)));
+      return Promise.resolve(jsonResponse(200, {}));
+    });
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('renders schedule rows with class/location names joined via lookups', async () => {
+    const { container } = render(
+      <I18nProvider>
+        <AuthProvider>
+          <SchedulesListPage />
+        </AuthProvider>
+      </I18nProvider>,
+    );
+
+    // 'Yoga' also appears in the generate-form's class select — assert the table body.
+    const tbody = await screen.findAllByText('Yoga').then(() => container.querySelector('tbody')!);
+    expect(tbody.textContent).toContain('Yoga');
+    expect(tbody.textContent).toContain('Main Hall');
+    expect(screen.getByText('10:00')).toBeInTheDocument();
+    expect(screen.getByText('11:30')).toBeInTheDocument();
+    expect(container.querySelector('a[href="/schedules/new"]')).not.toBeNull();
+    expect(container.querySelector('a[href="/schedules/sch-1/edit"]')).not.toBeNull();
+  });
+});

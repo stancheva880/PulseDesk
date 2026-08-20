@@ -6,7 +6,9 @@ export default defineConfig({
   test: {
     globals: true,
     environment: 'node',
-    include: ['src/**/*.spec.ts'],
+    // prisma/ is included so seed.spec.ts is discovered. Safe only because seed.ts has
+    // no top-level side effects (its entry point is prisma/seed-run.ts).
+    include: ['src/**/*.spec.ts', 'prisma/**/*.spec.ts'],
     root: './',
     // SQLite is the dev/test DB and serializes writes — under high parallelism the
     // Nest e2e specs (which all hit the same dev.db) contend on locks and time out.

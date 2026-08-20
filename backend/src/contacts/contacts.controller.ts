@@ -9,21 +9,26 @@ import {
   Patch,
   Post,
 } from '@nestjs/common';
+import { ApiBearerAuth } from '@nestjs/swagger';
 import { UserRole } from '@prisma/client';
 import { CurrentUser } from '@/auth/decorators/current-user.decorator';
 import { Roles } from '@/auth/decorators/roles.decorator';
 import { TenantId } from '@/auth/decorators/tenant-id.decorator';
 import type { AuthenticatedUser } from '@/auth/types/jwt-payload';
+import { NoContent, ResponseSchema } from '@/common/response-schema';
+import { ContactPersonListSchema, ContactPersonSchema } from './contacts.schema';
 import { ContactsService } from './contacts.service';
 import { CreateContactDto } from './dto/create-contact.dto';
 import { UpdateContactDto } from './dto/update-contact.dto';
 
+@ApiBearerAuth()
 @Controller('trainees/:traineeId/contacts')
 @Roles(UserRole.ADMIN, UserRole.EMPLOYEE)
 export class ContactsController {
   constructor(private readonly contacts: ContactsService) {}
 
   @Get()
+  @ResponseSchema('ContactPersonList', ContactPersonListSchema)
   list(
     @TenantId() tenantId: string,
     @CurrentUser() user: AuthenticatedUser,
@@ -32,18 +37,9 @@ export class ContactsController {
     return this.contacts.list(tenantId, traineeId, user);
   }
 
-  @Get(':id')
-  findOne(
-    @TenantId() tenantId: string,
-    @CurrentUser() user: AuthenticatedUser,
-    @Param('traineeId') traineeId: string,
-    @Param('id') id: string,
-  ) {
-    return this.contacts.findById(tenantId, traineeId, id, user);
-  }
-
   @Post()
   @Roles(UserRole.ADMIN)
+  @ResponseSchema('ContactPerson', ContactPersonSchema)
   create(
     @TenantId() tenantId: string,
     @CurrentUser() user: AuthenticatedUser,
@@ -55,6 +51,7 @@ export class ContactsController {
 
   @Patch(':id')
   @Roles(UserRole.ADMIN)
+  @ResponseSchema('ContactPerson', ContactPersonSchema)
   update(
     @TenantId() tenantId: string,
     @CurrentUser() user: AuthenticatedUser,
@@ -68,6 +65,7 @@ export class ContactsController {
   @Delete(':id')
   @Roles(UserRole.ADMIN)
   @HttpCode(HttpStatus.NO_CONTENT)
+  @ResponseSchema('ContactNoContent', NoContent)
   async remove(
     @TenantId() tenantId: string,
     @CurrentUser() user: AuthenticatedUser,

@@ -1,3 +1,4 @@
+import { SUPER_ADMIN_USER as su } from '@/test-utils/auth-user';
 import { ConflictException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { Test, type TestingModule } from '@nestjs/testing';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -12,6 +13,7 @@ import { LocationScopeService } from '@/auth/scope/location-scope.service';
 import { PrismaService } from '@/prisma/prisma.service';
 import { SessionsService } from '@/sessions/sessions.service';
 import { AttendancesService } from './attendances.service';
+import { createTestUser } from '@/test-utils/create-user';
 
 describe('AttendancesService', () => {
   let service: AttendancesService;
@@ -61,12 +63,15 @@ describe('AttendancesService', () => {
       },
     });
   }
-  async function newTrainee(tenantId: string, opts?: { userId?: string; guardianIds?: string[] }) {
+  async function newTrainee(
+    tenantId: string,
+    opts?: { userId?: string; guardianIds?: string[]; firstName?: string; lastName?: string },
+  ) {
     return prisma.trainee.create({
       data: {
         tenantId,
-        firstName: 'T',
-        lastName: 'X',
+        firstName: opts?.firstName ?? 'T',
+        lastName: opts?.lastName ?? 'X',
         dateOfBirth: new Date('2000-01-01'),
         userId: opts?.userId,
         guardians: opts?.guardianIds?.length
@@ -76,15 +81,13 @@ describe('AttendancesService', () => {
     });
   }
   async function newUser(tenantId: string, role: UserRole, name?: { firstName?: string; lastName?: string }) {
-    return prisma.user.create({
-      data: {
-        tenantId,
-        email: `${randomUUID()}@x`,
-        passwordHash: 'x',
-        role,
-        firstName: name?.firstName,
-        lastName: name?.lastName,
-      },
+    return createTestUser(prisma, {
+      tenantId,
+      email: `${randomUUID()}@x`,
+      passwordHash: 'x',
+      role,
+      firstName: name?.firstName,
+      lastName: name?.lastName,
     });
   }
   async function makeSession(tenantId: string, classId: string, locationId: string, trainerIds?: string[]) {
@@ -94,7 +97,7 @@ describe('AttendancesService', () => {
       startsAt: '2026-06-01T18:00:00.000Z',
       endsAt: '2026-06-01T19:00:00.000Z',
       trainerIds,
-    });
+    }, su);
   }
 
   // Tests in this file assert "no scope filter" semantics. With ADMIN now being
@@ -123,6 +126,25 @@ describe('AttendancesService', () => {
       const rows = await service.listForSession(t.id, session.id, adminViewer(t.id));
       expect(rows).toHaveLength(2);
       expect(rows.every((r) => r.status === AttendanceStatus.PENDING)).toBe(true);
+    });
+
+    // The attendance screen renders a name per row. Sending the trainee with the row is
+    // what lets it do that without resolving ids against a separately-paged trainee list.
+    it("includes each row's trainee id and name", async () => {
+      const t = await newTenant();
+      const loc = await newLocation(t.id);
+      const tr = await newTrainee(t.id, { firstName: 'Ada', lastName: 'Lovelace' });
+      const cls = await newClass(t.id, [tr.id]);
+      const session = await makeSession(t.id, cls.id, loc.id);
+
+      const rows = await service.listForSession(t.id, session.id, adminViewer(t.id));
+
+      expect(rows).toHaveLength(1);
+      expect(rows[0]!.trainee).toEqual({
+        id: tr.id,
+        firstName: 'Ada',
+        lastName: 'Lovelace',
+      });
     });
 
     it('employee can list attendances for sessions they teach', async () => {
@@ -405,6 +427,24 @@ describe('AttendancesService', () => {
           traineeRsvp: AttendanceRsvp.CONFIRMED,
         }),
       ).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it('returns NotFound when the trainee has no attendance row on the session', async () => {
+      // Session and trainee are both valid and owned by the customer, but the trainee
+      // is not enrolled in this session's class, so no attendance row exists.
+      const t = await newTenant();
+      const loc = await newLocation(t.id);
+      const customer = await newUser(t.id, UserRole.CUSTOMER);
+      const trainee = await newTrainee(t.id, { userId: customer.id });
+      const otherClass = await newClass(t.id, []);
+      const session = await makeSession(t.id, otherClass.id, loc.id);
+
+      await expect(
+        service.rsvp(t.id, session.id, customerViewer(t.id, customer.id), {
+          traineeId: trainee.id,
+          traineeRsvp: AttendanceRsvp.CONFIRMED,
+        }),
+      ).rejects.toThrow('Attendance row not found for this session/trainee');
     });
   });
 

@@ -10,15 +10,15 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { ApiError } from '@/lib/api';
-import { isManager } from '@/lib/permissions';
+import { apiErrorMessage } from '@/lib/api';
+import { isManager } from '@/lib/auth-storage';
 import {
   Fees,
   Payments,
   type FeeDetail,
   type Payment,
 } from '@/lib/api-resources';
-import { cn } from '@/lib/utils';
+import { cn, formatMoney, parseAmount } from '@/lib/utils';
 
 export default function FeeDetailPage() {
   const { t } = useTranslation();
@@ -56,7 +56,7 @@ export default function FeeDetailPage() {
         setEditAmount(String(Number(f.amount)));
         setEditNotes(f.notes ?? '');
       })
-      .catch((e: unknown) => setLoadError(e instanceof Error ? e.message : 'load failed'));
+      .catch((e: unknown) => setLoadError(apiErrorMessage(e)));
   };
 
   useEffect(reload, [id]);
@@ -64,9 +64,11 @@ export default function FeeDetailPage() {
   const onSaveFee = async (e: React.FormEvent) => {
     e.preventDefault();
     setEditError(null);
-    const amt = Number(editAmount);
-    if (!Number.isFinite(amt) || amt < 0) {
-      setEditError(t('fees.errors.amount'));
+    // One rule for every money box in these screens (lib/utils.ts). This used to accept >= 0,
+    // so clearing the field saved a zero fee.
+    const amt = parseAmount(editAmount);
+    if (amt === null) {
+      setEditError(t('common.errors.amount'));
       return;
     }
     setEditBusy(true);
@@ -74,7 +76,7 @@ export default function FeeDetailPage() {
       await Fees.update(id, { amount: amt, notes: editNotes || undefined });
       reload();
     } catch (err) {
-      setEditError(err instanceof ApiError ? err.message : t('common.errors.generic'));
+      setEditError(apiErrorMessage(err));
     } finally {
       setEditBusy(false);
     }
@@ -83,9 +85,9 @@ export default function FeeDetailPage() {
   const onAddPayment = async (e: React.FormEvent) => {
     e.preventDefault();
     setPayError(null);
-    const amt = Number(payAmount);
-    if (!Number.isFinite(amt) || amt <= 0) {
-      setPayError(t('fees.errors.amount'));
+    const amt = parseAmount(payAmount);
+    if (amt === null) {
+      setPayError(t('common.errors.amount'));
       return;
     }
     if (!payDate) {
@@ -106,7 +108,7 @@ export default function FeeDetailPage() {
       setPayNotes('');
       reload();
     } catch (err) {
-      setPayError(err instanceof ApiError ? err.message : t('common.errors.generic'));
+      setPayError(apiErrorMessage(err));
     } finally {
       setPayBusy(false);
     }
@@ -120,7 +122,7 @@ export default function FeeDetailPage() {
       setPendingPaymentDelete(null);
       reload();
     } catch (err) {
-      setLoadError(err instanceof ApiError ? err.message : t('common.errors.generic'));
+      setLoadError(apiErrorMessage(err));
       setPendingPaymentDelete(null);
     } finally {
       setDelBusy(false);
@@ -129,6 +131,8 @@ export default function FeeDetailPage() {
 
   const totalPaid =
     fee?.payments.reduce((s, p) => s + Number(p.amount), 0) ?? 0;
+  // The API refuses a total above the amount (TKT-0072), so the clamp guards a state the server no
+  // longer produces — it only keeps a row seeded before that rule from rendering a negative balance.
   const outstanding = fee ? Math.max(0, Number(fee.amount) - totalPaid) : 0;
 
   return (
@@ -184,7 +188,7 @@ export default function FeeDetailPage() {
                 <div className="space-y-1.5">
                   <Label>{t('fees.fields.outstanding')}</Label>
                   <p className="rounded-md border bg-muted/30 px-3 py-2 text-sm">
-                    {outstanding.toFixed(2)} {t('fees.currency')}
+                    {formatMoney(outstanding, t('fees.currency'))}
                   </p>
                 </div>
                 <div className="space-y-1.5 sm:col-span-2">
@@ -239,7 +243,7 @@ export default function FeeDetailPage() {
                             {new Date(p.paidAt).toISOString().slice(0, 10)}
                           </td>
                           <td className="p-3 font-medium">
-                            {Number(p.amount).toFixed(2)} {t('fees.currency')}
+                            {formatMoney(p.amount, t('fees.currency'))}
                           </td>
                           <td className="p-3 text-muted-foreground">{p.method ?? '—'}</td>
                           <td className="p-3 text-xs text-muted-foreground">
@@ -269,9 +273,20 @@ export default function FeeDetailPage() {
                 <h3 className="mb-2 text-sm font-medium">{t('payments.addTitle')}</h3>
                 <form className="grid gap-3 sm:grid-cols-2" onSubmit={onAddPayment} noValidate>
                   <div className="space-y-1.5">
-                    <Label htmlFor="p-amount">
-                      {t('payments.fields.amount')} ({t('fees.currency')})
-                    </Label>
+                    <div className="flex items-baseline justify-between gap-2">
+                      <Label htmlFor="p-amount">
+                        {t('payments.fields.amount')} ({t('fees.currency')})
+                      </Label>
+                      {outstanding > 0 ? (
+                        <button
+                          type="button"
+                          className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
+                          onClick={() => setPayAmount(String(outstanding))}
+                        >
+                          {t('payments.payRest')}
+                        </button>
+                      ) : null}
+                    </div>
                     <Input
                       id="p-amount"
                       type="number"

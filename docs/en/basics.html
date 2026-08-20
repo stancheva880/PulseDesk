@@ -1,0 +1,227 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Getting started — PulseDesk</title>
+    <link rel="stylesheet" href="../assets/docs.css" />
+  </head>
+  <body>
+    <nav class="topnav">
+      <a class="home" href="../index.html">PulseDesk</a>
+      <a href="super-admin.html">Super Administrator</a>
+      <a href="admin.html">Administrator</a>
+      <a href="trainer.html">Employee</a>
+      <a href="customer.html">Customer</a>
+      <span class="spacer"></span>
+      <a class="lang" href="../bg/osnovi.html">BG</a>
+    </nav>
+
+    <h1>Getting started</h1>
+    <p class="lead">
+      This page applies to every role: how to sign in, how to change your password, and how to
+      switch club, language and theme.
+    </p>
+
+    <h2>What PulseDesk is</h2>
+    <p>
+      PulseDesk runs a sports club or school. It holds the trainees, the classes, the weekly
+      schedules, the individual sessions, the attendance records and the fees. Each club sees only
+      its own data.
+    </p>
+
+    <h2>Roles and clubs</h2>
+    <p>
+      Your role belongs to one club, not to the system as a whole. One account can belong to
+      several clubs and hold a different role in each — administrator in one club, customer in
+      another. What you see on screen depends on your role in the club you are currently signed
+      in to.
+    </p>
+    <table>
+      <thead>
+        <tr>
+          <th>Role</th>
+          <th>Who it is for</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Super Administrator</td>
+          <td>Owner of the system. Access to every club.</td>
+        </tr>
+        <tr>
+          <td>Administrator</td>
+          <td>Club manager. Full control of their own club's data.</td>
+        </tr>
+        <tr>
+          <td>Employee</td>
+          <td>Trainer. Marks attendance and reads the information they need for it.</td>
+        </tr>
+        <tr>
+          <td>Customer</td>
+          <td>Trainee or parent. Sees only their own schedule and fees.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>Signing in</h2>
+    <div class="story">
+      <h3>As a user I want to sign in to my account</h3>
+      <ol>
+        <li>Open the PulseDesk address your club gave you.</li>
+        <li>Fill in <span class="ui">Email</span> and <span class="ui">Password</span>.</li>
+        <li>Press <span class="ui">Sign in</span>.</li>
+        <li>
+          If your account belongs to several clubs, <span class="ui">Choose a club</span> appears.
+          Press the club you want to work in. Your role in that club is shown next to its name.
+        </li>
+        <li>
+          If you belong to one club only, you go straight in. Customers land on
+          <span class="ui">My schedule</span>; everyone else lands on
+          <span class="ui">Dashboard</span>. A super administrator lands on the new-club form if the
+          system has no club yet — see <a href="super-admin.html">Super Administrator</a>.
+        </li>
+      </ol>
+      <p>
+        <span class="ui">Invalid credentials</span> means the email or the password does not match.
+        Check both and try again.
+      </p>
+    </div>
+
+    <h2>Forgotten password</h2>
+    <div class="story">
+      <h3>As a user I want to choose a new password</h3>
+      <ol>
+        <li>On the sign-in screen press <span class="ui">Forgot your password?</span></li>
+        <li>Enter your email and press <span class="ui">Send reset link</span>.</li>
+        <li>
+          A message says that if an account exists for that email, you will receive instructions
+          shortly. The message is the same when no account exists, so nobody can use it to test
+          other people's addresses.
+        </li>
+        <li>Open the link in the email.</li>
+        <li>
+          Enter <span class="ui">New password</span> and repeat it in
+          <span class="ui">Confirm password</span>. The password must be at least 8 characters.
+        </li>
+        <li>Press <span class="ui">Reset password</span>.</li>
+        <li>
+          You return to the sign-in screen with
+          <span class="ui">Password updated — sign in to continue</span>.
+        </li>
+      </ol>
+      <div class="warn">
+        <strong>The link expires.</strong>
+        If you see <span class="ui">This reset link is invalid or has expired</span>, press
+        <span class="ui">Request a new link</span> and repeat the steps.
+      </div>
+    </div>
+
+    <h2>The top bar</h2>
+    <p>The same controls sit in the top right corner of every screen:</p>
+    <table>
+      <thead>
+        <tr>
+          <th>Control</th>
+          <th>What it does</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Email and role</td>
+          <td>Shows which account you are using and with which role.</td>
+        </tr>
+        <tr>
+          <td>Club selector</td>
+          <td>
+            Appears only if you have access to more than one club. A Super Administrator always
+            sees a list of every club.
+          </td>
+        </tr>
+        <tr>
+          <td>Theme (icon)</td>
+          <td>
+            One button that cycles light → dark → system. The icon shows the current theme.
+          </td>
+        </tr>
+        <tr>
+          <td>BG / EN</td>
+          <td>Switches the language of the screens. Your choice is remembered for next time.</td>
+        </tr>
+        <tr>
+          <td><span class="ui">Sign out</span></td>
+          <td>Leaves the account and returns the sign-in screen.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>Switching club</h2>
+    <div class="story">
+      <h3>As a user with several clubs I want to switch club</h3>
+      <ol>
+        <li>Open the club list in the top bar.</li>
+        <li>Pick the other club. Your role in it is shown next to the name.</li>
+        <li>
+          The page reloads and every list is fetched again for the new club. You land wherever your
+          role in the new club takes you.
+        </li>
+      </ol>
+      <div class="note">
+        <strong>The list holds only your clubs.</strong>
+        You never see clubs you do not belong to. With access to a single club, no list is shown.
+      </div>
+    </div>
+
+    <h2>Things that work the same everywhere</h2>
+    <ul>
+      <li>
+        Long lists are paged. The foot of the list reads
+        <span class="ui">Page 1 of 4 (87 total)</span>, with
+        <span class="ui">Previous</span> and <span class="ui">Next</span> beside it.
+      </li>
+      <li>
+        Every list has a create button at the top right — for example
+        <span class="ui">New trainee</span> — and <span class="ui">Edit</span> and
+        <span class="ui">Delete</span> on each row. You only see the ones your role allows.
+      </li>
+      <li>
+        Deleting always asks for confirmation and names anything else that will be removed with
+        the record.
+      </li>
+      <li>
+        <span class="ui">Save</span> stores your changes, <span class="ui">Cancel</span> discards
+        them.
+      </li>
+    </ul>
+
+    <h2>When something is not there</h2>
+    <ul>
+      <li>
+        <strong>A menu is missing.</strong> Your role has no access to that section. The role pages
+        list which sections each role gets.
+      </li>
+      <li>
+        <strong>An empty screen saying "No club selected".</strong> This is for Super
+        Administrators — pick a club in the top bar.
+      </li>
+      <li>
+        <strong>A button is not there.</strong> Read-only records are still visible; the buttons
+        that change them appear only for roles allowed to change them.
+      </li>
+      <li>
+        <strong>A message about missing permission.</strong> You opened an address your role does
+        not allow, and the system returned you to a screen you may use.
+      </li>
+      <li>
+        <strong>The connection drops for a moment.</strong> You stay signed in and the system tries
+        again by itself. If you reload the page while the connection is down, you see the sign-in
+        page: reload once more when the connection is back, and you return to your club.
+      </li>
+    </ul>
+
+    <footer>
+      All names and email addresses in the examples are invented. ·
+      <a href="../index.html">Back to the start</a>
+    </footer>
+  </body>
+</html>

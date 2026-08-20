@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event';
 import FeeDetailPage from '@/app/(dashboard)/fees/[id]/page';
 import { AuthProvider } from '@/components/auth-provider';
 import { I18nProvider } from '@/components/i18n-provider';
-import { writeStoredTokens } from '@/lib/auth-storage';
+import { setAccessToken } from '@/lib/auth-storage';
 
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ replace: vi.fn(), push: vi.fn(), back: vi.fn() }),
@@ -55,13 +55,176 @@ function renderPage() {
 describe('FeeDetailPage — payment ledger flow', () => {
   beforeEach(() => {
     const exp = Math.floor(Date.now() / 1000) + 600;
-    writeStoredTokens({
-      accessToken: buildJwt({ sub: 'u', email: 'admin@x', role: 'ADMIN', tenantId: 't', exp }),
-      refreshToken: 'R',
-    });
+    setAccessToken(buildJwt({ sub: 'u', email: 'admin@x', role: 'ADMIN', tenantId: 't', exp }));
   });
   afterEach(() => {
     vi.restoreAllMocks();
+  });
+
+  // Both money boxes on this screen used their own rule: the fee amount accepted >= 0, so an
+  // emptied box saved a zero fee (Number('') is 0), and neither rejected a third decimal place the
+  // DTO would refuse anyway. They share one rule with the create form now.
+  describe('amount validation', () => {
+    function stubDetail(onPatch?: (body: unknown) => void, onPost?: (body: unknown) => void) {
+      vi.spyOn(globalThis, 'fetch').mockImplementation((input, init) => {
+        const url = typeof input === 'string' ? input : (input as Request).url;
+        const method = init?.method ?? 'GET';
+        if (url.endsWith('/fees/f1') && method === 'PATCH') {
+          onPatch?.(JSON.parse(init!.body as string));
+          return Promise.resolve(jsonResponse(200, FEE_DETAIL_BASE));
+        }
+        if (url.endsWith('/fees/f1/payments') && method === 'POST') {
+          onPost?.(JSON.parse(init!.body as string));
+          return Promise.resolve(jsonResponse(201, { id: 'p1' }));
+        }
+        if (url.endsWith('/fees/f1')) return Promise.resolve(jsonResponse(200, FEE_DETAIL_BASE));
+        return Promise.resolve(jsonResponse(404, null));
+      });
+    }
+
+    async function feeAmountBox() {
+      await screen.findByText(/Yoga 101/);
+      const el = document.getElementById('amount') as HTMLInputElement | null;
+      if (!el) throw new Error('fee amount input not found');
+      return el;
+    }
+
+    function saveButtons() {
+      return screen.getAllByRole('button', { name: /^Save$|^Запазване$/ });
+    }
+
+    it.each(['', '0', '-5', '1.234', '2000000'])(
+      'refuses to save the fee amount %j',
+      async (value) => {
+        const user = userEvent.setup();
+        let patched: unknown = null;
+        stubDetail((b) => {
+          patched = b;
+        });
+        renderPage();
+        const amount = await feeAmountBox();
+
+        await user.clear(amount);
+        if (value !== '') await user.type(amount, value);
+        const first = saveButtons()[0];
+        if (!first) throw new Error('expected the edit-fee Save button');
+        await user.click(first);
+
+        expect(await screen.findByText(/Сумата трябва|Amount must/)).toBeInTheDocument();
+        expect(patched).toBeNull();
+      },
+    );
+
+    it('saves a valid fee amount as a number', async () => {
+      const user = userEvent.setup();
+      let patched: Record<string, unknown> | null = null;
+      stubDetail((b) => {
+        patched = b as Record<string, unknown>;
+      });
+      renderPage();
+      const amount = await feeAmountBox();
+
+      await user.clear(amount);
+      await user.type(amount, '75.5');
+      const first = saveButtons()[0];
+      if (!first) throw new Error('expected the edit-fee Save button');
+      await user.click(first);
+
+      await vi.waitFor(() => expect(patched).not.toBeNull());
+      expect(patched).toMatchObject({ amount: 75.5 });
+    });
+
+    it.each(['0', '-5', '1.234', '2000000'])(
+      'refuses to record the payment amount %j',
+      async (value) => {
+        const user = userEvent.setup();
+        let posted: unknown = null;
+        stubDetail(undefined, (b) => {
+          posted = b;
+        });
+        renderPage();
+        await screen.findByText(/Yoga 101/);
+
+        await user.type(document.getElementById('p-amount') as HTMLInputElement, value);
+        await user.type(document.getElementById('p-paidAt') as HTMLInputElement, '2026-03-15');
+        const buttons = saveButtons();
+        const last = buttons[buttons.length - 1];
+        if (!last) throw new Error('expected the payment Save button');
+        await user.click(last);
+
+        expect(await screen.findByText(/Сумата трябва|Amount must/)).toBeInTheDocument();
+        expect(posted).toBeNull();
+      },
+    );
+
+    // How much may be paid depends on the fee's ledger, so that rule lives on the server only
+    // (TKT-0072) and its 400 names the balance. The form has to show that reason rather than a
+    // generic failure, or the admin cannot tell what to type instead.
+    it('shows the server reason when a payment exceeds the balance', async () => {
+      const user = userEvent.setup();
+      vi.spyOn(globalThis, 'fetch').mockImplementation((input, init) => {
+        const url = typeof input === 'string' ? input : (input as Request).url;
+        const method = init?.method ?? 'GET';
+        if (url.endsWith('/fees/f1/payments') && method === 'POST') {
+          return Promise.resolve(
+            jsonResponse(400, {
+              statusCode: 400,
+              message: 'Payment of 150 exceeds the outstanding balance of 100 on this fee',
+            }),
+          );
+        }
+        if (url.endsWith('/fees/f1')) return Promise.resolve(jsonResponse(200, FEE_DETAIL_BASE));
+        return Promise.resolve(jsonResponse(404, null));
+      });
+      renderPage();
+      await screen.findByText(/Yoga 101/);
+
+      await user.type(document.getElementById('p-amount') as HTMLInputElement, '150');
+      await user.type(document.getElementById('p-paidAt') as HTMLInputElement, '2026-03-15');
+      const buttons = saveButtons();
+      const last = buttons[buttons.length - 1];
+      if (!last) throw new Error('expected the payment Save button');
+      await user.click(last);
+
+      expect(await screen.findByText(/exceeds the outstanding balance of 100/)).toBeInTheDocument();
+    });
+
+    // Same 400, now carrying the code the backend attaches. The default locale is bg, so the
+    // admin must read Bulgarian rather than the server's English `message`.
+    it('shows the overpayment reason in the active locale when the 400 carries a code', async () => {
+      const user = userEvent.setup();
+      vi.spyOn(globalThis, 'fetch').mockImplementation((input, init) => {
+        const url = typeof input === 'string' ? input : (input as Request).url;
+        const method = init?.method ?? 'GET';
+        if (url.endsWith('/fees/f1/payments') && method === 'POST') {
+          return Promise.resolve(
+            jsonResponse(400, {
+              statusCode: 400,
+              message: 'Payment of 150 exceeds the outstanding balance of 100 on this fee',
+              error: 'BadRequest',
+              code: 'FEE_PAYMENT_EXCEEDS_BALANCE',
+              params: { amount: 150, balance: '100' },
+            }),
+          );
+        }
+        if (url.endsWith('/fees/f1')) return Promise.resolve(jsonResponse(200, FEE_DETAIL_BASE));
+        return Promise.resolve(jsonResponse(404, null));
+      });
+      renderPage();
+      await screen.findByText(/Yoga 101/);
+
+      await user.type(document.getElementById('p-amount') as HTMLInputElement, '150');
+      await user.type(document.getElementById('p-paidAt') as HTMLInputElement, '2026-03-15');
+      const buttons = saveButtons();
+      const last = buttons[buttons.length - 1];
+      if (!last) throw new Error('expected the payment Save button');
+      await user.click(last);
+
+      const shown = await screen.findByText(/надвишава остатъка от 100/);
+      expect(shown).toBeInTheDocument();
+      expect(shown.textContent).toContain('150');
+      expect(shown.textContent).not.toContain('exceeds');
+    });
   });
 
   it('records a payment, refetches the fee, and shows the updated PAID badge + outstanding 0', async () => {

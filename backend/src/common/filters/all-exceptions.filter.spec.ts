@@ -19,6 +19,14 @@ class BoomController {
   unknown(): unknown {
     throw new Error('something internal exploded with sensitive details');
   }
+  @Get('coded')
+  coded(): unknown {
+    throw new BadRequestException({
+      message: 'Payment of 10 exceeds the outstanding balance of 5 on this fee',
+      code: 'FEE_PAYMENT_EXCEEDS_BALANCE',
+      params: { amount: 10, balance: '5' },
+    });
+  }
 }
 
 async function buildApp(): Promise<INestApplication> {
@@ -65,5 +73,25 @@ describe('AllExceptionsFilter', () => {
     });
     expect(JSON.stringify(res.body)).not.toContain('sensitive details');
     expect(JSON.stringify(res.body)).not.toContain('stack');
+  });
+
+  // The client translates on `code` and interpolates `params`; `message` stays the
+  // English fallback for a code the bundle has no key for.
+  it('passes a code and its params through to the body', async () => {
+    const res = await request(app.getHttpServer()).get('/boom/coded');
+    expect(res.status).toBe(400);
+    expect(res.body).toMatchObject({
+      statusCode: 400,
+      message: 'Payment of 10 exceeds the outstanding balance of 5 on this fee',
+      error: 'BadRequest',
+      code: 'FEE_PAYMENT_EXCEEDS_BALANCE',
+      params: { amount: 10, balance: '5' },
+    });
+  });
+
+  it('omits code and params when the exception carries none', async () => {
+    const res = await request(app.getHttpServer()).get('/boom/http');
+    expect(res.body.code).toBeUndefined();
+    expect(res.body.params).toBeUndefined();
   });
 });

@@ -1,6 +1,7 @@
 import type { INestApplication } from '@nestjs/common';
 import { ValidationPipe } from '@nestjs/common';
-import { ConfigModule } from '@nestjs/config';
+import { ConfigModule, ConfigService } from '@nestjs/config';
+import { Reflector } from '@nestjs/core';
 import { Test, type TestingModule } from '@nestjs/testing';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { randomUUID } from 'node:crypto';
@@ -11,8 +12,10 @@ import { MailModule } from '@/mail/mail.module';
 import { AuthService } from '@/auth/auth.service';
 import { LocationScopeModule } from '@/auth/scope/location-scope.module';
 import { PrismaModule } from '@/prisma/prisma.module';
+import { ResponseSchemaInterceptor } from '@/common/response-schema.interceptor';
 import { PrismaService } from '@/prisma/prisma.service';
 import { LocationsModule } from './locations.module';
+import { createTestUser } from '@/test-utils/create-user';
 
 const PASSWORD = 'TestPass123!';
 
@@ -45,6 +48,11 @@ describe('LocationsController (e2e-ish)', () => {
     app.useGlobalPipes(
       new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }),
     );
+    // AppModule registers this as an APP_INTERCEPTOR; this spec builds its own module graph,
+    // so it wires the interceptor the same way it wires the ValidationPipe above.
+    app.useGlobalInterceptors(
+      new ResponseSchemaInterceptor(app.get(Reflector), app.get(ConfigService)),
+    );
     await app.init();
     prisma = moduleRef.get(PrismaService);
     auth = moduleRef.get(AuthService);
@@ -71,16 +79,14 @@ describe('LocationsController (e2e-ish)', () => {
 
   async function setupTenantActor(role: UserRole, opts?: { locationIds?: string[] }) {
     const tenant = await newTenant();
-    const user = await prisma.user.create({
-      data: {
-        email: `${randomUUID()}@test.local`,
-        passwordHash: await auth.hashPassword(PASSWORD),
-        role,
-        tenantId: tenant.id,
-        ...(opts?.locationIds?.length
-          ? { locations: { connect: opts.locationIds.map((id) => ({ id })) } }
-          : {}),
-      },
+    const user = await createTestUser(prisma, {
+      email: `${randomUUID()}@test.local`,
+      passwordHash: await auth.hashPassword(PASSWORD),
+      role,
+      tenantId: tenant.id,
+      ...(opts?.locationIds?.length
+        ? { locations: { connect: opts.locationIds.map((id) => ({ id })) } }
+        : {}),
     });
     userIds.push(user.id);
     const tokens = await auth.login(user);
@@ -88,13 +94,10 @@ describe('LocationsController (e2e-ish)', () => {
   }
 
   async function setupSuperAdmin(): Promise<TestActor> {
-    const user = await prisma.user.create({
-      data: {
-        email: `${randomUUID()}@super.local`,
-        passwordHash: await auth.hashPassword(PASSWORD),
-        role: UserRole.SUPER_ADMIN,
-        tenantId: null,
-      },
+    const user = await createTestUser(prisma, {
+      email: `${randomUUID()}@super.local`,
+      passwordHash: await auth.hashPassword(PASSWORD),
+      role: UserRole.SUPER_ADMIN,
     });
     userIds.push(user.id);
     const tokens = await auth.login(user);
@@ -106,22 +109,21 @@ describe('LocationsController (e2e-ish)', () => {
       const tenant = await newTenant();
       const gym = await prisma.location.create({ data: { tenantId: tenant.id, name: 'Gym' } });
       await prisma.location.create({ data: { tenantId: tenant.id, name: 'Pool' } });
-      const admin = await prisma.user.create({
-        data: {
-          email: `${randomUUID()}@a.local`,
-          passwordHash: await auth.hashPassword(PASSWORD),
-          role: UserRole.ADMIN,
-          tenantId: tenant.id,
-          locations: { connect: [{ id: gym.id }] },
-        },
+      const admin = await createTestUser(prisma, {
+        email: `${randomUUID()}@a.local`,
+        passwordHash: await auth.hashPassword(PASSWORD),
+        role: UserRole.ADMIN,
+        tenantId: tenant.id,
+        locations: { connect: [{ id: gym.id }] },
       });
       userIds.push(admin.id);
       const tokens = await auth.login(admin);
       const res = await request(server)
         .get('/locations')
         .set('Authorization', `Bearer ${tokens.accessToken}`)
+        .set('X-Tenant-Id', tenant.id)
         .expect(200);
-      expect(res.body.map((l: { name: string }) => l.name)).toEqual(['Gym']);
+      expect(res.body.items.map((l: { name: string }) => l.name)).toEqual(['Gym']);
     });
 
     it('admin with no assigned locations sees an empty list', async () => {
@@ -130,18 +132,32 @@ describe('LocationsController (e2e-ish)', () => {
       const res = await request(server)
         .get('/locations')
         .set('Authorization', `Bearer ${actor.accessToken}`)
+        .set('X-Tenant-Id', actor.tenantId!)
         .expect(200);
-      expect(res.body).toEqual([]);
+      expect(res.body.items).toEqual([]);
     });
 
-    it('employee can list locations in their tenant (no scoping change)', async () => {
-      const actor = await setupTenantActor(UserRole.EMPLOYEE);
-      await prisma.location.create({ data: { tenantId: actor.tenantId!, name: 'Pool' } });
+    it('employee lists only their assigned locations', async () => {
+      const tenant = await newTenant();
+      const pool = await prisma.location.create({
+        data: { tenantId: tenant.id, name: 'Pool' },
+      });
+      await prisma.location.create({ data: { tenantId: tenant.id, name: 'Annex' } });
+      const employee = await createTestUser(prisma, {
+        email: `${randomUUID()}@e.local`,
+        passwordHash: await auth.hashPassword(PASSWORD),
+        role: UserRole.EMPLOYEE,
+        tenantId: tenant.id,
+        locations: { connect: [{ id: pool.id }] },
+      });
+      userIds.push(employee.id);
+      const tokens = await auth.login(employee);
       const res = await request(server)
         .get('/locations')
-        .set('Authorization', `Bearer ${actor.accessToken}`)
+        .set('Authorization', `Bearer ${tokens.accessToken}`)
+        .set('X-Tenant-Id', tenant.id)
         .expect(200);
-      expect(res.body.map((l: { name: string }) => l.name)).toEqual(['Pool']);
+      expect(res.body.items.map((l: { name: string }) => l.name)).toEqual(['Pool']);
     });
 
     it('super_admin lists locations of the tenant given by X-Tenant-Id', async () => {
@@ -155,7 +171,7 @@ describe('LocationsController (e2e-ish)', () => {
         .set('Authorization', `Bearer ${su.accessToken}`)
         .set('X-Tenant-Id', tenantA.id)
         .expect(200);
-      expect(res.body.map((l: { name: string }) => l.name)).toEqual(['A-Gym']);
+      expect(res.body.items.map((l: { name: string }) => l.name)).toEqual(['A-Gym']);
     });
 
     it('super_admin without X-Tenant-Id gets 400', async () => {
@@ -184,6 +200,7 @@ describe('LocationsController (e2e-ish)', () => {
       await request(server)
         .get('/locations')
         .set('Authorization', `Bearer ${actor.accessToken}`)
+        .set('X-Tenant-Id', actor.tenantId!)
         .expect(403);
     });
   });
@@ -193,20 +210,19 @@ describe('LocationsController (e2e-ish)', () => {
       const tenant = await newTenant();
       const studio = await prisma.location.create({ data: { tenantId: tenant.id, name: 'Studio' } });
       const other = await prisma.location.create({ data: { tenantId: tenant.id, name: 'Other' } });
-      const admin = await prisma.user.create({
-        data: {
-          email: `${randomUUID()}@a.local`,
-          passwordHash: await auth.hashPassword(PASSWORD),
-          role: UserRole.ADMIN,
-          tenantId: tenant.id,
-          locations: { connect: [{ id: studio.id }] },
-        },
+      const admin = await createTestUser(prisma, {
+        email: `${randomUUID()}@a.local`,
+        passwordHash: await auth.hashPassword(PASSWORD),
+        role: UserRole.ADMIN,
+        tenantId: tenant.id,
+        locations: { connect: [{ id: studio.id }] },
       });
       userIds.push(admin.id);
       const tokens = await auth.login(admin);
       await request(server)
         .get(`/locations/${other.id}`)
         .set('Authorization', `Bearer ${tokens.accessToken}`)
+        .set('X-Tenant-Id', tenant.id)
         .expect(404);
     });
 
@@ -217,6 +233,7 @@ describe('LocationsController (e2e-ish)', () => {
       await request(server)
         .get(`/locations/${inA.id}`)
         .set('Authorization', `Bearer ${b.accessToken}`)
+        .set('X-Tenant-Id', b.tenantId!)
         .expect(404);
     });
   });
@@ -249,6 +266,7 @@ describe('LocationsController (e2e-ish)', () => {
       await request(server)
         .post('/locations')
         .set('Authorization', `Bearer ${actor.accessToken}`)
+        .set('X-Tenant-Id', actor.tenantId!)
         .send({ name: 'Studio' })
         .expect(403);
     });
@@ -258,6 +276,7 @@ describe('LocationsController (e2e-ish)', () => {
       await request(server)
         .post('/locations')
         .set('Authorization', `Bearer ${actor.accessToken}`)
+        .set('X-Tenant-Id', actor.tenantId!)
         .send({ name: 'Studio' })
         .expect(403);
     });
@@ -323,6 +342,7 @@ describe('LocationsController (e2e-ish)', () => {
       await request(server)
         .patch(`/locations/${created.id}`)
         .set('Authorization', `Bearer ${actor.accessToken}`)
+        .set('X-Tenant-Id', actor.tenantId!)
         .send({ name: 'Renamed' })
         .expect(403);
     });
@@ -361,6 +381,7 @@ describe('LocationsController (e2e-ish)', () => {
       await request(server)
         .delete(`/locations/${created.id}`)
         .set('Authorization', `Bearer ${actor.accessToken}`)
+        .set('X-Tenant-Id', actor.tenantId!)
         .expect(403);
     });
 
@@ -370,6 +391,7 @@ describe('LocationsController (e2e-ish)', () => {
       await request(server)
         .delete(`/locations/${created.id}`)
         .set('Authorization', `Bearer ${actor.accessToken}`)
+        .set('X-Tenant-Id', actor.tenantId!)
         .expect(403);
     });
   });

@@ -1,6 +1,8 @@
+import { SUPER_ADMIN_USER as su } from '@/test-utils/auth-user';
 import type { INestApplication } from '@nestjs/common';
 import { ValidationPipe } from '@nestjs/common';
-import { ConfigModule } from '@nestjs/config';
+import { ConfigModule, ConfigService } from '@nestjs/config';
+import { Reflector } from '@nestjs/core';
 import { Test, type TestingModule } from '@nestjs/testing';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { randomUUID } from 'node:crypto';
@@ -14,7 +16,9 @@ import { FeesModule } from '@/fees/fees.module';
 import { FeesService } from '@/fees/fees.service';
 import { PrismaModule } from '@/prisma/prisma.module';
 import { PrismaService } from '@/prisma/prisma.service';
+import { ResponseSchemaInterceptor } from '@/common/response-schema.interceptor';
 import { DashboardModule } from './dashboard.module';
+import { createTestUser } from '@/test-utils/create-user';
 
 const PASSWORD = 'TestPass123!';
 
@@ -42,6 +46,11 @@ describe('DashboardController (e2e-ish)', () => {
     app.useGlobalPipes(
       new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }),
     );
+    // AppModule registers this as an APP_INTERCEPTOR; this spec builds its own module graph,
+    // so it wires the interceptor the same way it wires the ValidationPipe above.
+    app.useGlobalInterceptors(
+      new ResponseSchemaInterceptor(app.get(Reflector), app.get(ConfigService)),
+    );
     await app.init();
     prisma = moduleRef.get(PrismaService);
     auth = moduleRef.get(AuthService);
@@ -64,14 +73,12 @@ describe('DashboardController (e2e-ish)', () => {
     const location = await prisma.location.create({
       data: { tenantId: tenant.id, name: `Main-${randomUUID()}` },
     });
-    const user = await prisma.user.create({
-      data: {
-        email: `${randomUUID()}@x`,
-        passwordHash: await auth.hashPassword(PASSWORD),
-        role,
-        tenantId: tenant.id,
-        ...(role === UserRole.ADMIN ? { locations: { connect: [{ id: location.id }] } } : {}),
-      },
+    const user = await createTestUser(prisma, {
+      email: `${randomUUID()}@x`,
+      passwordHash: await auth.hashPassword(PASSWORD),
+      role,
+      tenantId: tenant.id,
+      ...(role === UserRole.ADMIN ? { locations: { connect: [{ id: location.id }] } } : {}),
     });
     const tokens = await auth.login(user);
     return { tenantId: tenant.id, locationId: location.id, accessToken: tokens.accessToken };
@@ -83,6 +90,7 @@ describe('DashboardController (e2e-ish)', () => {
       const res = await request(server)
         .get('/dashboard/fees-summary?from=2026-01-01&to=2026-03-31')
         .set('Authorization', `Bearer ${a.accessToken}`)
+        .set('X-Tenant-Id', a.tenantId)
         .expect(200);
       expect(res.body).toEqual([
         { period: '2026-01', collected: 0, pending: 0 },
@@ -117,7 +125,7 @@ describe('DashboardController (e2e-ish)', () => {
         amount: 100,
         periodStart: '2026-03-01',
         periodEnd: '2026-03-31',
-      });
+      }, su);
       await prisma.payment.create({
         data: { tenantId: a.tenantId, feeId: fee.id, amount: 60, paidAt: new Date('2026-03-15') },
       });
@@ -125,6 +133,7 @@ describe('DashboardController (e2e-ish)', () => {
       const res = await request(server)
         .get('/dashboard/fees-summary?from=2026-03-01&to=2026-03-31')
         .set('Authorization', `Bearer ${a.accessToken}`)
+        .set('X-Tenant-Id', a.tenantId)
         .expect(200);
       expect(res.body).toEqual([{ period: '2026-03', collected: 60, pending: 40 }]);
     });
@@ -134,6 +143,7 @@ describe('DashboardController (e2e-ish)', () => {
       await request(server)
         .get('/dashboard/fees-summary?from=2026-01-01&to=2026-03-31')
         .set('Authorization', `Bearer ${a.accessToken}`)
+        .set('X-Tenant-Id', a.tenantId)
         .expect(403);
     });
 
@@ -142,6 +152,7 @@ describe('DashboardController (e2e-ish)', () => {
       const res = await request(server)
         .get('/dashboard/fees-summary')
         .set('Authorization', `Bearer ${a.accessToken}`)
+        .set('X-Tenant-Id', a.tenantId)
         .expect(200);
       expect(res.body).toHaveLength(6);
     });
@@ -174,7 +185,7 @@ describe('DashboardController (e2e-ish)', () => {
         amount: 100,
         periodStart: '2026-03-01',
         periodEnd: '2026-03-31',
-      });
+      }, su);
       await prisma.payment.create({
         data: { tenantId: a.tenantId, feeId: fee.id, amount: 100, paidAt: new Date('2026-04-10') },
       });
@@ -182,6 +193,7 @@ describe('DashboardController (e2e-ish)', () => {
       const res = await request(server)
         .get('/dashboard/cashflow-summary?from=2026-03-01&to=2026-04-30')
         .set('Authorization', `Bearer ${a.accessToken}`)
+        .set('X-Tenant-Id', a.tenantId)
         .expect(200);
       expect(res.body).toEqual([
         { period: '2026-03', collected: 0, billed: 100 },
@@ -194,6 +206,7 @@ describe('DashboardController (e2e-ish)', () => {
       await request(server)
         .get('/dashboard/cashflow-summary')
         .set('Authorization', `Bearer ${a.accessToken}`)
+        .set('X-Tenant-Id', a.tenantId)
         .expect(403);
     });
   });

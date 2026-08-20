@@ -10,6 +10,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends openssl \
 WORKDIR /app
 # NODE_ENV is intentionally NOT set to production here: npm ci omits devDependencies
 # when NODE_ENV=production, and the build stages need them (@nestjs/cli, typescript).
+COPY backend/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN sed -i 's/\r$//' /usr/local/bin/docker-entrypoint.sh \
+    && chmod +x /usr/local/bin/docker-entrypoint.sh
 
 # ---- deps: install all workspace deps (compiles native modules for Linux) --------
 FROM base AS deps
@@ -31,9 +34,6 @@ RUN npm run build --workspace backend
 # ---- dev: hot-reload target (source arrives via bind mount in compose) -----------
 FROM deps AS dev
 ENV NODE_ENV=development
-COPY backend/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
-RUN sed -i 's/\r$//' /usr/local/bin/docker-entrypoint.sh \
-    && chmod +x /usr/local/bin/docker-entrypoint.sh
 EXPOSE 4000
 ENTRYPOINT ["docker-entrypoint.sh"]
 CMD ["npm", "run", "dev", "--workspace", "backend"]
@@ -50,9 +50,6 @@ COPY --from=build /app/backend/dist ./backend/dist
 COPY --from=build /app/backend/prisma ./backend/prisma
 COPY --from=build /app/backend/prisma.config.ts ./backend/prisma.config.ts
 COPY --from=build /app/backend/tsconfig.json ./backend/tsconfig.json
-COPY backend/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
-RUN sed -i 's/\r$//' /usr/local/bin/docker-entrypoint.sh \
-    && chmod +x /usr/local/bin/docker-entrypoint.sh
 EXPOSE 4000
 ENTRYPOINT ["docker-entrypoint.sh"]
 CMD ["node", "backend/dist/main.js"]

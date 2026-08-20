@@ -1,0 +1,433 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Administrator — PulseDesk</title>
+    <link rel="stylesheet" href="../assets/docs.css" />
+  </head>
+  <body>
+    <nav class="topnav">
+      <a class="home" href="../index.html">PulseDesk</a>
+      <a href="basics.html">Getting started</a>
+      <a href="super-admin.html">Super Administrator</a>
+      <a href="trainer.html">Employee</a>
+      <a href="customer.html">Customer</a>
+      <span class="spacer"></span>
+      <a class="lang" href="../bg/admin.html">BG</a>
+    </nav>
+
+    <h1>Administrator</h1>
+    <p class="lead">
+      You run one club: its trainees, classes, schedules, sessions, fees, and the people who work
+      in it.
+    </p>
+    <p class="crumbs">
+      Read <a href="basics.html">Getting started</a> first — signing in, passwords and switching
+      club.
+    </p>
+
+    <h2>What you see</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Menu</th>
+          <th>What it is for</th>
+          <th>Rights</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Dashboard</td>
+          <td>
+            Counts of locations, active classes and this week's sessions, then charts of collected
+            and pending fees, and of cash-flow.
+          </td>
+          <td>read</td>
+        </tr>
+        <tr>
+          <td>Locations</td>
+          <td>The places where classes happen.</td>
+          <td>read only</td>
+        </tr>
+        <tr>
+          <td>Classes</td>
+          <td>The kinds of training, their price and their default trainers.</td>
+          <td>full</td>
+        </tr>
+        <tr>
+          <td>Schedules</td>
+          <td>Weekly recurring slots that sessions are generated from.</td>
+          <td>full</td>
+        </tr>
+        <tr>
+          <td>Sessions</td>
+          <td>The individual occurrences with date, time, trainer and attendance.</td>
+          <td>full</td>
+        </tr>
+        <tr>
+          <td>Trainees</td>
+          <td>The people who train, with guardian contacts and class enrolment.</td>
+          <td>full</td>
+        </tr>
+        <tr>
+          <td>Fees</td>
+          <td>Per-trainee charges and the payments recorded against them.</td>
+          <td>full</td>
+        </tr>
+        <tr>
+          <td>Users</td>
+          <td>The people with access to the club — trainers and customers.</td>
+          <td>full</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="note">
+      <strong>The chart period.</strong>
+      <span class="ui">Dashboard</span> shows the last 6 months. The <span class="ui">From</span>
+      and <span class="ui">To</span> fields set a different period, and either may be left
+      empty — a filled field is cleared with the ✕ at its right edge.
+      <span class="ui">From</span> alone runs to the current month; <span class="ui">To</span>
+      alone shows the 6 months before it. The period cannot be longer than 120 months (10 years)
+      and the end date cannot be before the start date — in both cases a message appears and the
+      chart stays as it was.
+    </div>
+
+    <h2>What you can do</h2>
+    <ul>
+      <li>Create, edit and delete trainees, classes, schedules, sessions and fees.</li>
+      <li>Mark attendance and add a trainee to a session.</li>
+      <li>Generate monthly or per-session fees for a whole class at once.</li>
+      <li>Record payments and remove a payment entered by mistake.</li>
+      <li>Add trainers and customers to the club, and remove them from it.</li>
+      <li>Link a trainee to a customer account so a parent can see their information.</li>
+    </ul>
+
+    <h2>What you cannot do, and why</h2>
+    <div class="warn">
+      <strong>Only a Super Administrator creates locations.</strong>
+      You see the list of locations and use it in classes and sessions, but
+      <span class="ui">New location</span> and editing a location are not available to you. Opening
+      such an address directly returns you to <span class="ui">Locations</span>. Ask your Super
+      Administrator for a new location.
+    </div>
+    <ul>
+      <li>
+        <strong>You cannot change an existing user's role.</strong> Only a Super Administrator
+        does that. When adding a new user you choose between
+        <span class="ui">Employee</span> and <span class="ui">Customer</span>.
+      </li>
+      <li>
+        <strong>You cannot remove a Super Administrator</strong> from the user list.
+      </li>
+      <li>
+        <strong>You see your own club's data only.</strong> There is no view across clubs. If you
+        belong to more than one club, switch club in the top bar and work in each separately.
+      </li>
+      <li>
+        <strong>You see the data of your own locations.</strong> Every administrator and employee has
+        at least one location assigned; data belonging to locations you are not responsible for is not
+        shown.
+      </li>
+      <li>
+        <strong>There are no card payments.</strong> Payments are entered by hand once the money
+        has arrived.
+      </li>
+    </ul>
+
+    <h2>Step by step</h2>
+
+    <div class="story">
+      <h3>1. As an administrator I want to add a new trainee</h3>
+      <ol>
+        <li>Open <span class="ui">Trainees</span> and press <span class="ui">New trainee</span>.</li>
+        <li>Fill in <span class="ui">First name</span>, <span class="ui">Last name</span> and <span class="ui">Date of birth</span>.</li>
+        <li>Optionally add <span class="ui">Phone</span>, <span class="ui">Email</span> and <span class="ui">Notes</span>.</li>
+        <li>Tick the <span class="ui">Locations</span> where the trainee trains.</li>
+        <li>
+          In <span class="ui">Classes</span> type at least two letters of the class name, then press
+          the class in the list. It becomes a chip above the field. To remove a chip, press it.
+        </li>
+        <li>Press <span class="ui">Save</span>.</li>
+      </ol>
+      <div class="stop">
+        <strong>A trainee under 18 needs at least one contact.</strong>
+        As soon as the date of birth means the trainee is under 18, a
+        <span class="ui">Guardian contacts</span> section opens and says that at least one guardian
+        contact is required. Press <span class="ui">+ Add contact</span> and fill in
+        <span class="ui">First name</span>, <span class="ui">Last name</span>,
+        <span class="ui">Relationship</span> (Parent, Guardian, Grandparent, Sibling, Other),
+        <span class="ui">Phone</span> and <span class="ui">Email</span>. Tick
+        <span class="ui">Primary contact</span> for the person to call first. Without a contact the
+        record will not save.
+      </div>
+      <p>
+        For a trainee who already exists, contacts are managed in a separate
+        <span class="ui">Guardian contacts</span> section on the edit screen — add and remove them
+        there at any time.
+      </p>
+      <p>
+        The <span class="ui">View</span> button on each row opens the read-only record — handy for a
+        quick look, and the only view your trainers get.
+      </p>
+    </div>
+
+    <div class="story">
+      <h3>2. As an administrator I want a parent to see their child's information</h3>
+      <ol>
+        <li>
+          Make sure the parent has an account in the club with the
+          <span class="ui">Customer</span> role. If not, create it first — see story 7.
+        </li>
+        <li>Open <span class="ui">Trainees</span> and press <span class="ui">Edit</span> on the child.</li>
+        <li>
+          In the <span class="ui">Guardians</span> section type at least two letters of the parent's
+          name or email address, then press their account in the list. It becomes a chip above the
+          field. Add more than one account if you must — both parents, for example. To remove a
+          chip, press it.
+        </li>
+        <li>Press <span class="ui">Save</span>.</li>
+      </ol>
+      <p>
+        The <span class="ui">Linked customer account</span> field is for a different case: when the
+        trainee is an adult and signs in with their own account. One customer account can be linked
+        to one trainee only — reusing it shows
+        <span class="ui">That account is already linked to another trainee</span>.
+      </p>
+      <p>
+        After saving, the parent sees the child in <span class="ui">My schedule</span> and
+        <span class="ui">My fees</span>, and can answer session invitations on their behalf.
+      </p>
+    </div>
+
+    <div class="story">
+      <h3>3. As an administrator I want to create a class</h3>
+      <ol>
+        <li>Open <span class="ui">Classes</span> and press <span class="ui">New class</span>.</li>
+        <li>Fill in <span class="ui">Name</span> and, if useful, <span class="ui">Description</span>.</li>
+        <li>
+          Choose the <span class="ui">Billing mode</span>:
+          <span class="ui">Per month</span> with <span class="ui">Monthly amount per trainee</span>,
+          or <span class="ui">Per session</span> with <span class="ui">Price per session</span>.
+        </li>
+        <li>Choose the <span class="ui">Locations</span> where the class runs.</li>
+        <li>
+          Choose the <span class="ui">Trainers</span> — they are used as the default for new
+          sessions of this class.
+        </li>
+        <li>Press <span class="ui">Save</span>.</li>
+      </ol>
+      <div class="warn">
+        <strong>The billing mode cannot be changed later.</strong>
+        The field is marked <span class="ui">(immutable after creation)</span>. If you pick the
+        wrong one, create a new class and move the trainees across.
+      </div>
+      <p>
+        If there are no locations or employees yet, the form says so plainly — for example
+        <span class="ui">No locations available — create one first</span>.
+      </p>
+    </div>
+
+    <div class="story">
+      <h3>4. As an administrator I want a weekly schedule and sessions from it</h3>
+      <ol>
+        <li>Open <span class="ui">Schedules</span> and press <span class="ui">New schedule</span>.</li>
+        <li>Choose the <span class="ui">Class</span> and the <span class="ui">Location</span>.</li>
+        <li>
+          Choose the <span class="ui">Day of week</span> and fill in
+          <span class="ui">Start time (HH:MM)</span> and <span class="ui">End time (HH:MM)</span> in
+          24-hour form, for example 18:00 and 19:30.
+        </li>
+        <li>Press <span class="ui">Save</span>. Repeat for each day of the week.</li>
+        <li>
+          In <span class="ui">Generate sessions</span> set <span class="ui">From</span> and
+          <span class="ui">To</span> — the range you want sessions for. Optionally set
+          <span class="ui">Limit to class (optional)</span>.
+        </li>
+        <li>Press <span class="ui">Generate sessions</span>.</li>
+        <li>
+          A result appears, for example
+          <span class="ui">Created 24 session(s); skipped 0 duplicate(s)</span>. The new sessions
+          are in <span class="ui">Sessions</span>.
+        </li>
+      </ol>
+      <div class="note">
+        <strong>Generating twice is safe.</strong>
+        A session that already exists is skipped and counted as a duplicate. Deleting a schedule
+        does not delete the sessions already generated from it.
+      </div>
+    </div>
+
+    <div class="story">
+      <h3>5. As an administrator I want to mark attendance</h3>
+      <ol>
+        <li>Open <span class="ui">Sessions</span> and find the session.</li>
+        <li>Press <span class="ui">Mark attendance</span> on its row.</li>
+        <li>
+          For each trainee choose a <span class="ui">Status</span>:
+          <span class="ui">Pending</span>, <span class="ui">Present</span>,
+          <span class="ui">Absent</span> or <span class="ui">Excused</span>.
+        </li>
+        <li>
+          If somebody turned up who is not on the list, pick them in
+          <span class="ui">Add a trainee…</span> and press <span class="ui">Add</span>.
+        </li>
+        <li>Press <span class="ui">Save all</span>. The number of saved rows is shown.</li>
+      </ol>
+      <p>
+        The <span class="ui">Customer RSVP</span> column shows what the customer answered in the
+        portal: <span class="ui">Confirmed</span>, <span class="ui">Declined</span> or
+        <span class="ui">Wants to reschedule</span>. That is information for you — the real
+        attendance is what you mark. <span class="ui">Last marked by</span> shows who marked it
+        most recently.
+      </p>
+    </div>
+
+    <div class="story">
+      <h3>6. As an administrator I want to charge fees and record a payment</h3>
+      <ol>
+        <li>Open <span class="ui">Fees</span>.</li>
+        <li>
+          For classes billed monthly use <span class="ui">Generate monthly fees</span>: set the
+          period and press <span class="ui">Generate</span>. One fee is created per trainee for
+          every monthly class.
+        </li>
+        <li>
+          For classes billed per session use
+          <span class="ui">Generate per-session fees</span> for a date range.
+        </li>
+        <li>
+          A result appears, for example
+          <span class="ui">Created 42 fee(s); skipped 3 duplicate(s)</span>. A duplicate means such
+          a fee already exists.
+        </li>
+        <li>
+          A single fee is created by hand with <span class="ui">New fee</span> — pick the trainee,
+          the class, the <span class="ui">Amount</span> and the period.
+        </li>
+        <li>To record a payment, press <span class="ui">Edit</span> on the fee's row.</li>
+        <li>
+          In <span class="ui">Record a payment</span> fill in <span class="ui">Amount</span>,
+          <span class="ui">Paid at</span>, <span class="ui">Method</span> (for example "cash" or
+          "bank transfer") and <span class="ui">Notes</span>, then save.
+        </li>
+      </ol>
+      <div class="note">
+        <strong>The status works itself out.</strong>
+        The sum of the recorded payments is compared with the fee's
+        <span class="ui">Amount</span>: equal amounts give <span class="ui">Paid</span>, a smaller
+        sum gives <span class="ui">Partial</span>, and no payment leaves it
+        <span class="ui">Unpaid</span>. The <span class="ui">Outstanding</span> column shows what is
+        left. The status is never typed in by hand.
+      </div>
+      <p>
+        To settle a fee in full, press <span class="ui">Pay the rest</span> next to the
+        <span class="ui">Amount</span> field. It fills in the remaining balance; you add the date
+        and save. The status becomes <span class="ui">Paid</span> on its own.
+      </p>
+      <div class="stop">
+        <strong>You cannot record more money than the fee asks for.</strong>
+        A payment above what is left is refused with
+        <span class="ui">Payment of 60.00 exceeds the outstanding balance of 40.00 on this fee</span>.
+        For the same reason you cannot lower the <span class="ui">Amount</span> below the payments
+        already recorded — that shows
+        <span class="ui">Amount 30.00 is below the 40.00 already recorded against this fee</span>.
+        Remove the payment first, then change the amount.
+      </div>
+      <p>
+        An amount must be more than zero, with two decimal places at most, and not more than
+        1,000,000. This applies to a fee amount, a payment and a class price.
+      </p>
+      <p>
+        Removing a payment asks for confirmation and warns that the fee status will be recomputed.
+        Use it when an amount was entered wrongly.
+      </p>
+      <p>
+        <strong>Who still owes for a class in a month.</strong>
+        In the fee list choose the <span class="ui">Class</span>, choose the
+        <span class="ui">Month</span>, and set <span class="ui">Status</span> to
+        <span class="ui">Outstanding</span>. That shows the unpaid fees and the partly paid ones
+        together, because both still owe money. Change the month to look at an earlier period.
+        <span class="ui">Search trainee or class…</span> finds one record.
+      </p>
+      <div class="note">
+        <strong>Trainees with no fee.</strong>
+        When you choose a class and a month, the trainees enrolled in that class who have no fee
+        for the month are listed above the table. The status filter cannot find them, because they
+        have no record at all. Use <span class="ui">Generate monthly fees</span> to create it.
+      </div>
+      <div class="note">
+        <strong>Changing the price of a class.</strong>
+        The amount is copied into the fee when the fee is created. If you raise the class price,
+        the fees already created keep the old amount, and the charts stay a true record of what
+        you charged. The new price applies only to fees created after the change. If you already
+        generated fees for a future month, delete them and generate again, or edit each amount.
+      </div>
+    </div>
+
+    <div class="story">
+      <h3>7. As an administrator I want to add a trainer or a customer</h3>
+      <ol>
+        <li>Open <span class="ui">Users</span> and press <span class="ui">New user</span>.</li>
+        <li>Fill in <span class="ui">Email</span>. You do not choose a password — the person sets their own.</li>
+        <li>
+          Optionally fill in <span class="ui">First name</span>, <span class="ui">Last name</span>
+          and <span class="ui">Phone</span>.
+        </li>
+        <li>
+          Choose the <span class="ui">Role</span>: <span class="ui">Employee</span> for a trainer,
+          <span class="ui">Customer</span> for a trainee or parent.
+        </li>
+        <li>
+          Choose the <span class="ui">Locations</span> the person is responsible for. Press the
+          field to see the list, or type to make it shorter, then press a location. It becomes a
+          chip above the field; press the chip to remove it. For an employee and an administrator at
+          least one location is required — it decides what they can see, so the form will not save
+          without one.
+        </li>
+        <li>Press <span class="ui">Save</span>.</li>
+      </ol>
+      <div class="note">
+        <strong>An existing email joins your club instead of creating a second account.</strong>
+        If the person already has a PulseDesk account, a message says that the existing account was
+        added to your club and their password is unchanged. One person keeps one account and picks
+        their clubs from the list in the top bar.
+      </div>
+      <div class="note">
+        <strong>The person receives an invitation by email.</strong>
+        On save, a link is sent to that address which lets them choose their own password. The link
+        is valid for 48 hours and works once. Until then the account exists but cannot be signed
+        into. You never learn anyone else’s password.
+      </div>
+      <p>
+        If the email does not arrive, the person can request a fresh link themselves with
+        <span class="ui">Forgot your password?</span> on the sign-in screen.
+      </p>
+    </div>
+
+    <div class="story">
+      <h3>8. As an administrator I want to take someone off the club</h3>
+      <ol>
+        <li>Open <span class="ui">Users</span>.</li>
+        <li>Press <span class="ui">Delete</span> on their row.</li>
+        <li>
+          Read the confirmation — it asks
+          <span class="ui">Remove ivan@example.com from your club?</span> and explains that their
+          account and their memberships in other clubs are unaffected. Only access to your club is
+          removed.
+        </li>
+        <li>Confirm with <span class="ui">Remove from club</span>.</li>
+      </ol>
+      <p>
+        To suspend access instead, open <span class="ui">Edit</span> and clear the
+        <span class="ui">Active</span> tick — the person stays in the club but cannot sign in.
+      </p>
+    </div>
+
+    <footer>
+      All names and email addresses in the examples are invented. ·
+      <a href="../index.html">Back to the start</a>
+    </footer>
+  </body>
+</html>

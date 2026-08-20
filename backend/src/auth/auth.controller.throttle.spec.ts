@@ -4,8 +4,11 @@ import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import request from 'supertest';
 import type { INestApplication } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
+import { FakeConfigService } from '@/test-utils/fake-config';
+import { ResponseSchemaInterceptor } from '@/common/response-schema.interceptor';
 
 class StubAuthService {
   validateUser(): unknown {
@@ -15,12 +18,10 @@ class StubAuthService {
     return {
       accessToken: 'a',
       refreshToken: 'r',
-      accessExpiresIn: 1,
-      refreshExpiresIn: 1,
     };
   }
   refresh(): unknown {
-    return { accessToken: 'a', refreshToken: 'r', accessExpiresIn: 1, refreshExpiresIn: 1 };
+    return { accessToken: 'a', refreshToken: 'r' };
   }
   logout(): unknown {
     return undefined;
@@ -39,12 +40,20 @@ async function buildApp(): Promise<INestApplication> {
     controllers: [AuthController],
     providers: [
       { provide: AuthService, useClass: StubAuthService },
+      // The controller now sets the refresh cookie, which needs JWT_REFRESH_TTL and
+      // NODE_ENV. Mechanical addition for a new constructor dependency — no assertion
+      // in this file changes.
+      { provide: ConfigService, useValue: new FakeConfigService({ JWT_REFRESH_TTL: '7d' }) },
       Reflector,
       { provide: APP_GUARD, useClass: ThrottlerGuard },
     ],
   }).compile();
 
   const app = module.createNestApplication();
+  // Matches AppModule's APP_INTERCEPTOR so the throttled routes are enforced here too.
+  app.useGlobalInterceptors(
+    new ResponseSchemaInterceptor(app.get(Reflector), app.get(ConfigService)),
+  );
   await app.init();
   return app;
 }
@@ -73,6 +82,19 @@ describe('AuthController throttling', () => {
     expect(responses.slice(0, 5).every((s) => s === 200)).toBe(true);
     expect(responses[5]).toBe(429);
     expect(responses[6]).toBe(429);
+  });
+
+  it('blocks the 11th logout from the same IP within 1 minute', async () => {
+    const server = app.getHttpServer();
+    const responses: number[] = [];
+    for (let i = 0; i < 12; i++) {
+      const res = await request(server).post('/auth/logout').send({ refreshToken: 'r' });
+      responses.push(res.status);
+    }
+    // first 10 succeed (204), 11th and 12th are throttled (429)
+    expect(responses.slice(0, 10).every((s) => s === 204)).toBe(true);
+    expect(responses[10]).toBe(429);
+    expect(responses[11]).toBe(429);
   });
 
   it('blocks the 4th forgot-password from the same IP within 1 minute', async () => {

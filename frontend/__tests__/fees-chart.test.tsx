@@ -1,9 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { FeesChart } from '@/components/fees-chart';
 import { I18nProvider } from '@/components/i18n-provider';
-import { writeStoredTokens } from '@/lib/auth-storage';
+import { setAccessToken } from '@/lib/auth-storage';
+import { setLocale } from '@/lib/i18n';
 
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ replace: vi.fn(), push: vi.fn(), back: vi.fn() }),
@@ -42,13 +43,11 @@ function renderChart() {
 describe('FeesChart', () => {
   beforeEach(() => {
     const exp = Math.floor(Date.now() / 1000) + 600;
-    writeStoredTokens({
-      accessToken: buildJwt({ sub: 'u', email: 'admin@x', role: 'ADMIN', tenantId: 't', exp }),
-      refreshToken: 'R',
-    });
+    setAccessToken(buildJwt({ sub: 'u', email: 'admin@x', role: 'ADMIN', tenantId: 't', exp }));
   });
-  afterEach(() => {
+  afterEach(async () => {
     vi.restoreAllMocks();
+    await setLocale('bg');
   });
 
   function mockFetch(handler: (url: string) => Response | Promise<Response>) {
@@ -108,5 +107,188 @@ describe('FeesChart', () => {
     expect(
       await screen.findByText(/No data in this range|Няма данни за този период/),
     ).toBeInTheDocument();
+  });
+
+  describe('date filters', () => {
+    const SEPT = [{ period: '2026-09', collected: 1, pending: 2 }];
+    const fromInput = () => screen.getByLabelText(/^(От|From)$/);
+    const toInput = () => screen.getByLabelText(/^(До|To)$/);
+
+    it('does not fire a request while the year is half-typed', async () => {
+      const calls: string[] = [];
+      mockFetch((url) => {
+        calls.push(url);
+        return jsonResponse(200, FEES_SUMMARY);
+      });
+      renderChart();
+      await screen.findByTestId('chart-row-2026-03');
+      expect(calls).toHaveLength(1);
+
+      // A native date input emits complete-but-absurd values while the year is typed.
+      fireEvent.change(fromInput(), { target: { value: '0002-01-01' } });
+      fireEvent.change(fromInput(), { target: { value: '0020-01-01' } });
+      fireEvent.change(fromInput(), { target: { value: '0202-01-01' } });
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 0));
+      });
+      expect(calls).toHaveLength(1);
+    });
+
+    it('fires exactly one request once the from date is plausible', async () => {
+      const calls: string[] = [];
+      mockFetch((url) => {
+        calls.push(url);
+        return jsonResponse(200, FEES_SUMMARY);
+      });
+      renderChart();
+      await screen.findByTestId('chart-row-2026-03');
+
+      fireEvent.change(fromInput(), { target: { value: '2026-01-01' } });
+      await vi.waitFor(() => expect(calls).toHaveLength(2));
+      expect(calls[1]).toContain('from=2026-01-01');
+    });
+
+    it('ignores a stale response that lands after a newer one', async () => {
+      const resolvers: Array<(r: Response) => void> = [];
+      vi.spyOn(globalThis, 'fetch').mockImplementation(
+        () => new Promise<Response>((resolve) => resolvers.push(resolve)),
+      );
+      renderChart();
+      await vi.waitFor(() => expect(resolvers).toHaveLength(1));
+
+      fireEvent.change(fromInput(), { target: { value: '2026-09-01' } });
+      await vi.waitFor(() => expect(resolvers).toHaveLength(2));
+
+      const [firstRequest, secondRequest] = resolvers;
+      if (!firstRequest || !secondRequest) throw new Error('expected two in-flight requests');
+
+      // Newest request answers first, then the superseded one.
+      secondRequest(jsonResponse(200, SEPT));
+      await screen.findByTestId('chart-row-2026-09');
+      firstRequest(jsonResponse(200, FEES_SUMMARY));
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 0));
+      });
+
+      expect(screen.queryByTestId('chart-row-2026-03')).toBeNull();
+      expect(screen.getByTestId('chart-row-2026-09')).toBeTruthy();
+    });
+
+
+    it('shows a translated message and sends nothing when "to" is before "from"', async () => {
+      const calls: string[] = [];
+      mockFetch((url) => {
+        calls.push(url);
+        return jsonResponse(200, FEES_SUMMARY);
+      });
+      renderChart();
+      await screen.findByTestId('chart-row-2026-03');
+
+      fireEvent.change(fromInput(), { target: { value: '2026-05-01' } });
+      await vi.waitFor(() => expect(calls).toHaveLength(2));
+      fireEvent.change(toInput(), { target: { value: '2026-03-01' } });
+
+      expect(
+        await screen.findByText('Крайната дата трябва да е на или след началната.'),
+      ).toBeInTheDocument();
+      expect(calls).toHaveLength(2);
+    });
+
+    it('shows a translated message and sends nothing when the range exceeds the limit', async () => {
+      const calls: string[] = [];
+      mockFetch((url) => {
+        calls.push(url);
+        return jsonResponse(200, FEES_SUMMARY);
+      });
+      renderChart();
+      await screen.findByTestId('chart-row-2026-03');
+
+      fireEvent.change(toInput(), { target: { value: '2026-12-31' } });
+      await vi.waitFor(() => expect(calls).toHaveLength(2));
+      fireEvent.change(fromInput(), { target: { value: '1990-01-01' } });
+
+      expect(
+        await screen.findByText('Периодът не може да е по-дълъг от 120 месеца.'),
+      ).toBeInTheDocument();
+      expect(calls).toHaveLength(2);
+    });
+
+    const clearFrom = () =>
+      screen.queryByRole('button', { name: /Clear start date|Изчистване на началната дата/i });
+    const clearTo = () =>
+      screen.queryByRole('button', { name: /Clear end date|Изчистване на крайната дата/i });
+
+    it('renders no clear button while both fields are empty', async () => {
+      mockFetch(() => jsonResponse(200, FEES_SUMMARY));
+      renderChart();
+      await screen.findByTestId('chart-row-2026-03');
+      expect(clearFrom()).toBeNull();
+      expect(clearTo()).toBeNull();
+    });
+
+    it('shows a clear button only for the field that holds a value', async () => {
+      mockFetch(() => jsonResponse(200, FEES_SUMMARY));
+      renderChart();
+      await screen.findByTestId('chart-row-2026-03');
+
+      fireEvent.change(fromInput(), { target: { value: '2026-01-01' } });
+      await vi.waitFor(() => expect(clearFrom()).not.toBeNull());
+      expect(clearTo()).toBeNull();
+    });
+
+    it('clicking clear empties the field and refetches without that bound', async () => {
+      const calls: string[] = [];
+      mockFetch((url) => {
+        calls.push(url);
+        return jsonResponse(200, FEES_SUMMARY);
+      });
+      renderChart();
+      await screen.findByTestId('chart-row-2026-03');
+
+      fireEvent.change(fromInput(), { target: { value: '2026-01-01' } });
+      await vi.waitFor(() => expect(calls).toHaveLength(2));
+      expect(calls[1]).toContain('from=2026-01-01');
+
+      const button = clearFrom();
+      if (!button) throw new Error('expected a clear button for the start date');
+      await userEvent.click(button);
+
+      await vi.waitFor(() => expect(calls).toHaveLength(3));
+      expect(calls[2]).not.toContain('from=');
+      expect(fromInput()).toHaveValue('');
+      expect(clearFrom()).toBeNull();
+    });
+
+    it('captions the period actually charted, taken from the response', async () => {
+      mockFetch(() => jsonResponse(200, FEES_SUMMARY));
+      renderChart();
+      await screen.findByTestId('chart-row-2026-03');
+      expect(
+        await screen.findByText(/(Показва|Showing): 2026-03 – 2026-04/),
+      ).toBeInTheDocument();
+    });
+
+    it('captions a single-month response without a range dash', async () => {
+      mockFetch(() => jsonResponse(200, [{ period: '2026-05', collected: 5, pending: 5 }]));
+      renderChart();
+      await screen.findByTestId('chart-row-2026-05');
+      expect(await screen.findByText(/(Показва|Showing): 2026-05$/)).toBeInTheDocument();
+    });
+    it('does not refetch when the language changes', async () => {
+      const calls: string[] = [];
+      mockFetch((url) => {
+        calls.push(url);
+        return jsonResponse(200, FEES_SUMMARY);
+      });
+      renderChart();
+      await screen.findByTestId('chart-row-2026-03');
+      expect(calls).toHaveLength(1);
+
+      await act(async () => {
+        await setLocale('en');
+      });
+      expect(await screen.findByLabelText('From')).toBeInTheDocument();
+      expect(calls).toHaveLength(1);
+    });
   });
 });

@@ -1,8 +1,4 @@
-import {
-  BadRequestException,
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import {
   AttendanceStatus,
   Prisma,
@@ -11,10 +7,28 @@ import {
 } from '@prisma/client';
 import { LocationScopeService } from '@/auth/scope/location-scope.service';
 import type { AuthenticatedUser } from '@/auth/types/jwt-payload';
-import { DEFAULT_LIST_TAKE } from '@/common/dto/paginated-result';
+import { assertDateOrder } from '@/common/dates';
+import {
+  buildPaginatedResult,
+  normalizePagination,
+  type PaginatedResult,
+  type PaginationInput,
+} from '@/common/dto/paginated-result';
 import { PrismaService } from '@/prisma/prisma.service';
+import {
+  assertClassInTenant,
+  assertLocationInTenant,
+  assertTrainerIds,
+} from '@/common/tenant-guards';
 import type { CreateSessionDto } from './dto/create-session.dto';
 import type { UpdateSessionDto } from './dto/update-session.dto';
+
+export interface SessionListFilters {
+  /** Inclusive. */
+  startsAtFrom?: string;
+  /** Exclusive — see ListSessionsQueryDto. */
+  startsAtBefore?: string;
+}
 
 // Internal shape for callers (e.g., ClassSchedulesService) that have already validated FKs
 // and want to create sessions inside their own transaction without re-running validation.
@@ -36,23 +50,37 @@ export class SessionsService {
     private readonly scope: LocationScopeService,
   ) {}
 
-  async list(tenantId: string, viewer: AuthenticatedUser): Promise<Session[]> {
+  async list(
+    tenantId: string,
+    viewer: AuthenticatedUser,
+    pagination?: PaginationInput,
+    filters?: SessionListFilters,
+  ): Promise<PaginatedResult<Session>> {
+    let where: Prisma.SessionWhereInput;
     if (viewer.role === UserRole.EMPLOYEE) {
-      return this.prisma.session.findMany({
-        where: { tenantId, trainers: { some: { id: viewer.id } } },
-        orderBy: { startsAt: 'asc' },
-        take: DEFAULT_LIST_TAKE,
-      });
+      where = { tenantId, trainers: { some: { id: viewer.id } } };
+    } else {
+      where = { tenantId, ...(await this.scope.locationWhere(viewer, tenantId)) };
     }
-    const allowedIds = await this.scope.getAccessibleLocationIds(viewer, tenantId);
-    return this.prisma.session.findMany({
-      where: {
-        tenantId,
-        ...(allowedIds === null ? {} : { locationId: { in: allowedIds } }),
-      },
-      orderBy: { startsAt: 'asc' },
-      take: DEFAULT_LIST_TAKE,
-    });
+    // gte/lt, not gte/lte: startsAtBefore is exclusive, so a caller asking for one week cannot
+    // count the next week's first session as well.
+    if (filters?.startsAtFrom !== undefined || filters?.startsAtBefore !== undefined) {
+      where.startsAt = {
+        ...(filters.startsAtFrom === undefined ? {} : { gte: new Date(filters.startsAtFrom) }),
+        ...(filters.startsAtBefore === undefined ? {} : { lt: new Date(filters.startsAtBefore) }),
+      };
+    }
+    const p = normalizePagination(pagination);
+    const [items, total] = await this.prisma.$transaction([
+      this.prisma.session.findMany({
+        where,
+        orderBy: { startsAt: 'asc' },
+        skip: p.skip,
+        take: p.take,
+      }),
+      this.prisma.session.count({ where }),
+    ]);
+    return buildPaginatedResult(items, total, p);
   }
 
   async findById(tenantId: string, id: string, viewer: AuthenticatedUser) {
@@ -60,8 +88,7 @@ export class SessionsService {
     if (viewer.role === UserRole.EMPLOYEE) {
       where.trainers = { some: { id: viewer.id } };
     } else {
-      const allowedIds = await this.scope.getAccessibleLocationIds(viewer, tenantId);
-      if (allowedIds !== null) where.locationId = { in: allowedIds };
+      Object.assign(where, await this.scope.locationWhere(viewer, tenantId));
     }
     const session = await this.prisma.session.findFirst({
       where,
@@ -78,17 +105,17 @@ export class SessionsService {
   async create(
     tenantId: string,
     dto: CreateSessionDto,
-    user?: AuthenticatedUser,
+    user: AuthenticatedUser,
   ): Promise<Session> {
     const startsAt = new Date(dto.startsAt);
     const endsAt = new Date(dto.endsAt);
     assertTimeRange(startsAt, endsAt);
 
     // Validate FK references in the same tenant + check trainer roles in one go.
-    await this.assertClassInTenant(tenantId, dto.classId);
-    await this.assertLocationInTenant(tenantId, dto.locationId);
-    if (user) await this.scope.assertLocationAllowed(user, tenantId, dto.locationId);
-    if (dto.trainerIds) await this.assertTrainerIds(tenantId, dto.trainerIds);
+    await assertClassInTenant(this.prisma, tenantId, dto.classId);
+    await assertLocationInTenant(this.prisma, tenantId, dto.locationId);
+    await this.scope.assertLocationsAllowed(user, tenantId, [dto.locationId]);
+    if (dto.trainerIds) await assertTrainerIds(this.prisma, tenantId, dto.trainerIds);
 
     return this.prisma.$transaction((tx) =>
       this.createInTransaction(tx, {
@@ -159,24 +186,22 @@ export class SessionsService {
     tenantId: string,
     id: string,
     dto: UpdateSessionDto,
-    user?: AuthenticatedUser,
+    user: AuthenticatedUser,
   ): Promise<Session> {
     const existing = await this.prisma.session.findFirst({ where: { id, tenantId } });
     if (!existing) throw new NotFoundException(`Session ${id} not found`);
-    if (user) {
-      await this.scope.assertLocationAllowed(user, tenantId, existing.locationId);
-    }
+    await this.scope.assertLocationsAllowed(user, tenantId, [existing.locationId]);
 
     const newStartsAt = dto.startsAt ? new Date(dto.startsAt) : existing.startsAt;
     const newEndsAt = dto.endsAt ? new Date(dto.endsAt) : existing.endsAt;
     assertTimeRange(newStartsAt, newEndsAt);
 
     if (dto.locationId !== undefined) {
-      await this.assertLocationInTenant(tenantId, dto.locationId);
-      if (user) await this.scope.assertLocationAllowed(user, tenantId, dto.locationId);
+      await assertLocationInTenant(this.prisma, tenantId, dto.locationId);
+      await this.scope.assertLocationsAllowed(user, tenantId, [dto.locationId]);
     }
     if (dto.trainerIds !== undefined) {
-      await this.assertTrainerIds(tenantId, dto.trainerIds);
+      await assertTrainerIds(this.prisma, tenantId, dto.trainerIds);
     }
 
     const data: Prisma.SessionUpdateInput = {};
@@ -194,49 +219,22 @@ export class SessionsService {
     return this.prisma.session.update({ where: { id }, data });
   }
 
-  async delete(tenantId: string, id: string, user?: AuthenticatedUser): Promise<void> {
+  async delete(tenantId: string, id: string, user: AuthenticatedUser): Promise<void> {
     const existing = await this.prisma.session.findFirst({
       where: { id, tenantId },
       select: { locationId: true },
     });
     if (!existing) throw new NotFoundException(`Session ${id} not found`);
-    if (user) await this.scope.assertLocationAllowed(user, tenantId, existing.locationId);
+    await this.scope.assertLocationsAllowed(user, tenantId, [existing.locationId]);
     await this.prisma.session.delete({ where: { id } });
   }
 
-  // ---- internal validators ----
-
-  private async assertClassInTenant(tenantId: string, classId: string): Promise<void> {
-    const found = await this.prisma.class.count({ where: { id: classId, tenantId } });
-    if (!found) {
-      throw new BadRequestException('classId is invalid or not in your tenant');
-    }
-  }
-
-  private async assertLocationInTenant(tenantId: string, locationId: string): Promise<void> {
-    const found = await this.prisma.location.count({ where: { id: locationId, tenantId } });
-    if (!found) {
-      throw new BadRequestException('locationId is invalid or not in your tenant');
-    }
-  }
-
-  private async assertTrainerIds(tenantId: string, ids: string[]): Promise<void> {
-    if (ids.length === 0) return;
-    const found = await this.prisma.user.count({
-      where: { id: { in: ids }, tenantId, role: UserRole.EMPLOYEE },
-    });
-    if (found !== ids.length) {
-      throw new BadRequestException('Some trainerIds are not employees in your tenant');
-    }
-  }
 }
 
 function assertTimeRange(startsAt: Date, endsAt: Date): void {
-  if (
-    Number.isNaN(startsAt.getTime()) ||
-    Number.isNaN(endsAt.getTime()) ||
-    endsAt.getTime() <= startsAt.getTime()
-  ) {
-    throw new BadRequestException('endsAt must be after startsAt');
-  }
+  assertDateOrder(startsAt, endsAt, {
+    strict: true,
+    message: 'endsAt must be after startsAt',
+    code: 'SESSION_END_BEFORE_START',
+  });
 }

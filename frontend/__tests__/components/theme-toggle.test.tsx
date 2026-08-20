@@ -1,7 +1,7 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { ThemeProvider } from '@/components/theme-provider';
+import { ThemeProvider } from 'next-themes';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { I18nProvider } from '@/components/i18n-provider';
 
@@ -27,41 +27,37 @@ describe('ThemeToggle', () => {
     expect(trigger).toBeInTheDocument();
   });
 
-  it('opens the menu and shows three theme options on click', async () => {
+  // TKT-0015 change request (approved): the dropdown menu became a cycle button —
+  // clicking advances light → dark → system. Persistence and all-three-values
+  // intents preserved through the same localStorage assertions.
+  it('persists the chosen theme to localStorage on click', async () => {
     const user = userEvent.setup();
     renderToggle();
     const trigger = await screen.findByRole('button', { name: /Theme|Тема/i });
+    // Default is system → first click lands on light.
     await user.click(trigger);
-
-    expect(await screen.findByRole('menuitem', { name: /Light|Светла/i })).toBeInTheDocument();
-    expect(screen.getByRole('menuitem', { name: /Dark|Тъмна/i })).toBeInTheDocument();
-    expect(screen.getByRole('menuitem', { name: /System|Системна/i })).toBeInTheDocument();
-  });
-
-  it('persists the chosen theme to localStorage', async () => {
-    const user = userEvent.setup();
-    renderToggle();
-    const trigger = await screen.findByRole('button', { name: /Theme|Тема/i });
-    await user.click(trigger);
-    await user.click(await screen.findByRole('menuitem', { name: /Dark|Тъмна/i }));
 
     // next-themes default key is "theme"
-    await vi.waitFor(() => expect(localStorage.getItem('theme')).toBe('dark'));
+    await vi.waitFor(() => expect(localStorage.getItem('theme')).toBe('light'));
   });
 
-  it('cycles through all three theme values', async () => {
+  it('cycles through all three theme values and labels the active mode', async () => {
     const user = userEvent.setup();
     renderToggle();
-    const trigger = await screen.findByRole('button', { name: /Theme|Тема/i });
 
-    for (const [name, expected] of [
-      [/Light|Светла/i, 'light'],
-      [/Dark|Тъмна/i, 'dark'],
-      [/System|Системна/i, 'system'],
+    for (const [expected, label] of [
+      ['light', /Light|Светла/i],
+      ['dark', /Dark|Тъмна/i],
+      ['system', /System|Системна/i],
     ] as const) {
+      const trigger = await screen.findByRole('button', { name: /Theme|Тема/i });
       await user.click(trigger);
-      await user.click(await screen.findByRole('menuitem', { name }));
       await vi.waitFor(() => expect(localStorage.getItem('theme')).toBe(expected));
+      // aria-label names the currently active mode.
+      await vi.waitFor(() => {
+        const btn = screen.getByRole('button', { name: /Theme|Тема/i });
+        expect(btn.getAttribute('aria-label')).toMatch(label);
+      });
     }
   });
 });

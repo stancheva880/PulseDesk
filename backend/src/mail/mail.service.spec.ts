@@ -1,10 +1,8 @@
-import { ConfigModule } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
 import { Logger } from '@nestjs/common';
+import { UserRole } from '@prisma/client';
 import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest';
 import { ConsoleMailService } from './console-mail.service';
-import { MailModule } from './mail.module';
-import { MailService } from './mail.service';
 
 describe('ConsoleMailService', () => {
   let service: ConsoleMailService;
@@ -31,20 +29,6 @@ describe('ConsoleMailService', () => {
     expect(message).toContain('Hi there');
   });
 
-  it('formats invite emails with subject + tenant name + invite URL', async () => {
-    await service.sendInvite({
-      to: 'newbie@b.com',
-      tenantName: 'Demo Sports Club',
-      inviteUrl: 'https://app/invite/abc',
-      expiresAt: new Date('2026-12-01T00:00:00Z'),
-    });
-    expect(logSpy).toHaveBeenCalledOnce();
-    const message = logSpy.mock.calls[0]?.[0] as string;
-    expect(message).toContain('newbie@b.com');
-    expect(message).toContain('Demo Sports Club');
-    expect(message).toContain('https://app/invite/abc');
-  });
-
   it('formats password-reset emails with the reset URL and expiry', async () => {
     await service.sendPasswordReset({
       to: 'user@example.com',
@@ -58,28 +42,22 @@ describe('ConsoleMailService', () => {
     expect(message).toContain('https://app/reset-password/raw-token-xyz');
     expect(message).toContain('2026-12-01T00:00:00');
   });
-});
 
-describe('MailModule (transport selection)', () => {
-  async function buildModule(transport: string) {
-    process.env.MAIL_TRANSPORT = transport;
-    const moduleRef = await Test.createTestingModule({
-      imports: [ConfigModule.forRoot({ isGlobal: true, ignoreEnvFile: true }), MailModule],
-    }).compile();
-    return moduleRef.get(MailService);
-  }
-
-  it('binds the console transport when MAIL_TRANSPORT=console', async () => {
-    const svc = await buildModule('console');
-    expect(svc).toBeInstanceOf(ConsoleMailService);
-  });
-
-  it('binds the console transport by default when env is unset', async () => {
-    delete process.env.MAIL_TRANSPORT;
-    const moduleRef = await Test.createTestingModule({
-      imports: [ConfigModule.forRoot({ isGlobal: true, ignoreEnvFile: true }), MailModule],
-    }).compile();
-    const svc = moduleRef.get(MailService);
-    expect(svc).toBeInstanceOf(ConsoleMailService);
+  // TKT-0061: the recipient already has a password. Carrying a link here would hand a
+  // password-setting capability to a live account, which is the whole point of not sending one.
+  it('formats club-access emails with the club and role, and no link', async () => {
+    await service.sendClubAccess({
+      to: 'member@example.com',
+      clubName: 'Sofia Swim Club',
+      role: UserRole.EMPLOYEE,
+    });
+    expect(logSpy).toHaveBeenCalledOnce();
+    const message = logSpy.mock.calls[0]?.[0] as string;
+    expect(message).toContain('member@example.com');
+    expect(message).toContain('Sofia Swim Club');
+    expect(message).toContain('EMPLOYEE');
+    expect(message).not.toContain('http');
+    expect(message).not.toContain('/accept-invite/');
+    expect(message).not.toContain('/reset-password/');
   });
 });

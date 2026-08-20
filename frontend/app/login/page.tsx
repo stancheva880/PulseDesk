@@ -7,15 +7,17 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
 import { z } from 'zod';
-import { ArrowRight, Loader2, Lock, Mail } from 'lucide-react';
+import { ArrowRight, Building2, Loader2, Lock, Mail } from 'lucide-react';
 import { AuthShell } from '@/components/auth-shell';
-import { useAuth } from '@/components/auth-provider';
+import { useAuth, type LoginMembership } from '@/components/auth-provider';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { PasswordInput } from '@/components/ui/password-input';
 import { ApiError } from '@/lib/api';
-import { homePathForRole } from '@/lib/role-redirect';
+import { landingRoute } from '@/lib/auth-storage';
+import { writeTenantContext } from '@/lib/tenant-context';
+
 
 const schema = z.object({
   email: z.string().trim().email(),
@@ -45,6 +47,8 @@ export default function LoginPage() {
   const router = useRouter();
   const { login, status, user } = useAuth();
   const [submitError, setSubmitError] = useState<string | null>(null);
+  // Memberships awaiting a tenant choice (login returned more than one).
+  const [choices, setChoices] = useState<LoginMembership[] | null>(null);
 
   const {
     register,
@@ -56,13 +60,29 @@ export default function LoginPage() {
   });
 
   useEffect(() => {
-    if (status === 'authenticated' && user) router.replace(homePathForRole(user.role));
-  }, [status, user, router]);
+    // Customers land in the read-only portal; admins/employees/super-admins in the
+    // dashboard. Suppressed while the tenant picker is waiting for a choice.
+    if (status === 'authenticated' && user && !choices)
+      router.replace(landingRoute(user.role));
+  }, [status, user, choices, router]);
+
+  const pickTenant = (membership: LoginMembership) => {
+    writeTenantContext(membership.tenantId);
+    router.replace(landingRoute(membership.role));
+  };
 
   const onSubmit = async (values: FormValues) => {
     setSubmitError(null);
     try {
-      await login({ email: values.email, password: values.password });
+      const memberships = await login({ email: values.email, password: values.password });
+      if (memberships.length > 1) {
+        // The effect above must not fire before this state lands — set synchronously
+        // in the same commit as the auth-state change it races against.
+        setChoices(memberships);
+      } else if (memberships.length === 1) {
+        pickTenant(memberships[0]!);
+      }
+      // Zero memberships = SUPER_ADMIN — the effect redirects by JWT role.
     } catch (e) {
       if (e instanceof ApiError && e.status === 401) {
         setSubmitError(t('login.errors.invalid'));
@@ -71,6 +91,33 @@ export default function LoginPage() {
       }
     }
   };
+
+  if (choices) {
+    return (
+      <AuthShell title={t('login.pickTenant.title')} description={t('login.pickTenant.description')}>
+        <div className="space-y-3">
+          {choices.map((m) => (
+            <Button
+              key={m.tenantId}
+              type="button"
+              variant="outline"
+              onClick={() => pickTenant(m)}
+              className="pd-rise h-auto w-full justify-start gap-3 px-4 py-3 text-left"
+            >
+              <Building2 className="h-5 w-5 shrink-0 text-muted-foreground" />
+              <span className="flex min-w-0 flex-col">
+                <span className="truncate text-[15px] font-semibold">{m.tenantName}</span>
+                <span className="text-xs text-muted-foreground">
+                  {t(`login.pickTenant.roles.${m.role}`)}
+                </span>
+              </span>
+              <ArrowRight className="ml-auto h-4 w-4 shrink-0" />
+            </Button>
+          ))}
+        </div>
+      </AuthShell>
+    );
+  }
 
   return (
     <AuthShell title={t('login.title')} description={t('login.description')}>

@@ -20,32 +20,34 @@ function makeContext(req: RequestShape): ExecutionContext {
 }
 
 describe('resolveTenantId (TenantId decorator factory)', () => {
-  it('returns the JWT tenantId for tenant users', () => {
+  // Behavior flip (PRD-0001 / TKT-0001): the active tenant travels in the X-Tenant-Id
+  // header for ALL users; membership validity is enforced by TenantContextGuard.
+  it('returns the X-Tenant-Id header for tenant users', () => {
+    const ctx = makeContext({
+      user: { id: 'u', email: 'a@b', role: UserRole.ADMIN, tenantId: 'tenant-1' },
+      headers: { 'x-tenant-id': 'tenant-2' },
+    });
+    expect(resolveTenantId(ctx)).toBe('tenant-2');
+  });
+
+  it('throws Forbidden when a tenant user sends no X-Tenant-Id header', () => {
     const ctx = makeContext({
       user: { id: 'u', email: 'a@b', role: UserRole.ADMIN, tenantId: 'tenant-1' },
       headers: {},
     });
-    expect(resolveTenantId(ctx)).toBe('tenant-1');
+    expect(() => resolveTenantId(ctx)).toThrow(ForbiddenException);
   });
 
-  it('ignores X-Tenant-Id header for tenant users (cannot spoof tenant)', () => {
+  it('throws Forbidden when a tenant user sends an empty X-Tenant-Id header', () => {
     const ctx = makeContext({
-      user: { id: 'u', email: 'a@b', role: UserRole.ADMIN, tenantId: 'real-tenant' },
-      headers: { 'x-tenant-id': 'forged-tenant' },
+      user: { id: 'u', email: 'a@b', role: UserRole.ADMIN, tenantId: 'tenant-1' },
+      headers: { 'x-tenant-id': '' },
     });
-    expect(resolveTenantId(ctx)).toBe('real-tenant');
+    expect(() => resolveTenantId(ctx)).toThrow(ForbiddenException);
   });
 
   it('throws Forbidden when the request has no authenticated user', () => {
     const ctx = makeContext({ user: undefined, headers: {} });
-    expect(() => resolveTenantId(ctx)).toThrow(ForbiddenException);
-  });
-
-  it('throws Forbidden when a tenant user has no tenantId on their JWT (data inconsistency)', () => {
-    const ctx = makeContext({
-      user: { id: 'u', email: 'a@b', role: UserRole.ADMIN, tenantId: null },
-      headers: {},
-    });
     expect(() => resolveTenantId(ctx)).toThrow(ForbiddenException);
   });
 

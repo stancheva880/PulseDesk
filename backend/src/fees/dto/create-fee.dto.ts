@@ -4,9 +4,11 @@ import {
   IsNumber,
   IsOptional,
   IsString,
+  Max,
   MaxLength,
   Min,
 } from 'class-validator';
+import { MAX_AMOUNT, MIN_AMOUNT } from '@/common/dto/money';
 
 export class CreateFeeDto {
   @IsString()
@@ -14,10 +16,6 @@ export class CreateFeeDto {
 
   @IsString()
   traineeId!: string;
-
-  @IsOptional()
-  @IsString()
-  sessionId?: string;
 
   // YYYY-MM-DD or full ISO — class-validator's IsDateString accepts both.
   @IsDateString()
@@ -28,7 +26,8 @@ export class CreateFeeDto {
 
   @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 2 })
-  @Min(0)
+  @Min(MIN_AMOUNT)
+  @Max(MAX_AMOUNT)
   amount!: number;
 
   @IsOptional()

@@ -14,8 +14,3 @@ export class GenerateSessionsDto {
   @IsString()
   classId?: string;
 }
-
-export interface GenerateSessionsResult {
-  created: number;
-  skipped: number;
-}

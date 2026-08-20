@@ -2,49 +2,55 @@
 
 import { Plus } from 'lucide-react';
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ConfirmDialog } from '@/components/confirm-dialog';
 import { useAuth } from '@/components/auth-provider';
+import { DataTable, type DataTableColumn } from '@/components/data-table';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Skeleton } from '@/components/ui/skeleton';
-import { ApiError } from '@/lib/api';
 import { calculateAge } from '@/lib/age';
-import { isManager } from '@/lib/permissions';
+import { isManager } from '@/lib/auth-storage';
 import { Trainees, type Trainee } from '@/lib/api-resources';
+import { useCrudList } from '@/lib/use-crud-list';
 
 export default function TraineesListPage() {
   const { t } = useTranslation();
   const { user } = useAuth();
   const admin = isManager(user?.role);
-  const [rows, setRows] = useState<Trainee[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [pendingDelete, setPendingDelete] = useState<Trainee | null>(null);
-  const [busy, setBusy] = useState(false);
+  const { rows, setPage, pageInfo, error, pendingDelete, setPendingDelete, busy, onDelete } =
+    useCrudList(Trainees);
 
-  const reload = () => {
-    Trainees.list()
-      .then(setRows)
-      .catch((e: unknown) => setError(e instanceof Error ? e.message : 'load failed'));
-  };
-
-  useEffect(reload, []);
-
-  const onDelete = async () => {
-    if (!pendingDelete) return;
-    setBusy(true);
-    try {
-      await Trainees.remove(pendingDelete.id);
-      setPendingDelete(null);
-      reload();
-    } catch (e) {
-      setError(e instanceof ApiError ? e.message : t('common.errors.generic'));
-      setPendingDelete(null);
-    } finally {
-      setBusy(false);
-    }
-  };
+  const columns: DataTableColumn<Trainee>[] = [
+    {
+      key: 'lastName',
+      header: t('trainees.fields.lastName'),
+      cell: (tr) => tr.lastName,
+      cellClassName: 'font-medium',
+      skeleton: 'h-4 w-24',
+    },
+    {
+      key: 'firstName',
+      header: t('trainees.fields.firstName'),
+      cell: (tr) => tr.firstName,
+      skeleton: 'h-4 w-24',
+    },
+    {
+      key: 'age',
+      header: t('trainees.fields.age'),
+      cell: (tr) => calculateAge(new Date(tr.dateOfBirth)),
+      cellClassName: 'text-muted-foreground',
+      skeleton: 'h-4 w-8',
+    },
+    {
+      key: 'status',
+      header: t('trainees.fields.status'),
+      cell: (tr) => (
+        <Badge variant={tr.isActive ? 'success' : 'secondary'}>
+          {tr.isActive ? t('common.active') : t('common.inactive')}
+        </Badge>
+      ),
+      skeleton: 'h-5 w-16 rounded-full',
+    },
+  ];
 
   return (
     <div className="space-y-6">
@@ -69,83 +75,49 @@ export default function TraineesListPage() {
         </p>
       ) : null}
 
-      <div className="overflow-hidden rounded-lg border bg-card">
-        <table className="w-full text-sm">
-          <thead className="bg-muted/50">
-            <tr>
-              <th className="p-3 text-left font-medium text-muted-foreground">{t('trainees.fields.lastName')}</th>
-              <th className="p-3 text-left font-medium text-muted-foreground">{t('trainees.fields.firstName')}</th>
-              <th className="p-3 text-left font-medium text-muted-foreground">{t('trainees.fields.age')}</th>
-              <th className="p-3 text-left font-medium text-muted-foreground">{t('trainees.fields.status')}</th>
-              <th className="w-1 p-3"></th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows === null ? (
-              Array.from({ length: 3 }).map((_, i) => (
-                <tr key={`sk-${i}`} className="border-t">
-                  <td className="p-3"><Skeleton className="h-4 w-24" /></td>
-                  <td className="p-3"><Skeleton className="h-4 w-24" /></td>
-                  <td className="p-3"><Skeleton className="h-4 w-8" /></td>
-                  <td className="p-3"><Skeleton className="h-5 w-16 rounded-full" /></td>
-                  <td className="p-3"></td>
-                </tr>
-              ))
-            ) : rows.length === 0 ? (
-              <tr>
-                <td colSpan={5} className="p-10 text-center text-sm text-muted-foreground">
-                  {t('trainees.empty')}
-                </td>
-              </tr>
-            ) : (
-              rows.map((tr) => (
-                <tr key={tr.id} className="border-t transition-colors hover:bg-muted/30">
-                  <td className="p-3 font-medium">{tr.lastName}</td>
-                  <td className="p-3">{tr.firstName}</td>
-                  <td className="p-3 text-muted-foreground">
-                    {calculateAge(new Date(tr.dateOfBirth))}
-                  </td>
-                  <td className="p-3">
-                    <Badge variant={tr.isActive ? 'success' : 'secondary'}>
-                      {tr.isActive ? t('common.active') : t('common.inactive')}
-                    </Badge>
-                  </td>
-                  <td className="whitespace-nowrap p-3 text-right">
-                    {admin ? (
-                      <>
-                        <Button asChild variant="ghost" size="sm">
-                          <Link href={`/trainees/${tr.id}/edit`}>{t('common.edit')}</Link>
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="ml-1 text-destructive hover:bg-destructive/10 hover:text-destructive"
-                          onClick={() => setPendingDelete(tr)}
-                        >
-                          {t('common.delete')}
-                        </Button>
-                      </>
-                    ) : null}
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
-
-      <ConfirmDialog
-        open={pendingDelete !== null}
-        onOpenChange={(open) => {
-          if (!open) setPendingDelete(null);
+      <DataTable
+        columns={columns}
+        rows={rows}
+        rowKey={(tr) => tr.id}
+        emptyText={t('trainees.empty')}
+        actions={(tr) => (
+          <>
+            {/* Read-only detail — the only way a trainer reaches phone and guardian contacts. */}
+            <Button asChild variant="ghost" size="sm">
+              <Link href={`/trainees/${tr.id}`}>{t('common.view')}</Link>
+            </Button>
+            {admin ? (
+              <>
+                <Button asChild variant="ghost" size="sm" className="ml-1">
+                  <Link href={`/trainees/${tr.id}/edit`}>{t('common.edit')}</Link>
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="ml-1 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                  onClick={() => setPendingDelete(tr)}
+                >
+                  {t('common.delete')}
+                </Button>
+              </>
+            ) : null}
+          </>
+        )}
+        pageInfo={pageInfo}
+        onPageChange={setPage}
+        confirm={{
+          open: pendingDelete !== null,
+          onOpenChange: (open) => {
+            if (!open) setPendingDelete(null);
+          },
+          title: t('trainees.deleteConfirm', {
+            name: pendingDelete ? `${pendingDelete.firstName} ${pendingDelete.lastName}` : '',
+          }),
+          confirmLabel: t('common.delete'),
+          cancelLabel: t('common.cancel'),
+          onConfirm: onDelete,
+          busy,
         }}
-        title={t('trainees.deleteConfirm', {
-          name: pendingDelete ? `${pendingDelete.firstName} ${pendingDelete.lastName}` : '',
-        })}
-        confirmLabel={t('common.delete')}
-        cancelLabel={t('common.cancel')}
-        onConfirm={onDelete}
-        busy={busy}
       />
     </div>
   );

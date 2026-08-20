@@ -1,4 +1,8 @@
 {
   "extends": "./tsconfig.json",
-  "exclude": ["node_modules", "dist", "test", "**/*.spec.ts", "**/*.e2e-spec.ts", "vitest.config.ts"]
+  // api/ is the serverless entry point, compiled by the host, not by `nest build`. Including it
+  // here would put a file outside src/ in the program, which moves tsc's inferred rootDir up and
+  // emits dist/src/main.js instead of dist/main.js — breaking start:prod, gen:api and the image.
+  // tsconfig.json still covers it, so `npm run typecheck` checks it.
+  "exclude": ["node_modules", "dist", "api", "**/*.spec.ts", "vitest.config.ts"]
 }

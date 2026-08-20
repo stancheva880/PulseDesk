@@ -1,3 +1,4 @@
+import { SUPER_ADMIN_USER as su } from '@/test-utils/auth-user';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { Test, type TestingModule } from '@nestjs/testing';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -11,6 +12,7 @@ import {
 import { LocationScopeService } from '@/auth/scope/location-scope.service';
 import { PrismaService } from '@/prisma/prisma.service';
 import { SessionsService } from './sessions.service';
+import { createTestUser } from '@/test-utils/create-user';
 
 describe('SessionsService', () => {
   let service: SessionsService;
@@ -71,13 +73,11 @@ describe('SessionsService', () => {
   }
 
   async function newEmployee(tenantId: string) {
-    return prisma.user.create({
-      data: {
-        tenantId,
-        email: `${randomUUID()}@x`,
-        passwordHash: 'x',
-        role: UserRole.EMPLOYEE,
-      },
+    return createTestUser(prisma, {
+      tenantId,
+      email: `${randomUUID()}@x`,
+      passwordHash: 'x',
+      role: UserRole.EMPLOYEE,
     });
   }
 
@@ -107,7 +107,7 @@ describe('SessionsService', () => {
         locationId: loc.id,
         startsAt: '2026-06-01T18:00:00.000Z',
         endsAt: '2026-06-01T19:00:00.000Z',
-      });
+      }, su);
 
       expect(session.tenantId).toBe(t.id);
       expect(session.status).toBe(SessionStatus.SCHEDULED);
@@ -132,7 +132,7 @@ describe('SessionsService', () => {
         locationId: loc.id,
         startsAt: '2026-06-01T18:00:00.000Z',
         endsAt: '2026-06-01T19:00:00.000Z',
-      });
+      }, su);
 
       const count = await prisma.attendance.count({ where: { sessionId: session.id } });
       expect(count).toBe(0);
@@ -149,7 +149,7 @@ describe('SessionsService', () => {
         locationId: loc.id,
         startsAt: '2026-06-01T18:00:00.000Z',
         endsAt: '2026-06-01T19:00:00.000Z',
-      });
+      }, su);
 
       const withTrainers = await prisma.session.findUnique({
         where: { id: session.id },
@@ -171,7 +171,7 @@ describe('SessionsService', () => {
         startsAt: '2026-06-01T18:00:00.000Z',
         endsAt: '2026-06-01T19:00:00.000Z',
         trainerIds: [substitute.id],
-      });
+      }, su);
 
       const withTrainers = await prisma.session.findUnique({
         where: { id: session.id },
@@ -191,7 +191,7 @@ describe('SessionsService', () => {
           locationId: loc.id,
           startsAt: '2026-06-01T18:00:00.000Z',
           endsAt: '2026-06-01T19:00:00.000Z',
-        }),
+        }, su),
       ).rejects.toBeInstanceOf(BadRequestException);
     });
 
@@ -206,7 +206,7 @@ describe('SessionsService', () => {
           locationId: locB.id,
           startsAt: '2026-06-01T18:00:00.000Z',
           endsAt: '2026-06-01T19:00:00.000Z',
-        }),
+        }, su),
       ).rejects.toBeInstanceOf(BadRequestException);
     });
 
@@ -214,8 +214,11 @@ describe('SessionsService', () => {
       const t = await newTenant();
       const loc = await newLocation(t.id);
       const cls = await newClass(t.id);
-      const admin = await prisma.user.create({
-        data: { tenantId: t.id, email: `${randomUUID()}@x`, passwordHash: 'x', role: UserRole.ADMIN },
+      const admin = await createTestUser(prisma, {
+        tenantId: t.id,
+        email: `${randomUUID()}@x`,
+        passwordHash: 'x',
+        role: UserRole.ADMIN,
       });
       await expect(
         service.create(t.id, {
@@ -224,7 +227,7 @@ describe('SessionsService', () => {
           startsAt: '2026-06-01T18:00:00.000Z',
           endsAt: '2026-06-01T19:00:00.000Z',
           trainerIds: [admin.id],
-        }),
+        }, su),
       ).rejects.toBeInstanceOf(BadRequestException);
     });
 
@@ -238,7 +241,7 @@ describe('SessionsService', () => {
           locationId: loc.id,
           startsAt: '2026-06-01T19:00:00.000Z',
           endsAt: '2026-06-01T19:00:00.000Z',
-        }),
+        }, su),
       ).rejects.toBeInstanceOf(BadRequestException);
     });
   });
@@ -255,15 +258,15 @@ describe('SessionsService', () => {
         locationId: loc.id,
         startsAt: '2026-06-01T18:00:00.000Z',
         endsAt: '2026-06-01T19:00:00.000Z',
-      });
+      }, su);
       await service.create(t.id, {
         classId: cls.id,
         locationId: loc.id,
         startsAt: '2026-06-08T18:00:00.000Z',
         endsAt: '2026-06-08T19:00:00.000Z',
-      });
+      }, su);
       const result = await service.list(t.id, adminViewer(t.id));
-      expect(result).toHaveLength(2);
+      expect(result.items).toHaveLength(2);
     });
 
     it('employee only sees sessions where they are a trainer', async () => {
@@ -280,7 +283,7 @@ describe('SessionsService', () => {
         startsAt: '2026-06-01T18:00:00.000Z',
         endsAt: '2026-06-01T19:00:00.000Z',
         trainerIds: [trainer.id],
-      });
+      }, su);
       // Session 2: only otherTrainer
       await service.create(t.id, {
         classId: cls.id,
@@ -288,10 +291,10 @@ describe('SessionsService', () => {
         startsAt: '2026-06-08T18:00:00.000Z',
         endsAt: '2026-06-08T19:00:00.000Z',
         trainerIds: [otherTrainer.id],
-      });
+      }, su);
 
       const result = await service.list(t.id, employeeViewer(t.id, trainer.id));
-      expect(result).toHaveLength(1);
+      expect(result.items).toHaveLength(1);
     });
 
     it('cross-tenant findById returns NotFound', async () => {
@@ -304,7 +307,7 @@ describe('SessionsService', () => {
         locationId: loc.id,
         startsAt: '2026-06-01T18:00:00.000Z',
         endsAt: '2026-06-01T19:00:00.000Z',
-      });
+      }, su);
       await expect(
         service.findById(b.id, inA.id, adminViewer(b.id)),
       ).rejects.toBeInstanceOf(NotFoundException);
@@ -322,7 +325,7 @@ describe('SessionsService', () => {
         startsAt: '2026-06-01T18:00:00.000Z',
         endsAt: '2026-06-01T19:00:00.000Z',
         trainerIds: [trainer.id],
-      });
+      }, su);
       await expect(
         service.findById(t.id, session.id, employeeViewer(t.id, outsider.id)),
       ).rejects.toBeInstanceOf(NotFoundException);
@@ -341,11 +344,11 @@ describe('SessionsService', () => {
         locationId: loc.id,
         startsAt: '2026-06-01T18:00:00.000Z',
         endsAt: '2026-06-01T19:00:00.000Z',
-      });
+      }, su);
       const updated = await service.update(t.id, session.id, {
         status: SessionStatus.COMPLETED,
         notes: 'Great session',
-      });
+      }, su);
       expect(updated.status).toBe(SessionStatus.COMPLETED);
       expect(updated.notes).toBe('Great session');
     });
@@ -360,9 +363,9 @@ describe('SessionsService', () => {
         locationId: loc.id,
         startsAt: '2026-06-01T18:00:00.000Z',
         endsAt: '2026-06-01T19:00:00.000Z',
-      });
+      }, su);
       await expect(
-        service.update(b.id, inA.id, { notes: 'hijack' }),
+        service.update(b.id, inA.id, { notes: 'hijack' }, su),
       ).rejects.toBeInstanceOf(NotFoundException);
     });
 
@@ -376,8 +379,8 @@ describe('SessionsService', () => {
         locationId: loc.id,
         startsAt: '2026-06-01T18:00:00.000Z',
         endsAt: '2026-06-01T19:00:00.000Z',
-      });
-      await service.delete(t.id, session.id);
+      }, su);
+      await service.delete(t.id, session.id, su);
       const orphaned = await prisma.attendance.count({ where: { sessionId: session.id } });
       expect(orphaned).toBe(0);
     });

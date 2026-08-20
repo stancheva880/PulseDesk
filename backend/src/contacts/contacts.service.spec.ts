@@ -1,3 +1,4 @@
+import { SUPER_ADMIN_USER as su } from '@/test-utils/auth-user';
 import { NotFoundException } from '@nestjs/common';
 import { Test, type TestingModule } from '@nestjs/testing';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -55,14 +56,14 @@ describe('ContactsService', () => {
         firstName: 'B',
         lastName: 'B',
         relationship: ContactRelationship.GUARDIAN,
-      });
+      }, su);
       await service.create(t.id, trainee.id, {
         firstName: 'A',
         lastName: 'A',
         relationship: ContactRelationship.PARENT,
         isPrimary: true,
-      });
-      const list = await service.list(t.id, trainee.id);
+      }, su);
+      const list = await service.list(t.id, trainee.id, su);
       expect(list.map((c) => c.firstName)).toEqual(['A', 'B']);
     });
 
@@ -70,7 +71,7 @@ describe('ContactsService', () => {
       const a = await newTenant();
       const b = await newTenant();
       const traineeA = await newTrainee(a.id);
-      await expect(service.list(b.id, traineeA.id)).rejects.toBeInstanceOf(NotFoundException);
+      await expect(service.list(b.id, traineeA.id, su)).rejects.toBeInstanceOf(NotFoundException);
     });
   });
 
@@ -83,9 +84,9 @@ describe('ContactsService', () => {
         firstName: 'A',
         lastName: 'A',
         relationship: ContactRelationship.PARENT,
-      });
+      }, su);
       await expect(
-        service.findById(t.id, trainee2.id, c.id),
+        service.findById(t.id, trainee2.id, c.id, su),
       ).rejects.toBeInstanceOf(NotFoundException);
     });
   });
@@ -99,7 +100,7 @@ describe('ContactsService', () => {
         lastName: 'X',
         relationship: ContactRelationship.PARENT,
         phone: '555',
-      });
+      }, su);
       expect(c.tenantId).toBe(t.id);
       expect(c.traineeId).toBe(trainee.id);
       expect(c.relationship).toBe(ContactRelationship.PARENT);
@@ -114,11 +115,11 @@ describe('ContactsService', () => {
         firstName: 'A',
         lastName: 'B',
         relationship: ContactRelationship.PARENT,
-      });
+      }, su);
       const updated = await service.update(t.id, trainee.id, c.id, {
         relationship: ContactRelationship.GUARDIAN,
         isPrimary: true,
-      });
+      }, su);
       expect(updated.relationship).toBe(ContactRelationship.GUARDIAN);
       expect(updated.isPrimary).toBe(true);
     });
@@ -130,10 +131,10 @@ describe('ContactsService', () => {
         firstName: 'A',
         lastName: 'B',
         relationship: ContactRelationship.PARENT,
-      });
-      await service.delete(t.id, trainee.id, c.id);
+      }, su);
+      await service.delete(t.id, trainee.id, c.id, su);
       await expect(
-        service.findById(t.id, trainee.id, c.id),
+        service.findById(t.id, trainee.id, c.id, su),
       ).rejects.toBeInstanceOf(NotFoundException);
     });
   });

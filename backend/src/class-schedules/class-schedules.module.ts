@@ -7,6 +7,5 @@ import { ClassSchedulesService } from './class-schedules.service';
   imports: [SessionsModule],
   controllers: [ClassSchedulesController],
   providers: [ClassSchedulesService],
-  exports: [ClassSchedulesService],
 })
 export class ClassSchedulesModule {}

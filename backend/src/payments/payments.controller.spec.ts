@@ -1,6 +1,8 @@
+import { SUPER_ADMIN_USER as su } from '@/test-utils/auth-user';
 import type { INestApplication } from '@nestjs/common';
 import { ValidationPipe } from '@nestjs/common';
-import { ConfigModule } from '@nestjs/config';
+import { ConfigModule, ConfigService } from '@nestjs/config';
+import { Reflector } from '@nestjs/core';
 import { Test, type TestingModule } from '@nestjs/testing';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { randomUUID } from 'node:crypto';
@@ -14,7 +16,9 @@ import { FeesModule } from '@/fees/fees.module';
 import { FeesService } from '@/fees/fees.service';
 import { PrismaModule } from '@/prisma/prisma.module';
 import { PrismaService } from '@/prisma/prisma.service';
+import { ResponseSchemaInterceptor } from '@/common/response-schema.interceptor';
 import { PaymentsModule } from './payments.module';
+import { createTestUser } from '@/test-utils/create-user';
 
 const PASSWORD = 'TestPass123!';
 
@@ -42,6 +46,11 @@ describe('PaymentsController (e2e-ish)', () => {
     app.useGlobalPipes(
       new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }),
     );
+    // AppModule registers this as an APP_INTERCEPTOR; this spec builds its own module graph,
+    // so it wires the interceptor the same way it wires the ValidationPipe above.
+    app.useGlobalInterceptors(
+      new ResponseSchemaInterceptor(app.get(Reflector), app.get(ConfigService)),
+    );
     await app.init();
     prisma = moduleRef.get(PrismaService);
     auth = moduleRef.get(AuthService);
@@ -64,14 +73,15 @@ describe('PaymentsController (e2e-ish)', () => {
     const location = await prisma.location.create({
       data: { tenantId: tenant.id, name: `Main-${randomUUID()}` },
     });
-    const user = await prisma.user.create({
-      data: {
-        email: `${randomUUID()}@x`,
-        passwordHash: await auth.hashPassword(PASSWORD),
-        role,
-        tenantId: tenant.id,
-        ...(role === UserRole.ADMIN ? { locations: { connect: [{ id: location.id }] } } : {}),
-      },
+    const user = await createTestUser(prisma, {
+      email: `${randomUUID()}@x`,
+      passwordHash: await auth.hashPassword(PASSWORD),
+      role,
+      tenantId: tenant.id,
+      // TKT-0054: ADMIN and EMPLOYEE are both location-scoped, so both need an assignment.
+      ...(role === UserRole.ADMIN || role === UserRole.EMPLOYEE
+        ? { locations: { connect: [{ id: location.id }] } }
+        : {}),
     });
     const tokens = await auth.login(user);
     return {
@@ -102,7 +112,7 @@ describe('PaymentsController (e2e-ish)', () => {
       amount,
       periodStart: '2026-03-01',
       periodEnd: '2026-03-31',
-    });
+    }, su);
   }
 
   describe('POST /fees/:feeId/payments', () => {
@@ -112,6 +122,7 @@ describe('PaymentsController (e2e-ish)', () => {
       await request(server)
         .post(`/fees/${fee.id}/payments`)
         .set('Authorization', `Bearer ${a.accessToken}`)
+        .set('X-Tenant-Id', a.tenantId)
         .send({ amount: 100, paidAt: '2026-03-15' })
         .expect(201);
       const updated = await prisma.fee.findUnique({ where: { id: fee.id } });
@@ -128,6 +139,7 @@ describe('PaymentsController (e2e-ish)', () => {
       await request(server)
         .post(`/fees/${fee.id}/payments`)
         .set('Authorization', `Bearer ${a.accessToken}`)
+        .set('X-Tenant-Id', a.tenantId)
         .send({ amount: 50, paidAt: '2026-03-15' })
         .expect(403);
     });
@@ -138,8 +150,40 @@ describe('PaymentsController (e2e-ish)', () => {
       await request(server)
         .post(`/fees/${fee.id}/payments`)
         .set('Authorization', `Bearer ${a.accessToken}`)
+        .set('X-Tenant-Id', a.tenantId)
         .send({ amount: 0, paidAt: '2026-03-15' })
         .expect(400);
+    });
+
+    it.each([-5, 1.234, 1_000_001])('returns 400 for amount %s', async (amount) => {
+      const a = await setupActor(UserRole.ADMIN);
+      const fee = await makeFee(a.tenantId, 100, a.locationId);
+      await request(server)
+        .post(`/fees/${fee.id}/payments`)
+        .set('Authorization', `Bearer ${a.accessToken}`)
+        .set('X-Tenant-Id', a.tenantId)
+        .send({ amount, paidAt: '2026-03-15' })
+        .expect(400);
+    });
+
+    it('returns 400 when the payment exceeds the outstanding balance', async () => {
+      const a = await setupActor(UserRole.ADMIN);
+      const fee = await makeFee(a.tenantId, 100, a.locationId);
+      await request(server)
+        .post(`/fees/${fee.id}/payments`)
+        .set('Authorization', `Bearer ${a.accessToken}`)
+        .set('X-Tenant-Id', a.tenantId)
+        .send({ amount: 60, paidAt: '2026-03-10' })
+        .expect(201);
+      // The message carries the balance, because "400" alone does not tell the club what to type.
+      const res = await request(server)
+        .post(`/fees/${fee.id}/payments`)
+        .set('Authorization', `Bearer ${a.accessToken}`)
+        .set('X-Tenant-Id', a.tenantId)
+        .send({ amount: 41, paidAt: '2026-03-20' })
+        .expect(400);
+      expect(res.body.message).toContain('40');
+      expect(await prisma.payment.count({ where: { feeId: fee.id } })).toBe(1);
     });
 
     it('returns 404 when feeId is in another tenant', async () => {
@@ -149,6 +193,7 @@ describe('PaymentsController (e2e-ish)', () => {
       await request(server)
         .post(`/fees/${fee.id}/payments`)
         .set('Authorization', `Bearer ${a.accessToken}`)
+        .set('X-Tenant-Id', a.tenantId)
         .send({ amount: 50, paidAt: '2026-03-15' })
         .expect(404);
     });
@@ -161,11 +206,13 @@ describe('PaymentsController (e2e-ish)', () => {
       await request(server)
         .post(`/fees/${fee.id}/payments`)
         .set('Authorization', `Bearer ${a.accessToken}`)
+        .set('X-Tenant-Id', a.tenantId)
         .send({ amount: 30, paidAt: '2026-03-10' })
         .expect(201);
       const res = await request(server)
         .get(`/fees/${fee.id}/payments`)
         .set('Authorization', `Bearer ${a.accessToken}`)
+        .set('X-Tenant-Id', a.tenantId)
         .expect(200);
       expect(res.body).toHaveLength(1);
     });
@@ -178,11 +225,13 @@ describe('PaymentsController (e2e-ish)', () => {
       const created = await request(server)
         .post(`/fees/${fee.id}/payments`)
         .set('Authorization', `Bearer ${a.accessToken}`)
+        .set('X-Tenant-Id', a.tenantId)
         .send({ amount: 100, paidAt: '2026-03-15' })
         .expect(201);
       await request(server)
         .delete(`/fees/${fee.id}/payments/${created.body.id}`)
         .set('Authorization', `Bearer ${a.accessToken}`)
+        .set('X-Tenant-Id', a.tenantId)
         .expect(204);
       const updated = await prisma.fee.findUnique({ where: { id: fee.id } });
       expect(updated?.status).toBe(FeeStatus.UNPAID);

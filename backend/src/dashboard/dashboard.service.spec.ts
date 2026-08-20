@@ -1,3 +1,4 @@
+import { SUPER_ADMIN_USER as su } from '@/test-utils/auth-user';
 import { BadRequestException } from '@nestjs/common';
 import { Test, type TestingModule } from '@nestjs/testing';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -68,7 +69,7 @@ describe('DashboardService', () => {
       amount,
       periodStart,
       periodEnd,
-    });
+    }, su);
     for (const p of payments) {
       await prisma.payment.create({
         data: {
@@ -88,7 +89,7 @@ describe('DashboardService', () => {
       const result = await service.getFeesSummary(t.id, {
         from: '2026-01-01',
         to: '2026-03-31',
-      });
+      }, su);
       expect(result.map((r) => r.period)).toEqual(['2026-01', '2026-02', '2026-03']);
       expect(result.every((r) => r.collected === 0 && r.pending === 0)).toBe(true);
     });
@@ -123,7 +124,7 @@ describe('DashboardService', () => {
       const result = await service.getFeesSummary(t.id, {
         from: '2026-03-01',
         to: '2026-04-30',
-      });
+      }, su);
       expect(result).toEqual([
         { period: '2026-03', collected: 30, pending: 70 },
         { period: '2026-04', collected: 100, pending: 0 },
@@ -148,7 +149,7 @@ describe('DashboardService', () => {
       const result = await service.getFeesSummary(t.id, {
         from: '2026-03-01',
         to: '2026-03-31',
-      });
+      }, su);
       expect(result).toEqual([{ period: '2026-03', collected: 75, pending: 25 }]);
     });
 
@@ -168,14 +169,14 @@ describe('DashboardService', () => {
       const result = await service.getFeesSummary(a.id, {
         from: '2026-03-01',
         to: '2026-03-31',
-      });
+      }, su);
       expect(result).toEqual([{ period: '2026-03', collected: 0, pending: 0 }]);
     });
 
     it('rejects when "to" is before "from"', async () => {
       const t = await newTenant();
       await expect(
-        service.getFeesSummary(t.id, { from: '2026-04-01', to: '2026-03-01' }),
+        service.getFeesSummary(t.id, { from: '2026-04-01', to: '2026-03-01' }, su),
       ).rejects.toBeInstanceOf(BadRequestException);
     });
   });
@@ -183,7 +184,7 @@ describe('DashboardService', () => {
   describe('getFeesSummary — defaults', () => {
     it('returns 6 contiguous months when no range is provided', async () => {
       const t = await newTenant();
-      const result = await service.getFeesSummary(t.id, {});
+      const result = await service.getFeesSummary(t.id, {}, su);
       expect(result).toHaveLength(6);
       // Monotonically increasing month keys.
       const sorted = [...result].sort((a, b) => a.period.localeCompare(b.period));
@@ -209,7 +210,7 @@ describe('DashboardService', () => {
       const result = await service.getCashflowSummary(t.id, {
         from: '2026-03-01',
         to: '2026-04-30',
-      });
+      }, su);
       expect(result).toEqual([
         { period: '2026-03', collected: 0, billed: 100 },
         { period: '2026-04', collected: 100, billed: 0 },
@@ -221,13 +222,13 @@ describe('DashboardService', () => {
       const empty = await service.getCashflowSummary(t.id, {
         from: '2026-01-01',
         to: '2026-02-28',
-      });
+      }, su);
       expect(empty).toEqual([
         { period: '2026-01', collected: 0, billed: 0 },
         { period: '2026-02', collected: 0, billed: 0 },
       ]);
       await expect(
-        service.getCashflowSummary(t.id, { from: '2026-04-01', to: '2026-03-01' }),
+        service.getCashflowSummary(t.id, { from: '2026-04-01', to: '2026-03-01' }, su),
       ).rejects.toBeInstanceOf(BadRequestException);
     });
 
@@ -247,8 +248,78 @@ describe('DashboardService', () => {
       const result = await service.getCashflowSummary(a.id, {
         from: '2026-03-01',
         to: '2026-03-31',
-      });
+      }, su);
       expect(result).toEqual([{ period: '2026-03', collected: 0, billed: 0 }]);
+    });
+  });
+
+  describe('range bounds', () => {
+    const currentMonth = () => new Date().toISOString().slice(0, 7);
+    const isoDay = (d: Date) => d.toISOString().slice(0, 10);
+
+    it('bounds an open "to": from-only runs to the current month, not to year 9999', async () => {
+      const t = await newTenant();
+      const now = new Date();
+      const from = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 2, 1));
+      const result = await service.getFeesSummary(t.id, { from: isoDay(from) }, su);
+      expect(result).toHaveLength(3);
+      expect(result.at(-1)?.period).toBe(currentMonth());
+    });
+
+    it('bounds an open "from": to-only returns the 6 months ending at "to"', async () => {
+      const t = await newTenant();
+      const result = await service.getFeesSummary(t.id, { to: '2026-06-30' }, su);
+      expect(result.map((r) => r.period)).toEqual([
+        '2026-01',
+        '2026-02',
+        '2026-03',
+        '2026-04',
+        '2026-05',
+        '2026-06',
+      ]);
+    });
+
+    it('a future "from" with no "to" yields that single month', async () => {
+      const t = await newTenant();
+      const now = new Date();
+      const future = new Date(Date.UTC(now.getUTCFullYear() + 1, now.getUTCMonth(), 1));
+      const result = await service.getFeesSummary(t.id, { from: isoDay(future) }, su);
+      expect(result).toEqual([
+        { period: future.toISOString().slice(0, 7), collected: 0, pending: 0 },
+      ]);
+    });
+
+    it('accepts a span of exactly 120 months', async () => {
+      const t = await newTenant();
+      const result = await service.getFeesSummary(
+        t.id,
+        { from: '2017-01-01', to: '2026-12-31' },
+        su,
+      );
+      expect(result).toHaveLength(120);
+    });
+
+    it('rejects a span wider than 120 months', async () => {
+      const t = await newTenant();
+      await expect(
+        service.getFeesSummary(t.id, { from: '1900-01-01', to: '2026-08-31' }, su),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it('getCashflowSummary bounds an open "to" the same way', async () => {
+      const t = await newTenant();
+      const now = new Date();
+      const from = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1));
+      const result = await service.getCashflowSummary(t.id, { from: isoDay(from) }, su);
+      expect(result).toHaveLength(2);
+      expect(result.at(-1)?.period).toBe(currentMonth());
+    });
+
+    it('getCashflowSummary rejects a span wider than 120 months', async () => {
+      const t = await newTenant();
+      await expect(
+        service.getCashflowSummary(t.id, { from: '1900-01-01', to: '2026-08-31' }, su),
+      ).rejects.toBeInstanceOf(BadRequestException);
     });
   });
 });

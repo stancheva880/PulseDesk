@@ -1,30 +1,26 @@
 'use client';
 
-import { useEffect, type ReactNode } from 'react';
+import { type ReactNode } from 'react';
 import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname } from 'next/navigation';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '@/components/auth-provider';
 import { BrandMark } from '@/components/brand-mark';
 import { Topbar } from '@/components/topbar';
 import { cn } from '@/lib/utils';
+import { useActiveTenant, useRequireRole } from '@/lib/use-require-role';
 
 export default function PortalLayout({ children }: { children: ReactNode }) {
   const { t } = useTranslation();
-  const router = useRouter();
   const pathname = usePathname();
-  const { user, status } = useAuth();
+  const { user } = useAuth();
 
-  useEffect(() => {
-    if (status === 'anonymous') router.replace('/login');
-    else if (status === 'authenticated' && user && user.role !== 'CUSTOMER') {
-      router.replace('/dashboard');
-    }
-  }, [status, user, router]);
-
-  if (status !== 'authenticated' || !user || user.role !== 'CUSTOMER') {
-    return null;
-  }
+  const ready = useRequireRole(user?.role === 'CUSTOMER', '/dashboard');
+  // A CUSTOMER is a tenant user, so this half only ever recovers the active tenant from
+  // their memberships — the select-tenant panel is SUPER_ADMIN's, and a SUPER_ADMIN never
+  // gets past the guard above.
+  const tenant = useActiveTenant(user?.role);
+  if (!ready) return null;
 
   const navItems = [
     { href: '/portal/schedule', labelKey: 'portal.navSchedule' },
@@ -63,7 +59,9 @@ export default function PortalLayout({ children }: { children: ReactNode }) {
   return (
     <div className="flex min-h-screen flex-col">
       <Topbar nav={portalNav} />
-      <main className="app-surface flex-1 overflow-y-auto px-6 py-8">{children}</main>
+      <main className="app-surface flex-1 overflow-y-auto px-6 py-8">
+        {tenant === 'ready' ? children : null}
+      </main>
     </div>
   );
 }

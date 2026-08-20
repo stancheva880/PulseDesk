@@ -1,183 +1,199 @@
 import { apiRequest } from './api';
+import type { components } from './api-schema';
 
 // Shared shapes — mirror the Prisma rows the backend returns. We keep these intentionally
 // loose (not generated from schema) since Phase 2 only consumes a small slice.
 
-export interface Location {
-  id: string;
-  tenantId: string;
-  name: string;
-  address: string | null;
-  isActive: boolean;
-  createdAt: string;
-  updatedAt: string;
+// Envelope returned by every paginated list endpoint (mirrors backend PaginatedResult).
+interface PaginatedResult<T> {
+  items: T[];
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
 }
 
-export type BillingMode = 'PER_MONTH' | 'PER_SESSION';
-
-export interface ClassRow {
-  id: string;
-  tenantId: string;
-  name: string;
-  description: string | null;
-  billingMode: BillingMode;
-  // Prisma's Decimal serializes to a string in JSON.
-  monthlyAmount: string | null;
-  sessionPrice: string | null;
-  isActive: boolean;
-  createdAt: string;
-  updatedAt: string;
+// Backend defaults to pageSize 25 and caps at 100.
+interface PageParams {
+  page?: number;
+  pageSize?: number;
 }
 
-export interface ClassDetail extends ClassRow {
-  locations: Location[];
-  trainers: Array<{ id: string; firstName: string | null; lastName: string | null; email: string }>;
-  trainees: Array<{ id: string; firstName: string; lastName: string }>;
+// The largest page the backend will serve (PaginationQueryDto's @Max), so "all" is
+// fetched in as few requests as the API allows.
+const MAX_PAGE_SIZE = 100;
+
+// Every row, for dropdowns and lookup maps that want "all". It follows the remaining
+// pages rather than returning only the first: a truncated dropdown or name map looks
+// exactly like a complete one, so silently stopping at row 100 is the worst failure here.
+// Sequential because real page counts are small; parallelising buys nothing measurable.
+export async function listAll<T>(
+  list: (params: PageParams) => Promise<PaginatedResult<T>>,
+): Promise<T[]> {
+  const first = await list({ pageSize: MAX_PAGE_SIZE });
+  const items = [...first.items];
+  for (let page = 2; page <= first.totalPages; page += 1) {
+    items.push(...(await list({ page, pageSize: MAX_PAGE_SIZE })).items);
+  }
+  return items;
 }
 
-export type ContactRelationship = 'PARENT' | 'GUARDIAN' | 'GRANDPARENT' | 'SIBLING' | 'OTHER';
+// The full seven-field row these endpoints return. Distinct from the two-column reference other
+// modules embed (SessionDetail.location, UserRow.locations, ClassDetail.locations) — the backend
+// names both shapes separately so they cannot be confused, which is the defect PRD-0008 started on.
+export type Location = components['schemas']['Location'];
 
-export interface ContactPerson {
-  id: string;
-  tenantId: string;
-  traineeId: string;
-  firstName: string;
-  lastName: string;
-  relationship: ContactRelationship;
-  phone: string | null;
-  email: string | null;
-  isPrimary: boolean;
-  createdAt: string;
-  updatedAt: string;
-}
+// Generated from the zod schemas the backend interceptor parses responses with, so the
+// narrow `locations: { id, name }` shape on ClassDetail is now enforced server-side rather
+// than described by hand here.
+export type ClassRow = components['schemas']['ClassRow'];
+export type ClassDetail = components['schemas']['ClassDetail'];
 
-export interface Trainee {
-  id: string;
-  tenantId: string;
-  firstName: string;
-  lastName: string;
-  dateOfBirth: string;
-  phone: string | null;
-  email: string | null;
-  notes: string | null;
-  isActive: boolean;
-  userId: string | null;
-  createdAt: string;
-  updatedAt: string;
-}
+// ContactRelationship is declared once in schema.prisma and reaches us through the generated
+// ContactPerson.
+export type ContactRelationship = components['schemas']['ContactPerson']['relationship'];
 
-export interface TraineeDetail extends Trainee {
-  contacts: ContactPerson[];
-  locations: Location[];
-  classes: ClassRow[];
-  guardians: Array<{ id: string; firstName: string | null; lastName: string | null; email: string }>;
-  user: { id: string; email: string } | null;
-}
+export type ContactPerson = components['schemas']['ContactPerson'];
 
-// Inputs sent to the backend. Optional ID arrays use `?` so we can omit them on create.
+// dateOfBirth is a full ISO timestamp on the wire — trainee-form slices it to YYYY-MM-DD.
+export type Trainee = components['schemas']['Trainee'];
 
-export interface CreateLocationInput {
-  name: string;
-  address?: string;
-}
-export type UpdateLocationInput = Partial<CreateLocationInput> & { isActive?: boolean };
+// guardians and user are narrowed by `select` in classes.service-style includes; contacts,
+// locations and classes come back whole. The backend schema enforces both now.
+export type TraineeDetail = components['schemas']['TraineeDetail'];
 
-export interface CreateClassInput {
-  name: string;
-  description?: string;
-  billingMode: BillingMode;
-  monthlyAmount?: number;
-  sessionPrice?: number;
-  locationIds?: string[];
-  traineeIds?: string[];
-  trainerIds?: string[];
-}
-export type UpdateClassInput = Partial<Omit<CreateClassInput, 'billingMode'>> & {
-  isActive?: boolean;
-  // billingMode is immutable after creation — backend rejects changes; we never send it on update.
-};
+// Inputs sent to the backend. Generated from backend/openapi.json — see `gen:api` +
+// `gen:types`. Never hand-write one: a hand-written request type is the drift PRD-0008
+// exists to stop. billingMode stays absent from UpdateClassDto (immutable after create)
+// and contacts from UpdateTraineeDto (managed via /trainees/:id/contacts/*).
 
-export interface ContactInput {
-  firstName: string;
-  lastName: string;
-  relationship: ContactRelationship;
-  phone?: string;
-  email?: string;
-  isPrimary?: boolean;
-}
+type CreateLocationInput = components['schemas']['CreateLocationDto'];
+type UpdateLocationInput = components['schemas']['UpdateLocationDto'];
 
-export interface CreateTraineeInput {
-  firstName: string;
-  lastName: string;
-  dateOfBirth: string;
-  phone?: string;
-  email?: string;
-  notes?: string;
-  locationIds?: string[];
-  classIds?: string[];
-  contacts?: ContactInput[];
-}
-export type UpdateTraineeInput = Partial<Omit<CreateTraineeInput, 'contacts'>> & {
-  isActive?: boolean;
-};
+type CreateClassInput = components['schemas']['CreateClassDto'];
+type UpdateClassInput = components['schemas']['UpdateClassDto'];
 
-export interface TenantSummary {
-  id: string;
-  slug: string;
-  name: string;
-  isActive: boolean;
-}
+type ContactInput = components['schemas']['CreateContactDto'];
 
-export type AppUserRole = 'SUPER_ADMIN' | 'ADMIN' | 'EMPLOYEE' | 'CUSTOMER';
+type CreateTraineeInput = components['schemas']['CreateTraineeDto'];
+type UpdateTraineeInput = components['schemas']['UpdateTraineeDto'];
 
-export interface UserRow {
-  id: string;
-  email: string;
-  firstName: string | null;
-  lastName: string | null;
-  role: AppUserRole;
-  isActive: boolean;
-  tenantId: string | null;
-  createdAt: string;
-  updatedAt: string;
-  locations: Array<{ id: string; name: string }>;
-}
+// The SUPER_ADMIN tenant selector's payload. GET /tenants answers without an X-Tenant-Id header,
+// which is what lets the selector load before a tenant is chosen.
+export type TenantSummary = components['schemas']['TenantSummaryList'][number];
 
-export interface CreateUserInput {
-  email: string;
-  password: string;
-  role: AppUserRole;
-  firstName?: string;
-  lastName?: string;
-  locationIds?: string[];
-}
+// The last hand-written enum union in this file: all eight now arrive by generation.
+export type AppUserRole = components['schemas']['UserSummary']['role'];
 
-export interface UpdateUserInput {
-  firstName?: string | null;
-  lastName?: string | null;
-  isActive?: boolean;
-  password?: string;
-  role?: AppUserRole;
-  locationIds?: string[];
-}
+// The backend parses every user response through this shape, which is an allowlist — the query
+// selects `isSuperAdmin` and `memberships` (the account's tenants) and the parse strips both.
+export type UserRow = components['schemas']['UserSummary'];
 
+// POST /users: the same row plus the attach flag, which a plain create omits entirely.
+export type CreatedUser = components['schemas']['CreatedUser'];
+
+// POST /users/:id/invite — delivery report only, no account fields.
+export type InviteResult = components['schemas']['InviteResult'];
+
+type CreateUserInput = components['schemas']['CreateUserDto'];
+type UpdateUserInput = components['schemas']['UpdateUserDto'];
+
+type CreateTenantInput = components['schemas']['CreateTenantDto'];
+type CreatedTenant = components['schemas']['CreatedTenant'];
+
+// Both routes are @Roles(SUPER_ADMIN) and neither reads @TenantId(), so omitting the tenant
+// header removes no check — and it is what keeps a stale stored club from 404ing the two calls
+// that exist to recover from it (tenant-context.guard.ts:56 rejects a header naming a club the
+// server does not have). Never copy this flag onto a route whose authorization depends on the
+// per-tenant role: the guard's role swap reads the header it would drop.
 export const Tenants = {
-  list: () => apiRequest<TenantSummary[]>('/tenants'),
+  list: () => apiRequest<TenantSummary[]>('/tenants', { omitTenantHeader: true }),
+  // Onboards a club with its first location and its first administrator, in one call.
+  // The response carries notificationSent: the new administrator has no password, so the
+  // invite mail is their only way in and a silent failure would strand the club.
+  create: (input: CreateTenantInput) =>
+    apiRequest<CreatedTenant>('/tenants', {
+      method: 'POST',
+      body: input,
+      omitTenantHeader: true,
+    }),
 };
+
+// The active-tenant gate and the club selector both need this list and mount in the same
+// commit, so they share one request. Shaped like tryRefresh() in api.ts:100-107 — the slot
+// clears on settle, so nothing is cached and a failure is never memoized. A request that
+// never settles does hold the slot, which is what resetClubsRequest() below is for.
+// Inactive clubs are dropped here so every caller agrees on what a club is;
+// GET /tenants selects isActive but applies no `where` (tenants.controller.ts:31-38), and the
+// guard answers 404 for an inactive club exactly as for a missing one.
+// ponytail: reactStrictMode double-invokes effects, so development can still see two requests
+// once the first settles. Production mounts once.
+/**
+ * The active clubs, plus whether the API capped the response.
+ *
+ * `truncated` matters because callers must not treat absence from `clubs` as proof that a club does
+ * not exist: above the cap the club selector cannot offer it either, so a stored id is the only
+ * remaining way into it. The shape is inline rather than a named `export interface` — this file is
+ * held to generated-only API types (PRD-0008, `api-response-aliases.test.ts`), and the payload type
+ * `TenantSummary` still comes from the generated schema.
+ */
+let inFlightClubs: Promise<{ clubs: TenantSummary[]; truncated: boolean }> | null = null;
+
+export function listClubs(): Promise<{ clubs: TenantSummary[]; truncated: boolean }> {
+  if (!inFlightClubs) {
+    inFlightClubs = Tenants.list()
+      .then((all) => ({
+        clubs: all.filter((club) => club.isActive),
+        // Judged on what the API returned, before the filter: a capped response full of inactive
+        // clubs would otherwise look short and licence a wrongful discard.
+        truncated: all.length >= MAX_PAGE_SIZE,
+      }))
+      .finally(() => {
+        inFlightClubs = null;
+      });
+  }
+  return inFlightClubs;
+}
+
+/**
+ * Drops the in-flight slot. For tests: the slot clears itself when the request settles, but a
+ * request that never settles holds it for the life of the module, and Vitest shares a module
+ * registry across the cases in one file. Production has no caller — a page whose fetch never
+ * settles is not going anywhere either.
+ */
+export function resetClubsRequest(): void {
+  inFlightClubs = null;
+}
+
+interface UserListFilters {
+  /** Membership role in the acting club — the server matches it there, not on User. */
+  role?: AppUserRole;
+}
 
 export const Users = {
-  list: () => apiRequest<UserRow[]>('/users'),
-  listSuperAdmins: () => apiRequest<UserRow[]>('/users/super-admins'),
+  list: (params: UserListFilters & PageParams = {}) =>
+    apiRequest<PaginatedResult<UserRow>>(`/users${buildQuery({ ...params })}`),
   get: (id: string) => apiRequest<UserRow>(`/users/${id}`),
+  // attachedExisting: the email already had an account — a membership was attached,
+  // the submitted password was ignored (TKT-0003).
   create: (input: CreateUserInput) =>
-    apiRequest<UserRow>('/users', { method: 'POST', body: input }),
+    apiRequest<CreatedUser>('/users', {
+      method: 'POST',
+      body: input,
+    }),
   update: (id: string, input: UpdateUserInput) =>
     apiRequest<UserRow>(`/users/${id}`, { method: 'PATCH', body: input }),
   remove: (id: string) => apiRequest<void>(`/users/${id}`, { method: 'DELETE' }),
+  // TKT-0060: re-issues the invite for a pending account. 409 if it has already been accepted
+  // or has been deactivated. inviteEmailSent is a report, not an error — false still means the
+  // new link exists and the old one is dead.
+  resendInvite: (id: string) =>
+    apiRequest<InviteResult>(`/users/${id}/invite`, { method: 'POST' }),
 };
 
 export const Locations = {
-  list: () => apiRequest<Location[]>('/locations'),
+  list: (params: PageParams = {}) =>
+    apiRequest<PaginatedResult<Location>>(`/locations${buildQuery({ ...params })}`),
   get: (id: string) => apiRequest<Location>(`/locations/${id}`),
   create: (input: CreateLocationInput) =>
     apiRequest<Location>('/locations', { method: 'POST', body: input }),
@@ -186,8 +202,24 @@ export const Locations = {
   remove: (id: string) => apiRequest<void>(`/locations/${id}`, { method: 'DELETE' }),
 };
 
+// Filter sets, shaped like FeeListFilters above: hand-written because they describe query params,
+// while every payload type still comes from the generated schema. Not exported, which is what
+// PRD-0008's "no hand-written API type" rule pins (api-response-aliases.test.ts) — a query-param
+// shape is this module's own business, and callers pass an object literal.
+interface ClassListFilters {
+  isActive?: boolean;
+}
+
+interface SessionListFilters {
+  /** Inclusive lower bound on startsAt. */
+  startsAtFrom?: string;
+  /** Exclusive upper bound — a week is half-open, so its last instant belongs to the next one. */
+  startsAtBefore?: string;
+}
+
 export const Classes = {
-  list: () => apiRequest<ClassRow[]>('/classes'),
+  list: (params: ClassListFilters & PageParams = {}) =>
+    apiRequest<PaginatedResult<ClassRow>>(`/classes${buildQuery({ ...params })}`),
   get: (id: string) => apiRequest<ClassDetail>(`/classes/${id}`),
   create: (input: CreateClassInput) =>
     apiRequest<ClassRow>('/classes', { method: 'POST', body: input }),
@@ -197,7 +229,8 @@ export const Classes = {
 };
 
 export const Trainees = {
-  list: () => apiRequest<Trainee[]>('/trainees'),
+  list: (params: PageParams = {}) =>
+    apiRequest<PaginatedResult<Trainee>>(`/trainees${buildQuery({ ...params })}`),
   get: (id: string) => apiRequest<TraineeDetail>(`/trainees/${id}`),
   create: (input: CreateTraineeInput) =>
     apiRequest<Trainee>('/trainees', { method: 'POST', body: input }),
@@ -207,8 +240,6 @@ export const Trainees = {
 };
 
 export const Contacts = {
-  list: (traineeId: string) =>
-    apiRequest<ContactPerson[]>(`/trainees/${traineeId}/contacts`),
   create: (traineeId: string, input: ContactInput) =>
     apiRequest<ContactPerson>(`/trainees/${traineeId}/contacts`, {
       method: 'POST',
@@ -220,111 +251,54 @@ export const Contacts = {
 
 // === Phase 3 — Sessions, Schedules, Attendances ===
 
-export type SessionStatus = 'SCHEDULED' | 'COMPLETED' | 'CANCELLED';
-export type AttendanceStatus = 'PENDING' | 'PRESENT' | 'ABSENT' | 'EXCUSED';
-export type AttendanceRsvp = 'CONFIRMED' | 'DECLINED' | 'RESCHEDULE_REQUESTED';
-export type DayOfWeek = 'MON' | 'TUE' | 'WED' | 'THU' | 'FRI' | 'SAT' | 'SUN';
+// SessionStatus is declared once in schema.prisma and reaches us through the generated Session.
+export type SessionStatus = components['schemas']['Session']['status'];
+// Both attendance enums are declared once in schema.prisma and reach us through the generated
+// Attendance. traineeRsvp is nullable there, but this union is used as a non-null value type
+// (`choice: AttendanceRsvp`), so the null is stripped rather than carried into every handler.
+export type AttendanceStatus = components['schemas']['Attendance']['status'];
+export type AttendanceRsvp = NonNullable<components['schemas']['Attendance']['traineeRsvp']>;
+// DayOfWeek is declared once in schema.prisma and reaches us through the generated ClassSchedule.
+export type DayOfWeek = components['schemas']['ClassSchedule']['dayOfWeek'];
 
-export interface SessionRow {
-  id: string;
-  tenantId: string;
-  classId: string;
-  locationId: string;
-  startsAt: string;
-  endsAt: string;
-  status: SessionStatus;
-  notes: string | null;
-  createdAt: string;
-  updatedAt: string;
-}
+// startsAt and endsAt are real instants, transformed server-side to exactly the ISO string
+// JSON.stringify already produced — dashboard/page.tsx parses startsAt with `new Date(...)`.
+export type SessionRow = components['schemas']['Session'];
+// The three relation subsets are enforced against their Prisma `select` server-side.
+export type SessionDetail = components['schemas']['SessionDetail'];
 
-export interface SessionDetail extends SessionRow {
-  class: { id: string; name: string; billingMode: BillingMode };
-  location: { id: string; name: string };
-  trainers: Array<{ id: string; firstName: string | null; lastName: string | null; email: string }>;
-}
+type CreateSessionInput = components['schemas']['CreateSessionDto'];
+// classId is absent from UpdateSessionDto — a session cannot move to another class.
+type UpdateSessionInput = components['schemas']['UpdateSessionDto'];
 
-export interface CreateSessionInput {
-  classId: string;
-  locationId: string;
-  startsAt: string;
-  endsAt: string;
-  notes?: string;
-  trainerIds?: string[];
-}
-export type UpdateSessionInput = Partial<Omit<CreateSessionInput, 'classId'>> & {
-  status?: SessionStatus;
-};
+// startTime and endTime are "HH:MM" 24-hour wall-clock strings. The backend schema publishes
+// that pattern in openapi.json and enforces it on every response; openapi-typescript cannot
+// express a patterned string, so they arrive here as plain `string`.
+export type ClassSchedule = components['schemas']['ClassSchedule'];
 
-export interface ClassSchedule {
-  id: string;
-  tenantId: string;
-  classId: string;
-  locationId: string;
-  dayOfWeek: DayOfWeek;
-  startTime: string;
-  endTime: string;
-  isActive: boolean;
-  createdAt: string;
-  updatedAt: string;
-}
+type CreateClassScheduleInput = components['schemas']['CreateClassScheduleDto'];
+// A schedule cannot move to another class, so UpdateClassScheduleDto omits classId.
+type UpdateClassScheduleInput = components['schemas']['UpdateClassScheduleDto'];
 
-export interface CreateClassScheduleInput {
-  classId: string;
-  locationId: string;
-  dayOfWeek: DayOfWeek;
-  startTime: string;
-  endTime: string;
-}
-export type UpdateClassScheduleInput = Partial<CreateClassScheduleInput> & {
-  isActive?: boolean;
-};
+type GenerateSessionsInput = components['schemas']['GenerateSessionsDto'];
+// The same component the fees generate routes return — one shape, declared once server-side.
+export type GenerateSessionsResult = components['schemas']['GenerateResult'];
 
-export interface GenerateSessionsInput {
-  from: string;
-  to: string;
-  classId?: string;
-}
-export interface GenerateSessionsResult {
-  created: number;
-  skipped: number;
-}
+export type Attendance = components['schemas']['Attendance'];
 
-export interface Attendance {
-  id: string;
-  tenantId: string;
-  sessionId: string;
-  traineeId: string;
-  status: AttendanceStatus;
-  traineeRsvp: AttendanceRsvp | null;
-  notes: string | null;
-  markedAt: string | null;
-  markedById: string | null;
-  markedByEmailSnapshot: string | null;
-  markedByNameSnapshot: string | null;
-  createdAt: string;
-  updatedAt: string;
-}
+// What GET /sessions/:id/attendances returns: the row plus the trainee's name, so the
+// attendance screen never resolves traineeId against a separately-paged trainee list. The
+// three-column subset is enforced against ATTENDANCE_WITH_TRAINEE server-side (TKT-0038).
+export type AttendanceWithTrainee = components['schemas']['AttendanceWithTraineeList'][number];
 
-export interface BulkMarkAttendanceItem {
-  traineeId: string;
-  status: AttendanceStatus;
-  notes?: string;
-}
-export interface BulkMarkAttendancesInput {
-  items: BulkMarkAttendanceItem[];
-}
-export interface BulkMarkResult {
-  updated: number;
-}
+type BulkMarkAttendancesInput = components['schemas']['BulkMarkAttendancesDto'];
+type BulkMarkResult = components['schemas']['BulkMarkResult'];
 
-export interface RsvpInput {
-  traineeId: string;
-  traineeRsvp: AttendanceRsvp;
-}
+type RsvpInput = components['schemas']['RsvpDto'];
 
 export const Sessions = {
-  list: () => apiRequest<SessionRow[]>('/sessions'),
+  list: (params: SessionListFilters & PageParams = {}) =>
+    apiRequest<PaginatedResult<SessionRow>>(`/sessions${buildQuery({ ...params })}`),
   get: (id: string) => apiRequest<SessionDetail>(`/sessions/${id}`),
   create: (input: CreateSessionInput) =>
     apiRequest<SessionRow>('/sessions', { method: 'POST', body: input }),
@@ -334,7 +308,8 @@ export const Sessions = {
 };
 
 export const ClassSchedules = {
-  list: () => apiRequest<ClassSchedule[]>('/class-schedules'),
+  list: (params: PageParams = {}) =>
+    apiRequest<PaginatedResult<ClassSchedule>>(`/class-schedules${buildQuery({ ...params })}`),
   get: (id: string) => apiRequest<ClassSchedule>(`/class-schedules/${id}`),
   create: (input: CreateClassScheduleInput) =>
     apiRequest<ClassSchedule>('/class-schedules', { method: 'POST', body: input }),
@@ -349,18 +324,35 @@ export const ClassSchedules = {
 };
 
 // Customer-portal payload — sessions enriched with class/location and the attendance rows
-// for trainees the customer owns/guards (server-side filtered).
-export interface CustomerSessionEntry extends SessionRow {
-  class: { id: string; name: string };
-  location: { id: string; name: string };
-  attendances: Array<
-    Attendance & { trainee: { id: string; firstName: string; lastName: string } }
-  >;
-}
+// for trainees the customer owns/guards (server-side filtered). Built server-side by extending
+// the same SessionSchema GET /sessions uses, so the portal cannot describe a session differently.
+export type CustomerSessionEntry = components['schemas']['CustomerSessionEntryList'][number];
 
 export const Attendances = {
+  /**
+   * A session's attendance rows, plus whether the API capped the response.
+   *
+   * The route is an unpaginated sub-list hard-capped at MAX_PAGE_SIZE server-side, and the
+   * attendance screen submits a snapshot of the rows it rendered — so a full page means the
+   * trainer may be about to leave unseen attendees unmarked, and they have to be told. Same
+   * inference as listClubs() below, including its one false positive: a session with exactly
+   * MAX_PAGE_SIZE attendees is reported as possibly-truncated. Erring that way is the point.
+   */
   listForSession: (sessionId: string) =>
-    apiRequest<Attendance[]>(`/sessions/${sessionId}/attendances`),
+    apiRequest<AttendanceWithTrainee[]>(`/sessions/${sessionId}/attendances`).then((items) => ({
+      items,
+      truncated: items.length >= MAX_PAGE_SIZE,
+    })),
+  /**
+   * The trainees who can still be added to this session: active, in scope, and not on it already.
+   * Both filters are the server's now — the screen used to page every trainee in the club on every
+   * session open and apply them in the browser, which no pageSize could fix because neither filter
+   * existed server-side (TKT-0071).
+   */
+  listCandidates: (sessionId: string, params: PageParams = {}) =>
+    apiRequest<PaginatedResult<Trainee>>(
+      `/sessions/${sessionId}/attendance-candidates${buildQuery({ ...params })}`,
+    ),
   addTrainee: (sessionId: string, traineeId: string) =>
     apiRequest<Attendance>(`/sessions/${sessionId}/attendances`, {
       method: 'POST',
@@ -381,95 +373,46 @@ export const Attendances = {
 
 // === Phase 4 — Fees, Payments, Dashboard ===
 
-export type FeeStatus = 'UNPAID' | 'PARTIAL' | 'PAID';
+// Generated from the zod schemas the backend parses money responses with. Every amount is a
+// Prisma Decimal serialized as a string — the schema enforces that server-side now, so a
+// number here would fail a backend test rather than reach formatMoney.
+// FeeStatus is declared once in schema.prisma and reaches us through the generated Fee.
+export type FeeStatus = components['schemas']['Fee']['status'];
 
-export interface Fee {
-  id: string;
-  tenantId: string;
-  classId: string;
-  traineeId: string;
-  sessionId: string | null;
-  // Decimals serialize as strings.
-  amount: string;
-  status: FeeStatus;
-  periodStart: string;
-  periodEnd: string;
-  notes: string | null;
-  createdAt: string;
-  updatedAt: string;
-}
+type Fee = components['schemas']['Fee'];
 
 // Returned by Fees.list — base Fee + the aggregate sum of its payments.
 // `outstanding = Number(amount) - Number(paid)` is computed at render time.
-export interface FeeRow extends Fee {
-  paid: string;
-}
+export type FeeRow = components['schemas']['PaginatedFeeRow']['items'][number];
 
-export interface FeeDetail extends Fee {
-  class: { id: string; name: string; billingMode: BillingMode };
-  trainee: { id: string; firstName: string; lastName: string };
-  payments: Payment[];
-}
+export type FeeDetail = components['schemas']['FeeDetail'];
 
-export interface CreateFeeInput {
-  classId: string;
-  traineeId: string;
-  amount: number;
-  periodStart: string;
-  periodEnd: string;
-  sessionId?: string;
-  notes?: string;
-}
-export type UpdateFeeInput = Partial<{
-  amount: number;
-  periodStart: string;
-  periodEnd: string;
-  notes: string;
-}>;
+// No sessionId on CreateFeeDto, so none here — session-linked fees come from
+// Fees.generateSession, which sets it server-side.
+type CreateFeeInput = components['schemas']['CreateFeeDto'];
+type UpdateFeeInput = components['schemas']['UpdateFeeDto'];
 
-export interface GenerateMonthlyFeesInput {
-  periodStart: string;
-  periodEnd: string;
-  classId?: string;
-}
-export interface GenerateSessionFeesInput {
-  from: string;
-  to: string;
-  classId?: string;
-}
-export interface GenerateFeesResult {
-  created: number;
-  skipped: number;
-}
+type GenerateMonthlyFeesInput = components['schemas']['GenerateMonthlyFeesDto'];
+type GenerateSessionFeesInput = components['schemas']['GenerateSessionFeesDto'];
+export type GenerateFeesResult = components['schemas']['GenerateResult'];
 
-export interface FeeListFilters {
-  status?: FeeStatus;
+/** OUTSTANDING is UNPAID + PARTIAL — a query value, not a fee state. See the backend DTO. */
+export type FeeStatusFilter = FeeStatus | 'OUTSTANDING';
+
+/** One enrolled trainee with no fee for the period — what generate-monthly would create. */
+export type UnbilledEntry = components['schemas']['UnbilledFeeList'][number];
+
+interface FeeListFilters {
+  status?: FeeStatusFilter;
   classId?: string;
   traineeId?: string;
   periodStartFrom?: string;
   periodStartTo?: string;
 }
 
-export interface Payment {
-  id: string;
-  tenantId: string;
-  feeId: string;
-  amount: string;
-  paidAt: string;
-  method: string | null;
-  notes: string | null;
-  recordedById: string | null;
-  recordedByEmailSnapshot: string | null;
-  recordedByNameSnapshot: string | null;
-  createdAt: string;
-}
+export type Payment = components['schemas']['Payment'];
 
-export interface CreatePaymentInput {
-  amount: number;
-  paidAt: string;
-  method?: string;
-  notes?: string;
-}
+type CreatePaymentInput = components['schemas']['CreatePaymentDto'];
 
 function buildQuery(params: Record<string, unknown>): string {
   const entries = Object.entries(params)
@@ -481,15 +424,15 @@ function buildQuery(params: Record<string, unknown>): string {
 
 // Customer-portal payload — fees enriched with class + trainee + full payments[].
 // Server-side filtered to trainees the customer owns/guards.
-export interface CustomerFeeEntry extends Fee {
-  class: { id: string; name: string };
-  trainee: { id: string; firstName: string; lastName: string };
-  payments: Payment[];
-}
+export type CustomerFeeEntry = components['schemas']['CustomerFeeEntryList'][number];
 
 export const Fees = {
-  list: (filters: FeeListFilters = {}) =>
-    apiRequest<FeeRow[]>(`/fees${buildQuery({ ...filters } as Record<string, unknown>)}`),
+  list: (filters: FeeListFilters & PageParams = {}) =>
+    apiRequest<PaginatedResult<FeeRow>>(
+      `/fees${buildQuery({ ...filters } as Record<string, unknown>)}`,
+    ),
+  unbilled: (params: { classId?: string; periodStart: string; periodEnd: string }) =>
+    apiRequest<UnbilledEntry[]>(`/fees/unbilled${buildQuery(params)}`),
   myFees: () => apiRequest<CustomerFeeEntry[]>('/me/fees'),
   get: (id: string) => apiRequest<FeeDetail>(`/fees/${id}`),
   create: (input: CreateFeeInput) =>
@@ -510,24 +453,16 @@ export const Fees = {
 };
 
 export const Payments = {
-  listForFee: (feeId: string) =>
-    apiRequest<Payment[]>(`/fees/${feeId}/payments`),
   record: (feeId: string, input: CreatePaymentInput) =>
     apiRequest<Payment>(`/fees/${feeId}/payments`, { method: 'POST', body: input }),
   remove: (feeId: string, id: string) =>
     apiRequest<void>(`/fees/${feeId}/payments/${id}`, { method: 'DELETE' }),
 };
 
-export interface FeesSummaryEntry {
-  period: string;
-  collected: number;
-  pending: number;
-}
-export interface CashflowSummaryEntry {
-  period: string;
-  collected: number;
-  billed: number;
-}
+// Dashboard sums are numbers by design: DashboardService aggregates and rounds each bucket,
+// and the chart computes on them. Per-row amounts stay strings — see FeeRow above.
+export type FeesSummaryEntry = components['schemas']['FeesSummaryEntryList'][number];
+export type CashflowSummaryEntry = components['schemas']['CashflowSummaryEntryList'][number];
 export const Dashboard = {
   feesSummary: (params: { from?: string; to?: string } = {}) =>
     apiRequest<FeesSummaryEntry[]>(`/dashboard/fees-summary${buildQuery(params)}`),

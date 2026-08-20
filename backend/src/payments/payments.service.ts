@@ -1,7 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma, type Payment } from '@prisma/client';
 import { LocationScopeService } from '@/auth/scope/location-scope.service';
 import type { AuthenticatedUser } from '@/auth/types/jwt-payload';
+import { resolveActorSnapshot } from '@/common/actor-snapshot';
 import { DEFAULT_LIST_TAKE } from '@/common/dto/paginated-result';
 import { FeesService } from '@/fees/fees.service';
 import { PrismaService } from '@/prisma/prisma.service';
@@ -18,7 +19,7 @@ export class PaymentsService {
   async listForFee(
     tenantId: string,
     feeId: string,
-    user?: AuthenticatedUser,
+    user: AuthenticatedUser,
   ): Promise<Payment[]> {
     await this.assertFeeAccessible(tenantId, feeId, user);
     return this.prisma.payment.findMany({
@@ -37,15 +38,30 @@ export class PaymentsService {
     await this.assertFeeAccessible(tenantId, feeId, viewer);
 
     // Resolve audit-snapshot fields once.
-    const recorder = await this.prisma.user.findUnique({
-      where: { id: viewer.id },
-      select: { email: true, firstName: true, lastName: true },
-    });
-    if (!recorder) throw new NotFoundException('Recorder user not found');
-    const nameSnapshot =
-      [recorder.firstName, recorder.lastName].filter(Boolean).join(' ').trim() || null;
+    const recorder = await resolveActorSnapshot(
+      this.prisma,
+      viewer.id,
+      'Recorder user not found',
+    );
 
     return this.prisma.$transaction(async (tx) => {
+      // Read the balance and insert in one transaction: a check before the transaction lets two
+      // concurrent payments both see the old total and both pass.
+      // ponytail: relies on the write serialisation of SQLite's default transaction; on Postgres at
+      // READ COMMITTED add `SELECT … FOR UPDATE` on the fee row, or a CHECK-style DB constraint.
+      const fee = await tx.fee.findUniqueOrThrow({
+        where: { id: feeId },
+        select: { amount: true },
+      });
+      const balance = fee.amount.minus(await this.feesService.paidTotalInTransaction(tx, feeId));
+      if (new Prisma.Decimal(dto.amount).gt(balance)) {
+        throw new BadRequestException({
+          message: `Payment of ${dto.amount} exceeds the outstanding balance of ${balance} on this fee`,
+          code: 'FEE_PAYMENT_EXCEEDS_BALANCE',
+          params: { amount: dto.amount, balance: balance.toString() },
+        });
+      }
+
       const payment = await tx.payment.create({
         data: {
           tenantId,
@@ -56,7 +72,7 @@ export class PaymentsService {
           notes: dto.notes,
           recordedById: viewer.id,
           recordedByEmailSnapshot: recorder.email,
-          recordedByNameSnapshot: nameSnapshot,
+          recordedByNameSnapshot: recorder.nameSnapshot,
         },
       });
       await this.feesService.recomputeStatusInTransaction(tx, feeId);
@@ -68,7 +84,7 @@ export class PaymentsService {
     tenantId: string,
     feeId: string,
     paymentId: string,
-    user?: AuthenticatedUser,
+    user: AuthenticatedUser,
   ): Promise<void> {
     await this.assertFeeAccessible(tenantId, feeId, user);
     const found = await this.prisma.payment.count({
@@ -85,15 +101,11 @@ export class PaymentsService {
   private async assertFeeAccessible(
     tenantId: string,
     feeId: string,
-    user?: AuthenticatedUser,
+    user: AuthenticatedUser,
   ): Promise<void> {
     const where: Prisma.FeeWhereInput = { id: feeId, tenantId };
-    if (user) {
-      const allowedIds = await this.scope.getAccessibleLocationIds(user, tenantId);
-      if (allowedIds !== null) {
-        where.class = { locations: { some: { id: { in: allowedIds } } } };
-      }
-    }
+    const scoped = await this.scope.locationsWhere(user, tenantId);
+    if (scoped.locations) where.class = scoped;
     const found = await this.prisma.fee.count({ where });
     if (!found) throw new NotFoundException(`Fee ${feeId} not found`);
   }

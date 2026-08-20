@@ -1,4 +1,4 @@
-import { ExecutionContext, NotFoundException } from '@nestjs/common';
+import { ExecutionContext, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { UserRole } from '@prisma/client';
 import { describe, expect, it } from 'vitest';
@@ -7,12 +7,32 @@ import type { AuthenticatedUser } from '../types/jwt-payload';
 import { TenantContextGuard } from './tenant-context.guard';
 
 interface FakeTenant { id: string; isActive: boolean }
+interface FakeMembership { userId: string; tenantId: string; role: UserRole; tenantActive: boolean }
 
-function makePrisma(tenants: Record<string, FakeTenant | undefined>) {
+function makePrisma(
+  tenants: Record<string, FakeTenant | undefined>,
+  memberships: FakeMembership[] = [],
+) {
   return {
     tenant: {
       findUnique: ({ where }: { where: { id: string } }) =>
         Promise.resolve(tenants[where.id] ?? null),
+    },
+    membership: {
+      findUnique: ({
+        where,
+      }: {
+        where: { userId_tenantId: { userId: string; tenantId: string } };
+      }) => {
+        const m = memberships.find(
+          (mm) =>
+            mm.userId === where.userId_tenantId.userId &&
+            mm.tenantId === where.userId_tenantId.tenantId,
+        );
+        return Promise.resolve(
+          m ? { role: m.role, tenant: { isActive: m.tenantActive } } : null,
+        );
+      },
     },
   } as unknown as ConstructorParameters<typeof TenantContextGuard>[1];
 }
@@ -41,16 +61,47 @@ describe('TenantContextGuard', () => {
     expect(await guard.canActivate(makeContext({}))).toBe(true);
   });
 
-  it('is a no-op for tenant users (does not query DB)', async () => {
+  // Behavior flip (PRD-0001 / TKT-0001): tenant users' X-Tenant-Id is validated
+  // against their memberships, and the request role becomes the per-tenant role.
+  it('allows a tenant user whose header matches an active membership and swaps role/tenantId', async () => {
     const guard = new TenantContextGuard(
       makeReflector(),
-      makePrisma({}),
+      makePrisma({}, [{ userId: 'u', tenantId: 't2', role: UserRole.EMPLOYEE, tenantActive: true }]),
+    );
+    const user: AuthenticatedUser = { id: 'u', email: 'a', role: UserRole.ADMIN, tenantId: 't1' };
+    const ctx = makeContext({ user, headers: { 'x-tenant-id': 't2' } });
+    expect(await guard.canActivate(ctx)).toBe(true);
+    expect(user.role).toBe(UserRole.EMPLOYEE);
+    expect(user.tenantId).toBe('t2');
+  });
+
+  it('throws Forbidden for a tenant user whose header names a tenant they are not a member of', async () => {
+    const guard = new TenantContextGuard(makeReflector(), makePrisma({}, []));
+    const ctx = makeContext({
+      user: { id: 'u', email: 'a', role: UserRole.ADMIN, tenantId: 't1' },
+      headers: { 'x-tenant-id': 'forged' },
+    });
+    await expect(guard.canActivate(ctx)).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it('throws Forbidden for a tenant user whose membership tenant is inactive', async () => {
+    const guard = new TenantContextGuard(
+      makeReflector(),
+      makePrisma({}, [{ userId: 'u', tenantId: 't2', role: UserRole.ADMIN, tenantActive: false }]),
     );
     const ctx = makeContext({
-      user: { id: 'u', email: 'a', role: UserRole.ADMIN, tenantId: 't' },
-      headers: { 'x-tenant-id': 'whatever' },
+      user: { id: 'u', email: 'a', role: UserRole.ADMIN, tenantId: 't1' },
+      headers: { 'x-tenant-id': 't2' },
     });
+    await expect(guard.canActivate(ctx)).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it('is a no-op for a tenant user without an X-Tenant-Id header (decorator enforces presence)', async () => {
+    const guard = new TenantContextGuard(makeReflector(), makePrisma({}));
+    const user: AuthenticatedUser = { id: 'u', email: 'a', role: UserRole.ADMIN, tenantId: 't' };
+    const ctx = makeContext({ user, headers: {} });
     expect(await guard.canActivate(ctx)).toBe(true);
+    expect(user.role).toBe(UserRole.ADMIN);
   });
 
   it('is a no-op for SUPER_ADMIN when X-Tenant-Id is missing', async () => {

@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Employee (trainer) — PulseDesk</title>
+    <link rel="stylesheet" href="../assets/docs.css" />
+  </head>
+  <body>
+    <nav class="topnav">
+      <a class="home" href="../index.html">PulseDesk</a>
+      <a href="basics.html">Getting started</a>
+      <a href="super-admin.html">Super Administrator</a>
+      <a href="admin.html">Administrator</a>
+      <a href="customer.html">Customer</a>
+      <span class="spacer"></span>
+      <a class="lang" href="../bg/trener.html">BG</a>
+    </nav>
+
+    <h1>Employee (trainer)</h1>
+    <p class="lead">
+      Your job in PulseDesk is one main task: record who attended a session. The other screens are
+      there for reference.
+    </p>
+    <p class="crumbs">
+      Read <a href="basics.html">Getting started</a> first — signing in, passwords and switching
+      club.
+    </p>
+
+    <h2>What you see</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Menu</th>
+          <th>What it is for</th>
+          <th>Rights</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Dashboard</td>
+          <td>The screen you land on after signing in.</td>
+          <td>read</td>
+        </tr>
+        <tr>
+          <td>Locations</td>
+          <td>The places where classes happen.</td>
+          <td>read only</td>
+        </tr>
+        <tr>
+          <td>Classes</td>
+          <td>What each class is, its price and its trainers.</td>
+          <td>read only</td>
+        </tr>
+        <tr>
+          <td>Sessions</td>
+          <td>The individual occurrences. Attendance is reached from here.</td>
+          <td>read + attendance</td>
+        </tr>
+        <tr>
+          <td>Trainees</td>
+          <td>The list, plus a record per trainee with the guardian contacts.</td>
+          <td>read only</td>
+        </tr>
+        <tr>
+          <td>Fees</td>
+          <td>Reference for who owes what.</td>
+          <td>read only</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>What you can do</h2>
+    <ul>
+      <li>Mark attendance for a session and save every row at once.</li>
+      <li>Add a trainee to a session when they turn up without being on the list.</li>
+      <li>Open a trainee's record and read their phone, email and guardian contacts.</li>
+      <li>Check the status of a fee when a parent asks you.</li>
+    </ul>
+
+    <h2>What you cannot do, and why</h2>
+    <ul>
+      <li>
+        <strong>There are no Schedules and Users menus.</strong> Weekly schedules and people's
+        access are managed by the club administrator. Opening such an address directly returns you
+        to <span class="ui">Dashboard</span>.
+      </li>
+      <li>
+        <strong>You do not create or change</strong> classes, sessions, trainees, locations or fees.
+        You see them to do your work, but the buttons that change them are not for you.
+      </li>
+      <li>
+        <strong>You do not record payments.</strong> The administrator takes the money and enters
+        it.
+      </li>
+      <li>
+        <strong>You see your own locations only.</strong> The trainee, fee and location lists cover
+        the locations you are assigned to. A trainee from another hall does not appear — ask the
+        administrator for them. The class and session lists are narrower: they show only the classes
+        and the sessions where you are a trainer. A session in your own hall that another trainer
+        takes does not appear. If you see nothing at all, you probably have no location assigned;
+        the club administrator fixes that.
+      </li>
+    </ul>
+
+    <h2>Step by step</h2>
+
+    <div class="story">
+      <h3>1. As a trainer I want to mark attendance for today's session</h3>
+      <ol>
+        <li>Open <span class="ui">Sessions</span>.</li>
+        <li>Find the session by date, time and class.</li>
+        <li>Press <span class="ui">Mark attendance</span> on its row.</li>
+        <li>
+          For each trainee choose a <span class="ui">Status</span>:
+          <span class="ui">Present</span> for those who came,
+          <span class="ui">Absent</span> for those who did not,
+          <span class="ui">Excused</span> when they told you in advance. Anyone you do not mark
+          stays <span class="ui">Pending</span>.
+        </li>
+        <li>
+          Press <span class="ui">Save all</span>. A message shows how many rows were saved, for
+          example <span class="ui">Saved 12 row(s)</span>.
+        </li>
+      </ol>
+      <div class="note">
+        <strong>Record it during the session or straight after.</strong>
+        Attendance feeds the fees of classes that are billed per session.
+      </div>
+    </div>
+
+    <div class="story">
+      <h3>2. As a trainer I want to add a trainee who is not on the list</h3>
+      <ol>
+        <li>Open the attendance screen for the session.</li>
+        <li>Pick the person in the <span class="ui">Add a trainee…</span> list.</li>
+        <li>Press <span class="ui">Add</span>. A new row appears.</li>
+        <li>Choose a status and press <span class="ui">Save all</span>.</li>
+      </ol>
+      <p>
+        If the list is empty and reads
+        <span class="ui">Every active trainee is already on this session</span>, there is nobody left
+        to add. The list holds the trainees of your own locations, so somebody from another hall does
+        not appear — nor does somebody who has not been created yet. Ask the administrator either way.
+      </p>
+    </div>
+
+    <div class="story">
+      <h3>3. As a trainer I want to know what the customer answered</h3>
+      <ol>
+        <li>Open the attendance screen for the session.</li>
+        <li>
+          Look at the <span class="ui">Customer RSVP</span> column:
+          <span class="ui">Confirmed</span>, <span class="ui">Declined</span> or
+          <span class="ui">Wants to reschedule</span>. Empty means no answer.
+        </li>
+      </ol>
+      <div class="warn">
+        <strong>The customer's answer is not attendance.</strong>
+        The customer states an intention; the real attendance is what you mark. Pass reschedule
+        requests to the administrator — only they move sessions.
+      </div>
+    </div>
+
+    <div class="story">
+      <h3>4. As a trainer I want to check whether a fee is paid</h3>
+      <ol>
+        <li>Open <span class="ui">Fees</span>.</li>
+        <li>
+          Type a trainee or class name in
+          <span class="ui">Search trainee or class…</span>
+        </li>
+        <li>
+          Optionally narrow the list: <span class="ui">Class</span>,
+          <span class="ui">Month</span> and <span class="ui">Status</span> —
+          <span class="ui">Unpaid</span>, <span class="ui">Partial</span>,
+          <span class="ui">Paid</span> or <span class="ui">Outstanding</span>.
+        </li>
+        <li>
+          <span class="ui">Outstanding</span> shows the unpaid and the partly paid fees
+          together. That answers "who still owes for this class this month".
+        </li>
+        <li>
+          Read the row: <span class="ui">Amount</span> is what is charged for the period,
+          <span class="ui">Outstanding</span> is what is left after the payments recorded.
+        </li>
+      </ol>
+      <p>
+        The list is reference only. Payments are recorded by the administrator, so send money
+        questions to them.
+      </p>
+    </div>
+
+    <div class="story">
+      <h3>5. As a trainer I want a parent's contact details</h3>
+      <ol>
+        <li>Open <span class="ui">Trainees</span>.</li>
+        <li>
+          The list shows <span class="ui">Last name</span>, <span class="ui">First name</span>,
+          <span class="ui">Age</span> and <span class="ui">Status</span>. Use
+          <span class="ui">Next</span> if the person is on a later page.
+        </li>
+        <li>Press <span class="ui">View</span> on their row.</li>
+        <li>
+          A read-only record opens: <span class="ui">Phone</span>, <span class="ui">Email</span>,
+          and the trainee's classes and locations.
+        </li>
+        <li>
+          Below it sits <span class="ui">Guardian contacts</span> — name,
+          <span class="ui">Relationship</span> to the child, phone and email. The one marked
+          <span class="ui">Primary contact</span> is the person to call first.
+        </li>
+      </ol>
+      <div class="warn">
+        <strong>Personal data is for club work only.</strong>
+        Do not pass phone numbers or email addresses on to anyone else.
+      </div>
+    </div>
+
+    <footer>
+      All names and email addresses in the examples are invented. ·
+      <a href="../index.html">Back to the start</a>
+    </footer>
+  </body>
+</html>

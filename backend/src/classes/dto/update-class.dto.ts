@@ -3,18 +3,18 @@ import {
   ArrayUnique,
   IsArray,
   IsBoolean,
-  IsEnum,
   IsNumber,
   IsOptional,
-  IsPositive,
   IsString,
+  Max,
   MaxLength,
+  Min,
   MinLength,
 } from 'class-validator';
-import { BillingMode } from '@prisma/client';
+import { MAX_AMOUNT, MIN_AMOUNT } from '@/common/dto/money';
 
-// billingMode is intentionally accepted on update so the controller can verify it
-// matches the existing class's mode (it's immutable after creation, per memory).
+// billingMode is immutable after creation and not a field here — sending it gets an
+// automatic 400 from the global forbidNonWhitelisted ValidationPipe.
 export class UpdateClassDto {
   @IsOptional()
   @IsString()
@@ -28,19 +28,17 @@ export class UpdateClassDto {
   description?: string;
 
   @IsOptional()
-  @IsEnum(BillingMode)
-  billingMode?: BillingMode;
-
-  @IsOptional()
   @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 2 })
-  @IsPositive()
+  @Min(MIN_AMOUNT)
+  @Max(MAX_AMOUNT)
   monthlyAmount?: number;
 
   @IsOptional()
   @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 2 })
-  @IsPositive()
+  @Min(MIN_AMOUNT)
+  @Max(MAX_AMOUNT)
   sessionPrice?: number;
 
   @IsOptional()

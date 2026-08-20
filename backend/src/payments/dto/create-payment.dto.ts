@@ -4,14 +4,17 @@ import {
   IsNumber,
   IsOptional,
   IsString,
+  Max,
   MaxLength,
   Min,
 } from 'class-validator';
+import { MAX_AMOUNT, MIN_AMOUNT } from '@/common/dto/money';
 
 export class CreatePaymentDto {
   @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 2 })
-  @Min(0.01)
+  @Min(MIN_AMOUNT)
+  @Max(MAX_AMOUNT)
   amount!: number;
 
   @IsDateString()

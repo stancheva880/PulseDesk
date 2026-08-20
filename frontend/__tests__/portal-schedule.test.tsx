@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event';
 import PortalSchedulePage from '@/app/(portal)/portal/schedule/page';
 import { AuthProvider } from '@/components/auth-provider';
 import { I18nProvider } from '@/components/i18n-provider';
-import { writeStoredTokens } from '@/lib/auth-storage';
+import { setAccessToken } from '@/lib/auth-storage';
 
 const replace = vi.fn();
 vi.mock('next/navigation', () => ({
@@ -73,10 +73,7 @@ function renderPage() {
 describe('PortalSchedulePage', () => {
   beforeEach(() => {
     const exp = Math.floor(Date.now() / 1000) + 600;
-    writeStoredTokens({
-      accessToken: buildJwt({ sub: 'u', email: 'cust@x', role: 'CUSTOMER', tenantId: 't', exp }),
-      refreshToken: 'R',
-    });
+    setAccessToken(buildJwt({ sub: 'u', email: 'cust@x', role: 'CUSTOMER', tenantId: 't', exp }));
     replace.mockClear();
   });
 

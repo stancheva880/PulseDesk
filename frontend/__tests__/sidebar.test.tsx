@@ -3,7 +3,8 @@ import { render, screen } from '@testing-library/react';
 import { AuthProvider, useAuth } from '@/components/auth-provider';
 import { I18nProvider } from '@/components/i18n-provider';
 import { Sidebar } from '@/components/sidebar';
-import { writeStoredTokens, type UserRole } from '@/lib/auth-storage';
+import { setAccessToken, type UserRole } from '@/lib/auth-storage';
+import { writeTenantContext } from '@/lib/tenant-context';
 
 vi.mock('next/navigation', () => ({
   usePathname: () => '/locations',
@@ -16,6 +17,13 @@ function buildJwt(payload: Record<string, unknown>): string {
   return `${header}.${body}.signature`;
 }
 
+function jsonResponse(body: unknown): Response {
+  return new Response(JSON.stringify(body), {
+    status: 200,
+    headers: { 'Content-Type': 'application/json' },
+  });
+}
+
 // Probe lets us wait until AuthProvider has hydrated the role before asserting nav contents.
 function RoleProbe() {
   const { user, status } = useAuth();
@@ -24,9 +32,20 @@ function RoleProbe() {
 
 function renderSidebar(role: UserRole = 'ADMIN') {
   const exp = Math.floor(Date.now() / 1000) + 600;
-  writeStoredTokens({
-    accessToken: buildJwt({ sub: 'u', email: 'a@b', role, tenantId: 't', exp }),
-    refreshToken: 'R',
+  setAccessToken(buildJwt({ sub: 'u', email: 'a@b', role, tenantId: 't', exp }));
+  // AuthProvider reconciles its membership snapshot on mount. Left unmocked that request
+  // goes to NEXT_PUBLIC_API_URL for real: a dev backend on that port answers 401, the
+  // retried refresh answers 401 too, and the provider signs the session out mid-test —
+  // which drops the role-gated links and made this file pass or fail on whether a server
+  // happened to be running. Answer it here so the render depends on nothing outside.
+  writeTenantContext('t');
+  vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
+    const url = typeof input === 'string' ? input : (input as Request).url;
+    return Promise.resolve(
+      url.includes('/auth/memberships')
+        ? jsonResponse([{ tenantId: 't', tenantName: 'Club', role }])
+        : jsonResponse({}),
+    );
   });
   return render(
     <I18nProvider>
