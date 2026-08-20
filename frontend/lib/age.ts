@@ -1,4 +1,4 @@
-// Mirrors backend/src/common/age.ts — kept identical so the form's "show contacts"
+// Mirrors calculateAge in backend/src/trainees/trainees.service.ts — kept identical so the form's "show contacts"
 // gate matches the backend's <18 validation exactly.
 export function calculateAge(dateOfBirth: Date, on: Date = new Date()): number {
   let age = on.getFullYear() - dateOfBirth.getFullYear();

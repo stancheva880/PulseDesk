@@ -5,13 +5,7 @@ import { MailModule } from './mail.module';
 import { MailService } from './mail.service';
 import { ConsoleMailService } from './console-mail.service';
 import { SmtpMailService } from './smtp-mail.service';
-
-class FakeConfigService {
-  constructor(private readonly values: Record<string, string>) {}
-  get<T>(key: string): T | undefined {
-    return this.values[key] as unknown as T | undefined;
-  }
-}
+import { FakeConfigService } from '@/test-utils/fake-config';
 
 async function build(env: Record<string, string>): Promise<MailService> {
   const module = await Test.createTestingModule({

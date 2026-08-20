@@ -1,3 +1,4 @@
+import { SUPER_ADMIN_USER as su } from '@/test-utils/auth-user';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { Test, type TestingModule } from '@nestjs/testing';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -7,6 +8,7 @@ import { LocationScopeService } from '@/auth/scope/location-scope.service';
 import { PrismaService } from '@/prisma/prisma.service';
 import { SessionsService } from '@/sessions/sessions.service';
 import { FeesService } from './fees.service';
+import { createTestUser } from '@/test-utils/create-user';
 
 describe('FeesService', () => {
   let service: FeesService;
@@ -78,7 +80,7 @@ describe('FeesService', () => {
       locationId,
       startsAt,
       endsAt: new Date(new Date(startsAt).getTime() + 60 * 60 * 1000).toISOString(),
-    });
+    }, su);
   }
 
   // --- create / update / delete (single) ---
@@ -95,7 +97,7 @@ describe('FeesService', () => {
         periodStart: '2026-03-01',
         periodEnd: '2026-03-31',
         notes: 'ad-hoc',
-      });
+      }, su);
       expect(fee.tenantId).toBe(t.id);
       expect(fee.status).toBe(FeeStatus.UNPAID);
       expect(Number(fee.amount)).toBe(50);
@@ -113,7 +115,7 @@ describe('FeesService', () => {
           amount: 50,
           periodStart: '2026-03-01',
           periodEnd: '2026-03-31',
-        }),
+        }, su),
       ).rejects.toBeInstanceOf(BadRequestException);
     });
 
@@ -129,7 +131,7 @@ describe('FeesService', () => {
           amount: 50,
           periodStart: '2026-03-01',
           periodEnd: '2026-03-31',
-        }),
+        }, su),
       ).rejects.toBeInstanceOf(BadRequestException);
     });
 
@@ -144,7 +146,7 @@ describe('FeesService', () => {
           amount: 50,
           periodStart: '2026-03-31',
           periodEnd: '2026-03-01',
-        }),
+        }, su),
       ).rejects.toBeInstanceOf(BadRequestException);
     });
 
@@ -158,10 +160,74 @@ describe('FeesService', () => {
         amount: 50,
         periodStart: '2026-03-01',
         periodEnd: '2026-03-31',
-      });
-      const updated = await service.update(t.id, fee.id, { amount: 75, notes: 'discount' });
+      }, su);
+      const updated = await service.update(t.id, fee.id, { amount: 75, notes: 'discount' }, su);
       expect(Number(updated.amount)).toBe(75);
       expect(updated.notes).toBe('discount');
+    });
+
+    // Changing the amount changes what "paid in full" means, and only the payment paths used to
+    // recompute the status. Lowering an amount under the paid total left a settled fee reading
+    // PARTIAL; raising it above left a PAID fee that in fact owes money.
+    describe('status follows a changed amount', () => {
+      async function feeWithPayment(amount: number, paid: number) {
+        const t = await newTenant();
+        const tr = await newTrainee(t.id);
+        const cls = await newMonthlyClass(t.id, [tr.id]);
+        const fee = await service.create(t.id, {
+          classId: cls.id,
+          traineeId: tr.id,
+          amount,
+          periodStart: '2026-03-01',
+          periodEnd: '2026-03-31',
+        }, su);
+        await prisma.payment.create({
+          data: { tenantId: t.id, feeId: fee.id, amount: paid, paidAt: new Date('2026-03-15') },
+        });
+        return { tenantId: t.id, feeId: fee.id };
+      }
+
+      it('lowering the amount to the paid total settles the fee', async () => {
+        const { tenantId, feeId } = await feeWithPayment(100, 40);
+        // 40 of 100 paid. The recompute the payment left behind is not run here, so seed it.
+        await prisma.fee.update({ where: { id: feeId }, data: { status: FeeStatus.PARTIAL } });
+
+        const updated = await service.update(tenantId, feeId, { amount: 40 }, su);
+
+        expect(updated.status).toBe(FeeStatus.PAID);
+      });
+
+      // The other door into an overpaid fee: no payment is inserted, the fee simply shrinks under
+      // what has already been taken. Same rule as PaymentsService.record, or the guard is a fence
+      // with one side missing.
+      it('refuses to lower the amount below the recorded payments', async () => {
+        const { tenantId, feeId } = await feeWithPayment(100, 40);
+
+        await expect(service.update(tenantId, feeId, { amount: 39 }, su)).rejects.toBeInstanceOf(
+          BadRequestException,
+        );
+
+        const unchanged = await prisma.fee.findUnique({ where: { id: feeId } });
+        expect(Number(unchanged?.amount)).toBe(100);
+      });
+
+      it('raising the amount above the paid total reopens a settled fee', async () => {
+        const { tenantId, feeId } = await feeWithPayment(40, 40);
+        await prisma.fee.update({ where: { id: feeId }, data: { status: FeeStatus.PAID } });
+
+        const updated = await service.update(tenantId, feeId, { amount: 100 }, su);
+
+        expect(updated.status).toBe(FeeStatus.PARTIAL);
+      });
+
+      it('leaves the status alone when the amount is not part of the change', async () => {
+        const { tenantId, feeId } = await feeWithPayment(100, 40);
+        await prisma.fee.update({ where: { id: feeId }, data: { status: FeeStatus.PARTIAL } });
+
+        const updated = await service.update(tenantId, feeId, { notes: 'no money moved' }, su);
+
+        expect(updated.status).toBe(FeeStatus.PARTIAL);
+      });
     });
 
     it('cross-tenant update returns NotFound', async () => {
@@ -175,9 +241,9 @@ describe('FeesService', () => {
         amount: 50,
         periodStart: '2026-03-01',
         periodEnd: '2026-03-31',
-      });
+      }, su);
       await expect(
-        service.update(b.id, fee.id, { amount: 1 }),
+        service.update(b.id, fee.id, { amount: 1 }, su),
       ).rejects.toBeInstanceOf(NotFoundException);
     });
 
@@ -191,11 +257,11 @@ describe('FeesService', () => {
         amount: 50,
         periodStart: '2026-03-01',
         periodEnd: '2026-03-31',
-      });
+      }, su);
       await prisma.payment.create({
         data: { tenantId: t.id, feeId: fee.id, amount: 10, paidAt: new Date('2026-03-15') },
       });
-      await service.delete(t.id, fee.id);
+      await service.delete(t.id, fee.id, su);
       const orphaned = await prisma.payment.count({ where: { feeId: fee.id } });
       expect(orphaned).toBe(0);
     });
@@ -214,18 +280,18 @@ describe('FeesService', () => {
         amount: 50,
         periodStart: '2026-03-01',
         periodEnd: '2026-03-31',
-      });
+      }, su);
       await service.create(t.id, {
         classId: cls.id,
         traineeId: tr.id,
         amount: 70,
         periodStart: '2026-04-01',
         periodEnd: '2026-04-30',
-      });
+      }, su);
       await prisma.fee.update({ where: { id: fee1.id }, data: { status: FeeStatus.PAID } });
-      const result = await service.list(t.id, { status: FeeStatus.PAID });
-      expect(result).toHaveLength(1);
-      expect(result[0]!.id).toBe(fee1.id);
+      const result = await service.list(t.id, { status: FeeStatus.PAID }, su);
+      expect(result.items).toHaveLength(1);
+      expect(result.items[0]!.id).toBe(fee1.id);
     });
 
     it('filters by classId and traineeId', async () => {
@@ -239,17 +305,17 @@ describe('FeesService', () => {
         amount: 50,
         periodStart: '2026-03-01',
         periodEnd: '2026-03-31',
-      });
+      }, su);
       await service.create(t.id, {
         classId: cls.id,
         traineeId: tr2.id,
         amount: 50,
         periodStart: '2026-03-01',
         periodEnd: '2026-03-31',
-      });
-      const result = await service.list(t.id, { traineeId: tr1.id });
-      expect(result).toHaveLength(1);
-      expect(result[0]!.id).toBe(f1.id);
+      }, su);
+      const result = await service.list(t.id, { traineeId: tr1.id }, su);
+      expect(result.items).toHaveLength(1);
+      expect(result.items[0]!.id).toBe(f1.id);
     });
 
     it('attaches paid aggregate per row (sum of payments) — 0 when no payments', async () => {
@@ -262,7 +328,7 @@ describe('FeesService', () => {
         amount: 100,
         periodStart: '2026-03-01',
         periodEnd: '2026-03-31',
-      });
+      }, su);
       // Two partial payments — paid should reflect the sum.
       await prisma.payment.create({
         data: { tenantId: t.id, feeId: fee.id, amount: 30, paidAt: new Date('2026-03-10') },
@@ -280,12 +346,12 @@ describe('FeesService', () => {
         amount: 50,
         periodStart: '2026-03-01',
         periodEnd: '2026-03-31',
-      });
+      }, su);
 
-      const rows = await service.list(t.id, {});
-      const byId = new Map(rows.map((r) => [r.id, r]));
+      const rows = await service.list(t.id, {}, su);
+      const byId = new Map(rows.items.map((r) => [r.id, r]));
       expect(Number(byId.get(fee.id)?.paid)).toBe(55);
-      expect(rows.find((r) => r.id !== fee.id)?.paid).toBe('0');
+      expect(rows.items.find((r) => r.id !== fee.id)?.paid).toBe('0');
     });
 
     it('filters by period range (overlap with given window)', async () => {
@@ -298,20 +364,20 @@ describe('FeesService', () => {
         amount: 50,
         periodStart: '2026-03-01',
         periodEnd: '2026-03-31',
-      });
+      }, su);
       await service.create(t.id, {
         classId: cls.id,
         traineeId: tr.id,
         amount: 50,
         periodStart: '2026-04-01',
         periodEnd: '2026-04-30',
-      });
+      }, su);
       const result = await service.list(t.id, {
         periodStartFrom: '2026-03-01',
         periodStartTo: '2026-03-31',
-      });
-      expect(result).toHaveLength(1);
-      expect(result[0]!.id).toBe(march.id);
+      }, su);
+      expect(result.items).toHaveLength(1);
+      expect(result.items[0]!.id).toBe(march.id);
     });
   });
 
@@ -329,7 +395,7 @@ describe('FeesService', () => {
       const result = await service.generateMonthly(t.id, {
         periodStart: '2026-03-01',
         periodEnd: '2026-03-31',
-      });
+      }, su);
       expect(result).toEqual({ created: 2, skipped: 0 });
       const fees = await prisma.fee.findMany({ where: { tenantId: t.id } });
       expect(fees).toHaveLength(2);
@@ -347,13 +413,13 @@ describe('FeesService', () => {
       const first = await service.generateMonthly(t.id, {
         periodStart: '2026-03-01',
         periodEnd: '2026-03-31',
-      });
+      }, su);
       expect(first).toEqual({ created: 2, skipped: 0 });
 
       const second = await service.generateMonthly(t.id, {
         periodStart: '2026-03-01',
         periodEnd: '2026-03-31',
-      });
+      }, su);
       expect(second).toEqual({ created: 0, skipped: 2 });
       const fees = await prisma.fee.count({ where: { tenantId: t.id } });
       expect(fees).toBe(2);
@@ -368,7 +434,7 @@ describe('FeesService', () => {
         periodStart: '2026-03-01',
         periodEnd: '2026-03-31',
         classId: a.id,
-      });
+      }, su);
       expect(result.created).toBe(1);
       const fees = await prisma.fee.findMany({ where: { tenantId: t.id } });
       expect(fees).toHaveLength(1);
@@ -384,7 +450,7 @@ describe('FeesService', () => {
           periodStart: '2026-03-01',
           periodEnd: '2026-03-31',
           classId: classB.id,
-        }),
+        }, su),
       ).rejects.toBeInstanceOf(BadRequestException);
     });
   });
@@ -404,7 +470,7 @@ describe('FeesService', () => {
       const result = await service.generateSessionFees(t.id, {
         from: '2026-06-01',
         to: '2026-06-30',
-      });
+      }, su);
       expect(result).toEqual({ created: 4, skipped: 0 });
       const fees = await prisma.fee.findMany({ where: { tenantId: t.id } });
       expect(fees).toHaveLength(4);
@@ -422,7 +488,7 @@ describe('FeesService', () => {
       const result = await service.generateSessionFees(t.id, {
         from: '2026-06-01',
         to: '2026-06-30',
-      });
+      }, su);
       expect(result.created).toBe(0);
     });
 
@@ -436,13 +502,13 @@ describe('FeesService', () => {
       const first = await service.generateSessionFees(t.id, {
         from: '2026-06-01',
         to: '2026-06-30',
-      });
+      }, su);
       expect(first).toEqual({ created: 1, skipped: 0 });
 
       const second = await service.generateSessionFees(t.id, {
         from: '2026-06-01',
         to: '2026-06-30',
-      });
+      }, su);
       expect(second).toEqual({ created: 0, skipped: 1 });
     });
 
@@ -459,7 +525,7 @@ describe('FeesService', () => {
         from: '2026-06-01',
         to: '2026-06-30',
         classId: a.id,
-      });
+      }, su);
       expect(result.created).toBe(1);
       const fees = await prisma.fee.findMany({ where: { tenantId: t.id } });
       expect(fees).toHaveLength(1);
@@ -472,7 +538,7 @@ describe('FeesService', () => {
         service.generateSessionFees(t.id, {
           from: '2026-06-30',
           to: '2026-06-01',
-        }),
+        }, su),
       ).rejects.toBeInstanceOf(BadRequestException);
     });
   });
@@ -482,13 +548,11 @@ describe('FeesService', () => {
   describe('listForCustomer', () => {
     it('returns fees for trainees the customer owns or guards (with class + trainee + payments)', async () => {
       const t = await newTenant();
-      const customer = await prisma.user.create({
-        data: {
-          tenantId: t.id,
-          email: `${randomUUID()}@x`,
-          passwordHash: 'x',
-          role: UserRole.CUSTOMER,
-        },
+      const customer = await createTestUser(prisma, {
+        tenantId: t.id,
+        email: `${randomUUID()}@x`,
+        passwordHash: 'x',
+        role: UserRole.CUSTOMER,
       });
       // Self-trainee + guarded child
       const self = await prisma.trainee.create({
@@ -521,21 +585,21 @@ describe('FeesService', () => {
         amount: 100,
         periodStart: '2026-03-01',
         periodEnd: '2026-03-31',
-      });
+      }, su);
       await service.create(t.id, {
         classId: cls.id,
         traineeId: child.id,
         amount: 100,
         periodStart: '2026-03-01',
         periodEnd: '2026-03-31',
-      });
+      }, su);
       await service.create(t.id, {
         classId: cls.id,
         traineeId: stranger.id,
         amount: 100,
         periodStart: '2026-03-01',
         periodEnd: '2026-03-31',
-      });
+      }, su);
       await prisma.payment.create({
         data: { tenantId: t.id, feeId: selfFee.id, amount: 30, paidAt: new Date('2026-03-15') },
       });
@@ -562,9 +626,12 @@ describe('FeesService', () => {
         amount: 100,
         periodStart: '2026-03-01',
         periodEnd: '2026-03-31',
-      });
-      const customer = await prisma.user.create({
-        data: { tenantId: a.id, email: `${randomUUID()}@x`, passwordHash: 'x', role: UserRole.CUSTOMER },
+      }, su);
+      const customer = await createTestUser(prisma, {
+        tenantId: a.id,
+        email: `${randomUUID()}@x`,
+        passwordHash: 'x',
+        role: UserRole.CUSTOMER,
       });
       const result = await service.listForCustomer(a.id, customer.id);
       expect(result).toHaveLength(0);

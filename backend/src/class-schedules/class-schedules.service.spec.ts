@@ -1,3 +1,4 @@
+import { SUPER_ADMIN_USER as su } from '@/test-utils/auth-user';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { Test, type TestingModule } from '@nestjs/testing';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -74,7 +75,7 @@ describe('ClassSchedulesService', () => {
         dayOfWeek: DayOfWeek.MON,
         startTime: '18:00',
         endTime: '19:00',
-      });
+      }, su);
       expect(sched.tenantId).toBe(t.id);
       expect(sched.dayOfWeek).toBe(DayOfWeek.MON);
       expect(sched.isActive).toBe(true);
@@ -92,7 +93,7 @@ describe('ClassSchedulesService', () => {
           dayOfWeek: DayOfWeek.MON,
           startTime: '18:00',
           endTime: '19:00',
-        }),
+        }, su),
       ).rejects.toBeInstanceOf(BadRequestException);
     });
 
@@ -107,7 +108,7 @@ describe('ClassSchedulesService', () => {
           dayOfWeek: DayOfWeek.MON,
           startTime: '19:00',
           endTime: '19:00',
-        }),
+        }, su),
       ).rejects.toBeInstanceOf(BadRequestException);
     });
 
@@ -122,8 +123,8 @@ describe('ClassSchedulesService', () => {
         dayOfWeek: DayOfWeek.MON,
         startTime: '18:00',
         endTime: '19:00',
-      });
-      await expect(service.findById(b.id, inA.id)).rejects.toBeInstanceOf(NotFoundException);
+      }, su);
+      await expect(service.findById(b.id, inA.id, su)).rejects.toBeInstanceOf(NotFoundException);
     });
   });
 
@@ -139,14 +140,14 @@ describe('ClassSchedulesService', () => {
         dayOfWeek: DayOfWeek.MON,
         startTime: '18:00',
         endTime: '19:00',
-      });
+      }, su);
 
       // 2026-06-01 is a Monday. The range covers exactly 4 Mondays:
       // 2026-06-01, 06-08, 06-15, 06-22. (06-29 is also a Monday but `to` excludes it.)
       const result = await service.generateSessions(t.id, {
         from: '2026-06-01',
         to: '2026-06-28',
-      });
+      }, su);
       expect(result.created).toBe(4);
       expect(result.skipped).toBe(0);
 
@@ -172,12 +173,12 @@ describe('ClassSchedulesService', () => {
         dayOfWeek: DayOfWeek.MON,
         startTime: '18:00',
         endTime: '19:00',
-      });
-      await service.generateSessions(t.id, { from: '2026-06-01', to: '2026-06-28' });
+      }, su);
+      await service.generateSessions(t.id, { from: '2026-06-01', to: '2026-06-28' }, su);
       const second = await service.generateSessions(t.id, {
         from: '2026-06-01',
         to: '2026-06-28',
-      });
+      }, su);
       expect(second.created).toBe(0);
       expect(second.skipped).toBe(4);
     });
@@ -192,12 +193,12 @@ describe('ClassSchedulesService', () => {
         dayOfWeek: DayOfWeek.MON,
         startTime: '18:00',
         endTime: '19:00',
-      });
-      await service.update(t.id, sched.id, { isActive: false });
+      }, su);
+      await service.update(t.id, sched.id, { isActive: false }, su);
       const result = await service.generateSessions(t.id, {
         from: '2026-06-01',
         to: '2026-06-28',
-      });
+      }, su);
       expect(result.created).toBe(0);
     });
 
@@ -212,19 +213,19 @@ describe('ClassSchedulesService', () => {
         dayOfWeek: DayOfWeek.MON,
         startTime: '18:00',
         endTime: '19:00',
-      });
+      }, su);
       await service.create(t.id, {
         classId: classB.id,
         locationId: loc.id,
         dayOfWeek: DayOfWeek.MON,
         startTime: '20:00',
         endTime: '21:00',
-      });
+      }, su);
       const result = await service.generateSessions(t.id, {
         from: '2026-06-01',
         to: '2026-06-28',
         classId: classA.id,
-      });
+      }, su);
       expect(result.created).toBe(4);
       const sessions = await prisma.session.findMany({ where: { tenantId: t.id } });
       expect(sessions).toHaveLength(4);
@@ -242,8 +243,8 @@ describe('ClassSchedulesService', () => {
         dayOfWeek: DayOfWeek.MON,
         startTime: '18:00',
         endTime: '19:00',
-      });
-      await service.generateSessions(t.id, { from: '2026-06-01', to: '2026-06-08' });
+      }, su);
+      await service.generateSessions(t.id, { from: '2026-06-01', to: '2026-06-08' }, su);
       const attendances = await prisma.attendance.findMany({
         where: { tenantId: t.id, traineeId: trainee.id },
       });
@@ -255,7 +256,7 @@ describe('ClassSchedulesService', () => {
     it('rejects when from > to', async () => {
       const t = await newTenant();
       await expect(
-        service.generateSessions(t.id, { from: '2026-06-10', to: '2026-06-01' }),
+        service.generateSessions(t.id, { from: '2026-06-10', to: '2026-06-01' }, su),
       ).rejects.toBeInstanceOf(BadRequestException);
     });
 
@@ -270,11 +271,11 @@ describe('ClassSchedulesService', () => {
         dayOfWeek: DayOfWeek.MON,
         startTime: '18:00',
         endTime: '19:00',
-      });
+      }, su);
       const result = await service.generateSessions(a.id, {
         from: '2026-06-01',
         to: '2026-06-28',
-      });
+      }, su);
       expect(result.created).toBe(0);
       // Confirm tenant A has no sessions.
       const sessionsA = await prisma.session.count({ where: { tenantId: a.id } });

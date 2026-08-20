@@ -91,7 +91,7 @@ model Tenant {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  users          User[]
+  memberships    Membership[]
   locations      Location[]
   classes        Class[]
   trainees       Trainee[]
@@ -106,15 +106,17 @@ model Tenant {
 model User {
   id           String   @id @default(cuid())
   email        String   @unique
-  passwordHash String
+  passwordHash String?
   firstName    String?
   lastName     String?
-  role         UserRole
+  phone        String?
   isActive     Boolean  @default(true)
 
-  // SUPER_ADMIN has tenantId = null. All other roles must be tenant-scoped.
-  tenantId String?
-  tenant   Tenant? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  // Global platform admin — has no memberships; enters tenants via X-Tenant-Id.
+  isSuperAdmin Boolean @default(false)
+
+  // Per-tenant memberships (role lives on the membership). Empty for SUPER_ADMIN.
+  memberships Membership[]
 
   refreshTokens       RefreshToken[]
   passwordResetTokens PasswordResetToken[]
@@ -144,12 +146,32 @@ model User {
   updatedAt DateTime @updatedAt
 
   // Email is globally unique — one email maps to exactly one account (any tenant or super admin).
+}
+
+// One row per (user, tenant): the user's role inside that tenant.
+// SUPER_ADMIN never appears in a membership (enforced in service code).
+model Membership {
+  id       String   @id @default(cuid())
+  userId   String
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tenantId String
+  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  role     UserRole
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, tenantId])
   @@index([tenantId])
 }
 
+// familyId ties a login to every token rotated from it. Omitting it on create
+// starts a new family (the default fires); rotation passes the parent's value.
+// Replaying a revoked token revokes the whole family — RFC 9700 4.14.2.
 model RefreshToken {
   id        String    @id @default(cuid())
   tokenHash String    @unique
+  familyId  String    @default(cuid())
   userId    String
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   expiresAt DateTime
@@ -158,6 +180,7 @@ model RefreshToken {
 
   @@index([userId])
   @@index([expiresAt])
+  @@index([familyId])
 }
 
 // One-time password-reset tokens. Pattern mirrors RefreshToken: we store sha256 of the

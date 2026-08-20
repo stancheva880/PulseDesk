@@ -1,6 +1,7 @@
 import type { INestApplication } from '@nestjs/common';
 import { ValidationPipe } from '@nestjs/common';
-import { ConfigModule } from '@nestjs/config';
+import { ConfigModule, ConfigService } from '@nestjs/config';
+import { Reflector } from '@nestjs/core';
 import { Test, type TestingModule } from '@nestjs/testing';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { randomUUID } from 'node:crypto';
@@ -11,8 +12,10 @@ import { MailModule } from '@/mail/mail.module';
 import { AuthService } from '@/auth/auth.service';
 import { LocationScopeModule } from '@/auth/scope/location-scope.module';
 import { PrismaModule } from '@/prisma/prisma.module';
+import { ResponseSchemaInterceptor } from '@/common/response-schema.interceptor';
 import { PrismaService } from '@/prisma/prisma.service';
 import { ClassSchedulesModule } from './class-schedules.module';
+import { createTestUser } from '@/test-utils/create-user';
 
 const PASSWORD = 'TestPass123!';
 
@@ -44,6 +47,11 @@ describe('ClassSchedulesController (e2e-ish)', () => {
     app.useGlobalPipes(
       new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }),
     );
+    // AppModule registers this as an APP_INTERCEPTOR; this spec builds its own module graph,
+    // so it wires the interceptor the same way it wires the ValidationPipe above.
+    app.useGlobalInterceptors(
+      new ResponseSchemaInterceptor(app.get(Reflector), app.get(ConfigService)),
+    );
     await app.init();
     prisma = moduleRef.get(PrismaService);
     auth = moduleRef.get(AuthService);
@@ -64,14 +72,12 @@ describe('ClassSchedulesController (e2e-ish)', () => {
     const location = await prisma.location.create({
       data: { tenantId: tenant.id, name: `Main-${randomUUID()}` },
     });
-    const user = await prisma.user.create({
-      data: {
-        email: `${randomUUID()}@x`,
-        passwordHash: await auth.hashPassword(PASSWORD),
-        role,
-        tenantId: tenant.id,
-        ...(role === UserRole.ADMIN ? { locations: { connect: [{ id: location.id }] } } : {}),
-      },
+    const user = await createTestUser(prisma, {
+      email: `${randomUUID()}@x`,
+      passwordHash: await auth.hashPassword(PASSWORD),
+      role,
+      tenantId: tenant.id,
+      ...(role === UserRole.ADMIN ? { locations: { connect: [{ id: location.id }] } } : {}),
     });
     const tokens = await auth.login(user);
     return { tenantId: tenant.id, locationId: location.id, accessToken: tokens.accessToken };
@@ -100,6 +106,7 @@ describe('ClassSchedulesController (e2e-ish)', () => {
       const res = await request(server)
         .post('/class-schedules')
         .set('Authorization', `Bearer ${a.accessToken}`)
+        .set('X-Tenant-Id', a.tenantId)
         .send({
           classId: cls.id,
           locationId: a.locationId,
@@ -118,6 +125,7 @@ describe('ClassSchedulesController (e2e-ish)', () => {
       await request(server)
         .post('/class-schedules')
         .set('Authorization', `Bearer ${a.accessToken}`)
+        .set('X-Tenant-Id', a.tenantId)
         .send({
           classId: cls.id,
           locationId: loc.id,
@@ -135,6 +143,7 @@ describe('ClassSchedulesController (e2e-ish)', () => {
       await request(server)
         .post('/class-schedules')
         .set('Authorization', `Bearer ${a.accessToken}`)
+        .set('X-Tenant-Id', a.tenantId)
         .send({
           classId: cls.id,
           locationId: loc.id,
@@ -146,6 +155,83 @@ describe('ClassSchedulesController (e2e-ish)', () => {
     });
   });
 
+  describe('GET /class-schedules', () => {
+    // Added by TKT-0046: the module had no list or detail coverage, so no controller test could
+    // fail when the list shape changed. Both routes now parse through ClassScheduleSchema.
+    async function createSchedule(
+      a: TestActor,
+      classId: string,
+      body: { dayOfWeek: string; startTime: string; endTime: string },
+    ) {
+      const res = await request(server)
+        .post('/class-schedules')
+        .set('Authorization', `Bearer ${a.accessToken}`)
+        .set('X-Tenant-Id', a.tenantId)
+        .send({ classId, locationId: a.locationId, ...body })
+        .expect(201);
+      return res.body as { id: string };
+    }
+
+    it('admin lists schedules with the paginated envelope, earliest slot first', async () => {
+      const a = await setupActor(UserRole.ADMIN);
+      const cls = await newClass(a.tenantId);
+      await createSchedule(a, cls.id, {
+        dayOfWeek: 'MON',
+        startTime: '18:00',
+        endTime: '19:00',
+      });
+      await createSchedule(a, cls.id, {
+        dayOfWeek: 'MON',
+        startTime: '09:30',
+        endTime: '10:30',
+      });
+
+      const res = await request(server)
+        .get('/class-schedules')
+        .set('Authorization', `Bearer ${a.accessToken}`)
+        .set('X-Tenant-Id', a.tenantId)
+        .expect(200);
+
+      expect(Object.keys(res.body).sort()).toEqual([
+        'items',
+        'page',
+        'pageSize',
+        'total',
+        'totalPages',
+      ]);
+      expect(res.body.total).toBe(2);
+      expect(res.body.items.map((s: { startTime: string }) => s.startTime)).toEqual([
+        '09:30',
+        '18:00',
+      ]);
+      expect(res.body.items.map((s: { dayOfWeek: string }) => s.dayOfWeek)).toEqual([
+        'MON',
+        'MON',
+      ]);
+    });
+
+    it('admin reads one schedule, times unchanged as HH:MM', async () => {
+      const a = await setupActor(UserRole.ADMIN);
+      const cls = await newClass(a.tenantId);
+      const created = await createSchedule(a, cls.id, {
+        dayOfWeek: 'WED',
+        startTime: '07:05',
+        endTime: '08:15',
+      });
+
+      const res = await request(server)
+        .get(`/class-schedules/${created.id}`)
+        .set('Authorization', `Bearer ${a.accessToken}`)
+        .set('X-Tenant-Id', a.tenantId)
+        .expect(200);
+
+      expect(res.body.dayOfWeek).toBe('WED');
+      expect(res.body.startTime).toBe('07:05');
+      expect(res.body.endTime).toBe('08:15');
+      expect(res.body.tenantId).toBe(a.tenantId);
+    });
+  });
+
   describe('POST /class-schedules/generate-sessions', () => {
     it('admin generates sessions with a summary response', async () => {
       const a = await setupActor(UserRole.ADMIN);
@@ -153,6 +239,7 @@ describe('ClassSchedulesController (e2e-ish)', () => {
       await request(server)
         .post('/class-schedules')
         .set('Authorization', `Bearer ${a.accessToken}`)
+        .set('X-Tenant-Id', a.tenantId)
         .send({
           classId: cls.id,
           locationId: a.locationId,
@@ -165,6 +252,7 @@ describe('ClassSchedulesController (e2e-ish)', () => {
       const res = await request(server)
         .post('/class-schedules/generate-sessions')
         .set('Authorization', `Bearer ${a.accessToken}`)
+        .set('X-Tenant-Id', a.tenantId)
         .send({ from: '2026-06-01', to: '2026-06-28' })
         .expect(200);
       expect(res.body).toEqual({ created: 4, skipped: 0 });
@@ -175,6 +263,7 @@ describe('ClassSchedulesController (e2e-ish)', () => {
       await request(server)
         .post('/class-schedules/generate-sessions')
         .set('Authorization', `Bearer ${a.accessToken}`)
+        .set('X-Tenant-Id', a.tenantId)
         .send({ from: '2026-06-01', to: '2026-06-28' })
         .expect(403);
     });

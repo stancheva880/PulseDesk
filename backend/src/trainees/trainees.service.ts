@@ -7,14 +7,25 @@ import {
 import { Prisma, UserRole, type Trainee } from '@prisma/client';
 import { backfillFutureSessions } from '@/attendances/attendance-backfill';
 import { LocationScopeService } from '@/auth/scope/location-scope.service';
+import { connectMany, isUniqueConstraintError, setMany } from '@/common/prisma-relations';
+import { searchVariants } from '@/common/search-variants';
+import { assertClassIds, assertGuardianUserIds, assertLocationIds } from '@/common/tenant-guards';
 import type { AuthenticatedUser } from '@/auth/types/jwt-payload';
-import { calculateAge } from '@/common/age';
-import { DEFAULT_LIST_TAKE } from '@/common/dto/paginated-result';
+import {
+  buildPaginatedResult,
+  normalizePagination,
+  type PaginatedResult,
+  type PaginationInput,
+} from '@/common/dto/paginated-result';
 import { PrismaService } from '@/prisma/prisma.service';
 import type { CreateTraineeDto } from './dto/create-trainee.dto';
 import type { UpdateTraineeDto } from './dto/update-trainee.dto';
 
 const MIN_ADULT_AGE = 18;
+
+export interface TraineeListFilters {
+  search?: string;
+}
 
 @Injectable()
 export class TraineesService {
@@ -23,29 +34,50 @@ export class TraineesService {
     private readonly scope: LocationScopeService,
   ) {}
 
-  async list(tenantId: string, user?: AuthenticatedUser): Promise<Trainee[]> {
-    const allowedIds = user ? await this.scope.getAccessibleLocationIds(user, tenantId) : null;
-    return this.prisma.trainee.findMany({
-      where: {
-        tenantId,
-        ...(allowedIds === null
-          ? {}
-          : { locations: { some: { id: { in: allowedIds } } } }),
-      },
-      orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }],
-      take: DEFAULT_LIST_TAKE,
-    });
+  async list(
+    tenantId: string,
+    user: AuthenticatedUser,
+    pagination?: PaginationInput,
+    filters?: TraineeListFilters,
+  ): Promise<PaginatedResult<Trainee>> {
+    // The search clause goes in `AND`, so it narrows the location scope rather than replacing it.
+    const search = searchVariants(filters?.search ?? '');
+    const where: Prisma.TraineeWhereInput = {
+      tenantId,
+      ...(await this.scope.locationsWhere(user, tenantId)),
+      ...(search.length > 0
+        ? {
+            AND: [
+              {
+                OR: search.flatMap((v) => [
+                  { email: { contains: v } },
+                  { firstName: { contains: v } },
+                  { lastName: { contains: v } },
+                ]),
+              },
+            ],
+          }
+        : {}),
+    };
+    const p = normalizePagination(pagination);
+    const [items, total] = await this.prisma.$transaction([
+      this.prisma.trainee.findMany({
+        where,
+        orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }],
+        skip: p.skip,
+        take: p.take,
+      }),
+      this.prisma.trainee.count({ where }),
+    ]);
+    return buildPaginatedResult(items, total, p);
   }
 
-  async findById(tenantId: string, id: string, user?: AuthenticatedUser) {
-    const allowedIds = user ? await this.scope.getAccessibleLocationIds(user, tenantId) : null;
+  async findById(tenantId: string, id: string, user: AuthenticatedUser) {
     const trainee = await this.prisma.trainee.findFirst({
       where: {
         id,
         tenantId,
-        ...(allowedIds === null
-          ? {}
-          : { locations: { some: { id: { in: allowedIds } } } }),
+        ...(await this.scope.locationsWhere(user, tenantId)),
       },
       include: {
         contacts: true,
@@ -62,20 +94,21 @@ export class TraineesService {
   async create(
     tenantId: string,
     dto: CreateTraineeDto,
-    user?: AuthenticatedUser,
+    user: AuthenticatedUser,
   ): Promise<Trainee> {
     const dob = new Date(dto.dateOfBirth);
     const contacts = dto.contacts ?? [];
     if (calculateAge(dob) < MIN_ADULT_AGE && contacts.length === 0) {
-      throw new BadRequestException(
-        'At least one contact person is required for trainees under 18',
-      );
+      throw new BadRequestException({
+        message: 'At least one contact person is required for trainees under 18',
+        code: 'TRAINEE_MINOR_NEEDS_CONTACT',
+      });
     }
 
-    await this.assertLocationIds(tenantId, dto.locationIds);
-    if (user) await this.scope.assertLocationsAllowed(user, tenantId, dto.locationIds ?? []);
-    await this.assertClassIds(tenantId, dto.classIds);
-    await this.assertGuardianUserIds(tenantId, dto.guardianUserIds);
+    await assertLocationIds(this.prisma, tenantId, dto.locationIds);
+    await this.scope.assertLocationsAllowed(user, tenantId, dto.locationIds ?? []);
+    await assertClassIds(this.prisma, tenantId, dto.classIds);
+    await assertGuardianUserIds(this.prisma, tenantId, dto.guardianUserIds);
     if (dto.userId) await this.assertCustomerUserId(tenantId, dto.userId);
 
     try {
@@ -116,7 +149,10 @@ export class TraineesService {
       });
     } catch (e) {
       if (isUniqueConstraintError(e)) {
-        throw new ConflictException('That user is already linked to another trainee');
+        throw new ConflictException({
+          message: 'That user is already linked to another trainee',
+          code: 'TRAINEE_USER_ALREADY_LINKED',
+        });
       }
       throw e;
     }
@@ -126,16 +162,14 @@ export class TraineesService {
     tenantId: string,
     id: string,
     dto: UpdateTraineeDto,
-    user?: AuthenticatedUser,
+    user: AuthenticatedUser,
   ): Promise<Trainee> {
     await this.findById(tenantId, id, user);
-    const existing = await this.prisma.trainee.findFirst({ where: { id, tenantId } });
-    if (!existing) throw new NotFoundException(`Trainee ${id} not found`);
 
-    await this.assertLocationIds(tenantId, dto.locationIds);
-    if (user) await this.scope.assertLocationsAllowed(user, tenantId, dto.locationIds ?? []);
-    await this.assertClassIds(tenantId, dto.classIds);
-    await this.assertGuardianUserIds(tenantId, dto.guardianUserIds);
+    await assertLocationIds(this.prisma, tenantId, dto.locationIds);
+    await this.scope.assertLocationsAllowed(user, tenantId, dto.locationIds ?? []);
+    await assertClassIds(this.prisma, tenantId, dto.classIds);
+    await assertGuardianUserIds(this.prisma, tenantId, dto.guardianUserIds);
     if (typeof dto.userId === 'string') await this.assertCustomerUserId(tenantId, dto.userId);
 
     const data: Prisma.TraineeUpdateInput = {};
@@ -166,61 +200,37 @@ export class TraineesService {
       });
     } catch (e) {
       if (isUniqueConstraintError(e)) {
-        throw new ConflictException('That user is already linked to another trainee');
+        throw new ConflictException({
+          message: 'That user is already linked to another trainee',
+          code: 'TRAINEE_USER_ALREADY_LINKED',
+        });
       }
       throw e;
     }
   }
 
-  async delete(tenantId: string, id: string, user?: AuthenticatedUser): Promise<void> {
+  async delete(tenantId: string, id: string, user: AuthenticatedUser): Promise<void> {
     await this.findById(tenantId, id, user);
     await this.prisma.trainee.delete({ where: { id } });
   }
 
-  private async assertLocationIds(tenantId: string, ids?: string[]): Promise<void> {
-    if (!ids || ids.length === 0) return;
-    const found = await this.prisma.location.count({ where: { id: { in: ids }, tenantId } });
-    if (found !== ids.length) {
-      throw new BadRequestException('Some locationIds are invalid or not in your tenant');
-    }
-  }
-
-  private async assertClassIds(tenantId: string, ids?: string[]): Promise<void> {
-    if (!ids || ids.length === 0) return;
-    const found = await this.prisma.class.count({ where: { id: { in: ids }, tenantId } });
-    if (found !== ids.length) {
-      throw new BadRequestException('Some classIds are invalid or not in your tenant');
-    }
-  }
-
   private async assertCustomerUserId(tenantId: string, id: string): Promise<void> {
     const found = await this.prisma.user.count({
-      where: { id, tenantId, role: UserRole.CUSTOMER },
+      where: { id, memberships: { some: { tenantId, role: UserRole.CUSTOMER } } },
     });
     if (found !== 1) {
       throw new BadRequestException('userId must reference a CUSTOMER user in your tenant');
     }
   }
 
-  private async assertGuardianUserIds(tenantId: string, ids?: string[]): Promise<void> {
-    if (!ids || ids.length === 0) return;
-    const found = await this.prisma.user.count({
-      where: { id: { in: ids }, tenantId, role: UserRole.CUSTOMER },
-    });
-    if (found !== ids.length) {
-      throw new BadRequestException('Some guardianUserIds are not customers in your tenant');
-    }
+}
+
+
+export function calculateAge(dateOfBirth: Date, on: Date = new Date()): number {
+  let age = on.getFullYear() - dateOfBirth.getFullYear();
+  const monthDiff = on.getMonth() - dateOfBirth.getMonth();
+  if (monthDiff < 0 || (monthDiff === 0 && on.getDate() < dateOfBirth.getDate())) {
+    age--;
   }
-}
-
-function connectMany(ids?: string[]) {
-  return ids && ids.length > 0 ? { connect: ids.map((id) => ({ id })) } : undefined;
-}
-
-function setMany(ids: string[]) {
-  return { set: ids.map((id) => ({ id })) };
-}
-
-function isUniqueConstraintError(e: unknown): boolean {
-  return e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002';
+  return age;
 }

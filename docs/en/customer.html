@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Customer (trainee or parent) — PulseDesk</title>
+    <link rel="stylesheet" href="../assets/docs.css" />
+  </head>
+  <body>
+    <nav class="topnav">
+      <a class="home" href="../index.html">PulseDesk</a>
+      <a href="basics.html">Getting started</a>
+      <a href="super-admin.html">Super Administrator</a>
+      <a href="admin.html">Administrator</a>
+      <a href="trainer.html">Employee</a>
+      <span class="spacer"></span>
+      <a class="lang" href="../bg/klient.html">BG</a>
+    </nav>
+
+    <h1>Customer (trainee or parent)</h1>
+    <p class="lead">
+      You have two screens: <span class="ui">Schedule</span> and <span class="ui">Fees</span>. They
+      show the upcoming sessions, let you answer invitations, and show what has been paid.
+    </p>
+    <p class="crumbs">
+      Read <a href="basics.html">Getting started</a> first — signing in and forgotten passwords.
+    </p>
+
+    <h2>What you see</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Menu</th>
+          <th>What it is for</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Schedule</td>
+          <td>
+            <span class="ui">My schedule</span> — upcoming sessions for you and your trainees, with
+            answer buttons.
+          </td>
+        </tr>
+        <tr>
+          <td>Fees</td>
+          <td>
+            <span class="ui">My fees</span> — charges and recorded payments for you and your
+            trainees.
+          </td>
+        </tr>
+      </tbody>
+    </table>
+    <p>
+      If you are the parent of more than one child, both screens show every child linked to your
+      account, each under their own name.
+    </p>
+
+    <h2>What you can do</h2>
+    <ul>
+      <li>See when and where the next session is.</li>
+      <li>
+        Answer each session with <span class="ui">Confirmed</span>,
+        <span class="ui">Decline</span> or <span class="ui">Reschedule</span>.
+      </li>
+      <li>Check what has been charged, what has been paid and what is left.</li>
+      <li>Change language and theme, and sign out, from the top bar.</li>
+    </ul>
+
+    <h2>What you cannot do, and why</h2>
+    <ul>
+      <li>
+        <strong>You see only yourself and your trainees.</strong> Other families' data is not
+        available to you. If you expect to see a child and it is missing, ask the club to link that
+        child to your account.
+      </li>
+      <li>
+        <strong>You cannot change sessions.</strong> Times and places are set by the club. That is
+        what <span class="ui">Reschedule</span> is for — it asks the club rather than moving the
+        session yourself.
+      </li>
+      <li>
+        <strong>You cannot change fees or payments.</strong> Amounts and payments are entered by the
+        club. If something looks wrong, contact them.
+      </li>
+      <li>
+        <strong>There is no payment in the system.</strong> PulseDesk takes no cards. You pay the
+        way you agreed with the club, and the club records it.
+      </li>
+      <li>
+        <strong>Your answer is not attendance.</strong> Attendance is marked by the trainer after
+        the session.
+      </li>
+    </ul>
+
+    <h2>Step by step</h2>
+
+    <div class="story">
+      <h3>1. As a customer I want to see the next sessions</h3>
+      <ol>
+        <li>Sign in. You land straight on <span class="ui">My schedule</span>.</li>
+        <li>Each card shows the class name, the date and time, and the location below them.</li>
+        <li>
+          If it reads <span class="ui">No upcoming sessions yet</span>, nothing is planned. Contact
+          the club if you expected something.
+        </li>
+      </ol>
+    </div>
+
+    <div class="story">
+      <h3>2. As a parent I want to confirm that my child will come</h3>
+      <ol>
+        <li>Open <span class="ui">Schedule</span>.</li>
+        <li>Find the session's card.</li>
+        <li>Under the child's name press one of the three buttons:</li>
+      </ol>
+      <table>
+        <thead>
+          <tr>
+            <th>Button</th>
+            <th>What it means</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><span class="ui">Confirmed</span></td>
+            <td>We will be there.</td>
+          </tr>
+          <tr>
+            <td><span class="ui">Decline</span></td>
+            <td>We cannot come this time.</td>
+          </tr>
+          <tr>
+            <td><span class="ui">Reschedule</span></td>
+            <td>A request for the club to offer another time.</td>
+          </tr>
+        </tbody>
+      </table>
+      <ol start="4">
+        <li>
+          <span class="ui">RSVP saved</span> appears and the button you chose stays highlighted.
+        </li>
+        <li>To change your answer, press another button. The last choice counts.</li>
+      </ol>
+      <div class="note">
+        <strong>Answer early if you can.</strong>
+        The trainer sees your answer before the session and plans around it. If you see
+        <span class="ui">Could not update RSVP</span>, check your connection and try again.
+      </div>
+    </div>
+
+    <div class="story">
+      <h3>3. As a customer I want to see what I owe</h3>
+      <ol>
+        <li>Open <span class="ui">Fees</span>.</li>
+        <li>
+          Each row is one fee: the class, the period, <span class="ui">Amount</span>,
+          <span class="ui">Paid</span> and <span class="ui">Outstanding</span>.
+        </li>
+        <li>
+          The status is <span class="ui">Unpaid</span>,
+          <span class="ui">Partial</span> or <span class="ui">Paid</span>. It is worked out from the
+          recorded payments — <span class="ui">Paid</span> means the full amount has arrived.
+        </li>
+        <li>
+          The individual payments are listed under the fee with date and amount. If it reads
+          <span class="ui">No payments recorded yet</span>, the club has not entered a payment yet.
+        </li>
+      </ol>
+      <div class="warn">
+        <strong>Paid, but it still says "Unpaid"?</strong>
+        Recording is not automatic — the club enters payments by hand, so there can be a delay.
+        Contact the club if the difference remains.
+      </div>
+    </div>
+
+    <div class="story">
+      <h3>4. As a customer I want another language or a darker screen</h3>
+      <ol>
+        <li>Look at the top right corner.</li>
+        <li>Press <span class="ui">BG</span> or <span class="ui">EN</span> for the language.</li>
+        <li>
+          Press the theme icon to cycle light, dark and system. System follows your device setting.
+        </li>
+        <li>Your choice is remembered for next time.</li>
+      </ol>
+    </div>
+
+    <footer>
+      All names and email addresses in the examples are invented. ·
+      <a href="../index.html">Back to the start</a>
+    </footer>
+  </body>
+</html>

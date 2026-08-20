@@ -6,18 +6,12 @@ import {
   IsOptional,
   IsString,
   MaxLength,
-  MinLength,
 } from 'class-validator';
 import { UserRole } from '@prisma/client';
 
 export class CreateUserDto {
   @IsEmail()
   email!: string;
-
-  @IsString()
-  @MinLength(8)
-  @MaxLength(200)
-  password!: string;
 
   @IsOptional()
   @IsString()
@@ -29,16 +23,14 @@ export class CreateUserDto {
   @MaxLength(120)
   lastName?: string;
 
-  @IsEnum(UserRole)
-  role!: UserRole;
-
-  // SUPER_ADMIN-only field, ignored otherwise. When creating a SUPER_ADMIN, tenantId
-  // must be omitted (server enforces). When creating a tenant user as SUPER_ADMIN,
-  // the value comes from the X-Tenant-Id header — this DTO field is a redundant
-  // hint accepted for backward-compat scripts but is not required.
+  // Free text, deliberately unvalidated beyond the length — same as Trainee and ContactPerson.
   @IsOptional()
   @IsString()
-  tenantId?: string;
+  @MaxLength(50)
+  phone?: string;
+
+  @IsEnum(UserRole)
+  role!: UserRole;
 
   // Required for ADMIN/EMPLOYEE/CUSTOMER roles when creator enforces location scoping.
   // For ADMIN-the-creator, all entries must lie within the creator's assigned locations.

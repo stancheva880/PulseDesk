@@ -3,7 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useForm } from 'react-hook-form';
+import { useForm, useWatch } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
 import { z } from 'zod';
 import { Button } from '@/components/ui/button';
@@ -11,8 +11,10 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { ApiError } from '@/lib/api';
-import { Classes, Fees, Trainees, type ClassRow, type Trainee } from '@/lib/api-resources';
+import { apiErrorMessage } from '@/lib/api';
+import { parseAmount } from '@/lib/utils';
+import { listAll, Classes, Fees, Trainees, type ClassRow, type Trainee } from '@/lib/api-resources';
+import { NativeSelect } from '@/components/ui/native-select';
 
 const schema = z
   .object({
@@ -26,14 +28,15 @@ const schema = z
   .refine((v) => v.periodEnd >= v.periodStart, {
     path: ['periodEnd'],
     message: 'endsBeforeStarts',
+  })
+  // Money stays a string in the schema — class-form.tsx documents why — so the numeric rule is a
+  // refine rather than a coercion.
+  .refine((v) => parseAmount(v.amount) !== null, {
+    path: ['amount'],
+    message: 'amount',
   });
 
 type FormValues = z.infer<typeof schema>;
-
-function parseAmount(raw: string): number | null {
-  const n = Number(raw);
-  return Number.isFinite(n) && n > 0 ? n : null;
-}
 
 export default function NewFeePage() {
   const { t } = useTranslation();
@@ -43,7 +46,7 @@ export default function NewFeePage() {
   const [submitError, setSubmitError] = useState<string | null>(null);
 
   useEffect(() => {
-    Promise.all([Classes.list(), Trainees.list()])
+    Promise.all([listAll(Classes.list), listAll(Trainees.list)])
       .then(([c, tr]) => {
         setClasses(c);
         setTrainees(tr);
@@ -54,6 +57,8 @@ export default function NewFeePage() {
   const {
     register,
     handleSubmit,
+    control,
+    setValue,
     formState: { errors, isSubmitting },
   } = useForm<FormValues>({
     resolver: zodResolver(schema),
@@ -67,13 +72,26 @@ export default function NewFeePage() {
     },
   });
 
+  // The class already carries its price — monthlyAmount for PER_MONTH, sessionPrice for
+  // PER_SESSION, the same pairing FeesService's two generators use — and it arrives with the
+  // select options, so leaving the amount blank made the trainer retype a number the browser
+  // already had. Prefilled, not fixed: the field stays editable, and a class with no price for
+  // its mode leaves whatever is there alone.
+  const classId = useWatch({ control, name: 'classId' });
+  useEffect(() => {
+    const cls = classes.find((c) => c.id === classId);
+    if (!cls) return;
+    const price = cls.billingMode === 'PER_MONTH' ? cls.monthlyAmount : cls.sessionPrice;
+    if (price === null) return;
+    // String(Number(...)) so '80.00' shows as 80, as the fee detail screen does.
+    setValue('amount', String(Number(price)), { shouldValidate: true });
+  }, [classId, classes, setValue]);
+
   const onSubmit = async (values: FormValues) => {
     setSubmitError(null);
+    // zod rejected anything else already; this only narrows the type.
     const amt = parseAmount(values.amount);
-    if (amt === null) {
-      setSubmitError(t('fees.errors.amount'));
-      return;
-    }
+    if (amt === null) return;
     try {
       await Fees.create({
         classId: values.classId,
@@ -85,7 +103,7 @@ export default function NewFeePage() {
       });
       router.replace('/fees');
     } catch (e) {
-      setSubmitError(e instanceof ApiError ? e.message : t('common.errors.generic'));
+      setSubmitError(apiErrorMessage(e));
     }
   };
 
@@ -100,10 +118,9 @@ export default function NewFeePage() {
           <form className="space-y-4" onSubmit={handleSubmit(onSubmit)} noValidate>
             <div className="space-y-1.5">
               <Label htmlFor="classId">{t('fees.fields.class')}</Label>
-              <select
+              <NativeSelect
                 id="classId"
                 aria-invalid={Boolean(errors.classId)}
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                 {...register('classId')}
               >
                 <option value="">—</option>
@@ -112,14 +129,13 @@ export default function NewFeePage() {
                     {c.name}
                   </option>
                 ))}
-              </select>
+              </NativeSelect>
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="traineeId">{t('fees.fields.trainee')}</Label>
-              <select
+              <NativeSelect
                 id="traineeId"
                 aria-invalid={Boolean(errors.traineeId)}
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                 {...register('traineeId')}
               >
                 <option value="">—</option>
@@ -128,7 +144,7 @@ export default function NewFeePage() {
                     {tr.firstName} {tr.lastName}
                   </option>
                 ))}
-              </select>
+              </NativeSelect>
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-1.5">
@@ -160,6 +176,9 @@ export default function NewFeePage() {
                 aria-invalid={Boolean(errors.amount)}
                 {...register('amount')}
               />
+              {errors.amount ? (
+                <p className="text-xs text-destructive">{t('common.errors.amount')}</p>
+              ) : null}
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="notes">{t('fees.fields.notes')}</Label>

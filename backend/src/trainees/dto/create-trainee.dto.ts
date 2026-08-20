@@ -10,7 +10,7 @@ import {
   MinLength,
   ValidateNested,
 } from 'class-validator';
-import { ContactInputDto } from './contact-input.dto';
+import { CreateContactDto } from '@/contacts/dto/create-contact.dto';
 
 export class CreateTraineeDto {
   @IsString()
@@ -66,6 +66,6 @@ export class CreateTraineeDto {
   @IsOptional()
   @IsArray()
   @ValidateNested({ each: true })
-  @Type(() => ContactInputDto)
-  contacts?: ContactInputDto[];
+  @Type(() => CreateContactDto)
+  contacts?: CreateContactDto[];
 }

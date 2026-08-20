@@ -1,4 +1,5 @@
-import { NotFoundException } from '@nestjs/common';
+import { SUPER_ADMIN_USER as su } from '@/test-utils/auth-user';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { Test, type TestingModule } from '@nestjs/testing';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { randomUUID } from 'node:crypto';
@@ -7,6 +8,7 @@ import { LocationScopeService } from '@/auth/scope/location-scope.service';
 import { PrismaService } from '@/prisma/prisma.service';
 import { FeesService } from '@/fees/fees.service';
 import { PaymentsService } from './payments.service';
+import { createTestUser } from '@/test-utils/create-user';
 
 describe('PaymentsService', () => {
   let service: PaymentsService;
@@ -54,16 +56,14 @@ describe('PaymentsService', () => {
       amount,
       periodStart: '2026-03-01',
       periodEnd: '2026-03-31',
-    });
-    const recorder = await prisma.user.create({
-      data: {
-        tenantId: tenant.id,
-        email: `${randomUUID()}@x`,
-        passwordHash: 'x',
-        role: UserRole.ADMIN,
-        firstName: 'Ada',
-        lastName: 'Lovelace',
-      },
+    }, su);
+    const recorder = await createTestUser(prisma, {
+      tenantId: tenant.id,
+      email: `${randomUUID()}@x`,
+      passwordHash: 'x',
+      role: UserRole.ADMIN,
+      firstName: 'Ada',
+      lastName: 'Lovelace',
     });
     return { tenantId: tenant.id, fee, recorder };
   }
@@ -98,7 +98,7 @@ describe('PaymentsService', () => {
       expect(updated?.status).toBe(FeeStatus.PARTIAL);
     });
 
-    it('multiple partial payments summing >= amount mark the fee PAID', async () => {
+    it('multiple partial payments summing to the amount mark the fee PAID', async () => {
       const { tenantId, fee, recorder } = await setup(100);
       await service.record(tenantId, fee.id, viewer(tenantId, recorder.id), {
         amount: 40,
@@ -106,6 +106,52 @@ describe('PaymentsService', () => {
       });
       await service.record(tenantId, fee.id, viewer(tenantId, recorder.id), {
         amount: 60,
+        paidAt: '2026-03-20',
+      });
+      const updated = await prisma.fee.findUnique({ where: { id: fee.id } });
+      expect(updated?.status).toBe(FeeStatus.PAID);
+    });
+
+    // A fee has no way to say "more than enough" — FeeStatus is UNPAID/PARTIAL/PAID — so an
+    // over-tender used to land as a plain PAID fee and the extra money went unaccounted for.
+    it('rejects a payment larger than the fee, leaving no row behind', async () => {
+      const { tenantId, fee, recorder } = await setup(100);
+      await expect(
+        service.record(tenantId, fee.id, viewer(tenantId, recorder.id), {
+          amount: 100.01,
+          paidAt: '2026-03-15',
+        }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(await prisma.payment.count({ where: { feeId: fee.id } })).toBe(0);
+      const untouched = await prisma.fee.findUnique({ where: { id: fee.id } });
+      expect(untouched?.status).toBe(FeeStatus.UNPAID);
+    });
+
+    it('rejects a payment that takes the running total past the fee', async () => {
+      const { tenantId, fee, recorder } = await setup(100);
+      await service.record(tenantId, fee.id, viewer(tenantId, recorder.id), {
+        amount: 60,
+        paidAt: '2026-03-10',
+      });
+      await expect(
+        service.record(tenantId, fee.id, viewer(tenantId, recorder.id), {
+          amount: 41,
+          paidAt: '2026-03-20',
+        }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(await prisma.payment.count({ where: { feeId: fee.id } })).toBe(1);
+      const updated = await prisma.fee.findUnique({ where: { id: fee.id } });
+      expect(updated?.status).toBe(FeeStatus.PARTIAL);
+    });
+
+    it('accepts the payment that exactly clears the remaining balance', async () => {
+      const { tenantId, fee, recorder } = await setup(100);
+      await service.record(tenantId, fee.id, viewer(tenantId, recorder.id), {
+        amount: 60,
+        paidAt: '2026-03-10',
+      });
+      await service.record(tenantId, fee.id, viewer(tenantId, recorder.id), {
+        amount: 40,
         paidAt: '2026-03-20',
       });
       const updated = await prisma.fee.findUnique({ where: { id: fee.id } });
@@ -150,14 +196,14 @@ describe('PaymentsService', () => {
         amount: 50,
         paidAt: '2026-03-15',
       });
-      const rows = await service.listForFee(tenantId, fee.id);
+      const rows = await service.listForFee(tenantId, fee.id, su);
       expect(rows).toHaveLength(2);
     });
 
     it('cross-tenant returns NotFound', async () => {
       const a = await setup(100);
       const b = await setup(50);
-      await expect(service.listForFee(b.tenantId, a.fee.id)).rejects.toBeInstanceOf(
+      await expect(service.listForFee(b.tenantId, a.fee.id, su)).rejects.toBeInstanceOf(
         NotFoundException,
       );
     });
@@ -178,7 +224,7 @@ describe('PaymentsService', () => {
       });
       let updated = await prisma.fee.findUnique({ where: { id: fee.id } });
       expect(updated?.status).toBe(FeeStatus.PAID);
-      await service.delete(tenantId, fee.id, p1.id);
+      await service.delete(tenantId, fee.id, p1.id, su);
       updated = await prisma.fee.findUnique({ where: { id: fee.id } });
       expect(updated?.status).toBe(FeeStatus.PARTIAL);
     });
@@ -192,7 +238,7 @@ describe('PaymentsService', () => {
       expect((await prisma.fee.findUnique({ where: { id: fee.id } }))?.status).toBe(
         FeeStatus.PAID,
       );
-      await service.delete(tenantId, fee.id, p.id);
+      await service.delete(tenantId, fee.id, p.id, su);
       expect((await prisma.fee.findUnique({ where: { id: fee.id } }))?.status).toBe(
         FeeStatus.UNPAID,
       );
@@ -205,7 +251,7 @@ describe('PaymentsService', () => {
         amount: 50,
         paidAt: '2026-03-10',
       });
-      await expect(service.delete(b.tenantId, a.fee.id, p.id)).rejects.toBeInstanceOf(
+      await expect(service.delete(b.tenantId, a.fee.id, p.id, su)).rejects.toBeInstanceOf(
         NotFoundException,
       );
     });

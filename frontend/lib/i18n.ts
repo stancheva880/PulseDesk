@@ -3,7 +3,7 @@ import { initReactI18next } from 'react-i18next';
 import bgCommon from '@/locales/bg/common.json';
 
 export const SUPPORTED_LOCALES = ['bg', 'en'] as const;
-export const DEFAULT_LOCALE = 'bg';
+const DEFAULT_LOCALE = 'bg';
 export type Locale = (typeof SUPPORTED_LOCALES)[number];
 const STORAGE_KEY = 'pulsedesk.locale';
 const NS = 'common';

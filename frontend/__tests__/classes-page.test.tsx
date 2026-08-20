@@ -3,7 +3,7 @@ import { render, screen } from '@testing-library/react';
 import ClassesListPage from '@/app/(dashboard)/classes/page';
 import { AuthProvider } from '@/components/auth-provider';
 import { I18nProvider } from '@/components/i18n-provider';
-import { writeStoredTokens, type UserRole } from '@/lib/auth-storage';
+import { setAccessToken, type UserRole } from '@/lib/auth-storage';
 
 vi.mock('next/navigation', () => ({
   usePathname: () => '/classes',
@@ -23,6 +23,10 @@ function jsonResponse(status: number, body: unknown): Response {
   });
 }
 
+function paged<T>(items: T[]): unknown {
+  return { items, page: 1, pageSize: 100, total: items.length, totalPages: 1 };
+}
+
 const CLASSES = [
   {
     id: 'c1', tenantId: 't', name: 'Yoga', description: null, billingMode: 'PER_SESSION',
@@ -32,13 +36,10 @@ const CLASSES = [
 
 function renderAs(role: UserRole) {
   const exp = Math.floor(Date.now() / 1000) + 600;
-  writeStoredTokens({
-    accessToken: buildJwt({ sub: 'u', email: 'a@b', role, tenantId: 't', exp }),
-    refreshToken: 'R',
-  });
+  setAccessToken(buildJwt({ sub: 'u', email: 'a@b', role, tenantId: 't', exp }));
   vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
     const url = typeof input === 'string' ? input : (input as Request).url;
-    if (url.includes('/classes')) return Promise.resolve(jsonResponse(200, CLASSES));
+    if (url.includes('/classes')) return Promise.resolve(jsonResponse(200, paged(CLASSES)));
     return Promise.resolve(jsonResponse(200, []));
   });
   return render(

@@ -22,6 +22,11 @@ export class UpdateUserDto {
   lastName?: string | null;
 
   @IsOptional()
+  @IsString()
+  @MaxLength(50)
+  phone?: string | null;
+
+  @IsOptional()
   @IsBoolean()
   isActive?: boolean;
 

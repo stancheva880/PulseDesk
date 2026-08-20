@@ -1,6 +1,7 @@
 import type { INestApplication } from '@nestjs/common';
 import { ValidationPipe } from '@nestjs/common';
-import { ConfigModule } from '@nestjs/config';
+import { ConfigModule, ConfigService } from '@nestjs/config';
+import { Reflector } from '@nestjs/core';
 import { Test, type TestingModule } from '@nestjs/testing';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { randomUUID } from 'node:crypto';
@@ -12,7 +13,9 @@ import { AuthService } from '@/auth/auth.service';
 import { LocationScopeModule } from '@/auth/scope/location-scope.module';
 import { PrismaModule } from '@/prisma/prisma.module';
 import { PrismaService } from '@/prisma/prisma.service';
+import { ResponseSchemaInterceptor } from '@/common/response-schema.interceptor';
 import { ContactsModule } from './contacts.module';
+import { createTestUser } from '@/test-utils/create-user';
 
 const PASSWORD = 'TestPass123!';
 
@@ -44,6 +47,11 @@ describe('ContactsController (e2e-ish)', () => {
     app.useGlobalPipes(
       new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }),
     );
+    // AppModule registers this as an APP_INTERCEPTOR; this spec builds its own module graph,
+    // so it wires the interceptor the same way it wires the ValidationPipe above.
+    app.useGlobalInterceptors(
+      new ResponseSchemaInterceptor(app.get(Reflector), app.get(ConfigService)),
+    );
     await app.init();
     prisma = moduleRef.get(PrismaService);
     auth = moduleRef.get(AuthService);
@@ -64,14 +72,15 @@ describe('ContactsController (e2e-ish)', () => {
     const location = await prisma.location.create({
       data: { tenantId: tenant.id, name: `Main-${randomUUID()}` },
     });
-    const user = await prisma.user.create({
-      data: {
-        email: `${randomUUID()}@test.local`,
-        passwordHash: await auth.hashPassword(PASSWORD),
-        role,
-        tenantId: tenant.id,
-        ...(role === UserRole.ADMIN ? { locations: { connect: [{ id: location.id }] } } : {}),
-      },
+    const user = await createTestUser(prisma, {
+      email: `${randomUUID()}@test.local`,
+      passwordHash: await auth.hashPassword(PASSWORD),
+      role,
+      tenantId: tenant.id,
+      // TKT-0054: ADMIN and EMPLOYEE are both location-scoped, so both need an assignment.
+      ...(role === UserRole.ADMIN || role === UserRole.EMPLOYEE
+        ? { locations: { connect: [{ id: location.id }] } }
+        : {}),
     });
     const tokens = await auth.login(user);
     return { tenantId: tenant.id, locationId: location.id, accessToken: tokens.accessToken };
@@ -105,6 +114,7 @@ describe('ContactsController (e2e-ish)', () => {
       const res = await request(server)
         .get(`/trainees/${trainee.id}/contacts`)
         .set('Authorization', `Bearer ${a.accessToken}`)
+        .set('X-Tenant-Id', a.tenantId)
         .expect(200);
       expect(res.body).toHaveLength(1);
       expect(res.body[0].firstName).toBe('P');
@@ -117,6 +127,7 @@ describe('ContactsController (e2e-ish)', () => {
       await request(server)
         .get(`/trainees/${traineeA.id}/contacts`)
         .set('Authorization', `Bearer ${b.accessToken}`)
+        .set('X-Tenant-Id', b.tenantId)
         .expect(404);
     });
   });
@@ -128,6 +139,7 @@ describe('ContactsController (e2e-ish)', () => {
       const res = await request(server)
         .post(`/trainees/${trainee.id}/contacts`)
         .set('Authorization', `Bearer ${a.accessToken}`)
+        .set('X-Tenant-Id', a.tenantId)
         .send({ firstName: 'P', lastName: 'X', relationship: 'GUARDIAN', isPrimary: true })
         .expect(201);
       expect(res.body.tenantId).toBe(a.tenantId);
@@ -141,6 +153,7 @@ describe('ContactsController (e2e-ish)', () => {
       await request(server)
         .post(`/trainees/${trainee.id}/contacts`)
         .set('Authorization', `Bearer ${a.accessToken}`)
+        .set('X-Tenant-Id', a.tenantId)
         .send({ firstName: 'P', lastName: 'X', relationship: 'COUSIN' })
         .expect(400);
     });
@@ -151,8 +164,31 @@ describe('ContactsController (e2e-ish)', () => {
       await request(server)
         .post(`/trainees/${trainee.id}/contacts`)
         .set('Authorization', `Bearer ${a.accessToken}`)
+        .set('X-Tenant-Id', a.tenantId)
         .send({ firstName: 'P', lastName: 'X', relationship: 'PARENT' })
         .expect(403);
+    });
+  });
+
+  describe('GET /trainees/:traineeId/contacts/:id', () => {
+    // Route removed in TKT-0010 (dead API surface, PRD-0003) — asserted gone.
+    it('returns 404 for the removed GET :id route', async () => {
+      const a = await setupActor(UserRole.ADMIN);
+      const trainee = await newTrainee(a.tenantId, a.locationId);
+      const c = await prisma.contactPerson.create({
+        data: {
+          tenantId: a.tenantId,
+          traineeId: trainee.id,
+          firstName: 'P',
+          lastName: 'X',
+          relationship: ContactRelationship.PARENT,
+        },
+      });
+      await request(server)
+        .get(`/trainees/${trainee.id}/contacts/${c.id}`)
+        .set('Authorization', `Bearer ${a.accessToken}`)
+        .set('X-Tenant-Id', a.tenantId)
+        .expect(404);
     });
   });
 
@@ -172,6 +208,7 @@ describe('ContactsController (e2e-ish)', () => {
       await request(server)
         .delete(`/trainees/${trainee.id}/contacts/${c.id}`)
         .set('Authorization', `Bearer ${a.accessToken}`)
+        .set('X-Tenant-Id', a.tenantId)
         .expect(204);
     });
   });

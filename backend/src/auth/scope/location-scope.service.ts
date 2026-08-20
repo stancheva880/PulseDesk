@@ -3,10 +3,15 @@ import { UserRole } from '@prisma/client';
 import { PrismaService } from '@/prisma/prisma.service';
 import type { AuthenticatedUser } from '../types/jwt-payload';
 
-// Centralises ADMIN's location-based access checks. Other roles are unchanged here:
+// Centralises the location-based access checks for the two roles that have them:
+//  - ADMIN and EMPLOYEE are limited to the locations assigned to them (TKT-0054).
 //  - SUPER_ADMIN is never location-restricted.
-//  - EMPLOYEE / CUSTOMER are scoped via their per-resource rules elsewhere
-//    (e.g. assigned classes / sessions / guardian relationships).
+//  - CUSTOMER is scoped by ownership instead (their own and their trainees' rows), so this
+//    helper does not apply — location-scoping a customer would empty their portal.
+//
+// Sessions, classes and attendances narrow EMPLOYEE by their own work *before* reaching this
+// helper (sessions.service.ts, classes.service.ts, attendances.service.ts); everything else —
+// trainees, contacts, fees, payments, locations — relies on the assignment below.
 @Injectable()
 export class LocationScopeService {
   constructor(private readonly prisma: PrismaService) {}
@@ -14,15 +19,15 @@ export class LocationScopeService {
   /**
    * Returns the location IDs the user is allowed to operate on within the given tenant.
    * - SUPER_ADMIN → null (no filter; allowed everywhere)
-   * - ADMIN → their assigned location IDs (may be empty if not yet assigned)
-   * - EMPLOYEE / CUSTOMER → null (this helper does not apply; callers should rely on
-   *   the existing per-resource rules for these roles)
+   * - ADMIN / EMPLOYEE → their assigned location IDs. Never empty in practice: the users
+   *   service requires at least one assignment for both roles.
+   * - CUSTOMER → null (scoped by ownership, not by location)
    */
   async getAccessibleLocationIds(
     user: AuthenticatedUser,
     tenantId: string,
   ): Promise<string[] | null> {
-    if (user.role !== UserRole.ADMIN) return null;
+    if (user.role !== UserRole.ADMIN && user.role !== UserRole.EMPLOYEE) return null;
     const rows = await this.prisma.location.findMany({
       where: { tenantId, trainers: { some: { id: user.id } } },
       select: { id: true },
@@ -53,13 +58,38 @@ export class LocationScopeService {
   }
 
   /**
-   * Convenience for write paths that target a single location.
+   * Where fragment restricting a query to the user's accessible locations.
+   * Spread into a Prisma `where`; empty object when the user is unrestricted.
+   * `field` is the column holding the location id — 'locationId' on most models,
+   * 'id' on Location itself.
    */
-  async assertLocationAllowed(
+  async locationWhere(
     user: AuthenticatedUser,
     tenantId: string,
-    locationId: string,
-  ): Promise<void> {
-    return this.assertLocationsAllowed(user, tenantId, [locationId]);
+  ): Promise<{ locationId?: { in: string[] } }>;
+  async locationWhere(
+    user: AuthenticatedUser,
+    tenantId: string,
+    field: 'id',
+  ): Promise<{ id?: { in: string[] } }>;
+  async locationWhere(
+    user: AuthenticatedUser,
+    tenantId: string,
+    field: 'locationId' | 'id' = 'locationId',
+  ): Promise<{ locationId?: { in: string[] }; id?: { in: string[] } }> {
+    const allowed = await this.getAccessibleLocationIds(user, tenantId);
+    return allowed === null ? {} : { [field]: { in: allowed } };
+  }
+
+  /**
+   * Relation-shaped variant of `locationWhere` for models linked to locations
+   * via a `locations` m:n relation (Class, Trainee).
+   */
+  async locationsWhere(
+    user: AuthenticatedUser,
+    tenantId: string,
+  ): Promise<{ locations?: { some: { id: { in: string[] } } } }> {
+    const allowed = await this.getAccessibleLocationIds(user, tenantId);
+    return allowed === null ? {} : { locations: { some: { id: { in: allowed } } } };
   }
 }

@@ -1,17 +1,14 @@
 import { Controller, Get } from '@nestjs/common';
+import { ResponseSchema } from '../common/response-schema';
 import { Public } from '../auth/decorators/public.decorator';
-
-export interface HealthCheckResult {
-  status: 'ok';
-  service: string;
-  timestamp: string;
-}
+import { HealthSchema } from './health.schema';
 
 @Public()
 @Controller('health')
 export class HealthController {
   @Get()
-  check(): HealthCheckResult {
+  @ResponseSchema('Health', HealthSchema)
+  check(): { status: 'ok'; service: string; timestamp: string } {
     return {
       status: 'ok',
       service: 'pulsedesk-backend',

@@ -1,21 +1,15 @@
 # Dependencies
 node_modules/
-.pnp
-.pnp.js
 
 # Build outputs
 dist/
-build/
 .next/
-out/
 *.tsbuildinfo
-
-# public
-public/
 
 # Environment files (never commit)
 .env*
 !.env.example
+!.env.docker.example
 
 # Database (SQLite)
 *.db
@@ -26,26 +20,25 @@ prisma/dev.db*
 
 # Test coverage
 coverage/
-.nyc_output/
 
 # IDE / OS
 .idea/
-.vscode/*
-!.vscode/extensions.json
-!.vscode/settings.json
 .DS_Store
-Thumbs.db
+Thumbs.db/cp
+*.stackdump
 
 # Logs
-logs/
 *.log
 npm-debug.log*
 
 # Cache
 .cache/
-.turbo/
 .eslintcache
 
 # Misc
-*.md
 *.zip
+.claude/
+.workflow/
+*.md
+!README.md
+!DEPLOY.md

@@ -1,18 +1,38 @@
 import type { INestApplication } from '@nestjs/common';
 import { ValidationPipe } from '@nestjs/common';
-import { ConfigModule } from '@nestjs/config';
+import { ConfigModule, ConfigService } from '@nestjs/config';
 import { JwtModule } from '@nestjs/jwt';
+import { Reflector } from '@nestjs/core';
 import { Test, type TestingModule } from '@nestjs/testing';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { randomUUID } from 'node:crypto';
 import request from 'supertest';
 import { UserRole } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { ResponseSchemaInterceptor } from '../common/response-schema.interceptor';
 import { MailService } from '../mail/mail.service';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
+import { createTestUser } from '@/test-utils/create-user';
 
 const TEST_PASSWORD = 'TestPass123!';
+const REFRESH_COOKIE = 'pulsedesk.rt';
+
+// TKT-0036 — the refresh token travels as a Set-Cookie now, so these pull it back out.
+function refreshCookie(res: request.Response): string | undefined {
+  const raw = res.headers['set-cookie'];
+  const all = Array.isArray(raw) ? raw : raw ? [raw] : [];
+  return all.find((c) => c.startsWith(`${REFRESH_COOKIE}=`));
+}
+
+function cookieValue(setCookie: string): string {
+  return setCookie.split(';')[0]!.split('=').slice(1).join('=');
+}
+
+// Set-Cookie carries attributes; a Cookie request header must not.
+function cookieHeader(setCookie: string): string {
+  return setCookie.split(';')[0]!;
+}
 
 describe('AuthController (e2e-ish)', () => {
   let app: INestApplication;
@@ -20,7 +40,6 @@ describe('AuthController (e2e-ish)', () => {
   let auth: AuthService;
   const mailMock = {
     send: vi.fn(),
-    sendInvite: vi.fn(),
     sendPasswordReset: vi.fn(),
   };
   const userIds: string[] = [];
@@ -44,6 +63,11 @@ describe('AuthController (e2e-ish)', () => {
     app.useGlobalPipes(
       new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }),
     );
+    // AppModule registers this as an APP_INTERCEPTOR; this spec builds its own module graph,
+    // so it wires the interceptor here too — without it these routes would be unenforced.
+    app.useGlobalInterceptors(
+      new ResponseSchemaInterceptor(app.get(Reflector), app.get(ConfigService)),
+    );
     await app.init();
     prisma = moduleRef.get(PrismaService);
     auth = moduleRef.get(AuthService);
@@ -65,29 +89,93 @@ describe('AuthController (e2e-ish)', () => {
     const tenant = await prisma.tenant.create({ data: { name: 'Demo', slug } });
     tenantIds.push(tenant.id);
     const email = `${randomUUID()}@test.local`;
-    const user = await prisma.user.create({
-      data: {
-        email,
-        passwordHash: await auth.hashPassword(TEST_PASSWORD),
-        role: UserRole.ADMIN,
-        tenantId: tenant.id,
-      },
+    const user = await createTestUser(prisma, {
+      email,
+      passwordHash: await auth.hashPassword(TEST_PASSWORD),
+      role: UserRole.ADMIN,
+      tenantId: tenant.id,
     });
     userIds.push(user.id);
-    return { email };
+    return { email, user, tenant };
   }
 
   describe('POST /auth/login', () => {
-    it('returns access + refresh tokens on valid credentials', async () => {
+    // TKT-0036 (approved TEST CHANGE REQUEST): the refresh token moved from the response
+    // body into an httpOnly cookie. The asserted intent — login issues both tokens — is
+    // unchanged; only the transport of the second one is.
+    it('returns an access token and sets the refresh token as an httpOnly cookie', async () => {
       const { email } = await seedUser();
       const res = await request(server)
         .post('/auth/login')
         .send({ email, password: TEST_PASSWORD })
         .expect(200);
       expect(res.body.accessToken).toBeTruthy();
-      expect(res.body.refreshToken).toBeTruthy();
-      expect(res.body.accessExpiresIn).toBeGreaterThan(0);
-      expect(res.body.refreshExpiresIn).toBeGreaterThan(res.body.accessExpiresIn);
+      // The point of the change: no script can read this.
+      expect(res.body.refreshToken).toBeUndefined();
+
+      const cookie = refreshCookie(res);
+      expect(cookie).toBeTruthy();
+      expect(cookie).toMatch(/HttpOnly/i);
+      expect(cookie).toMatch(/SameSite=Strict/i);
+      expect(cookie).toMatch(/Path=\/api\/auth/i);
+    });
+
+    it('returns the memberships list for a tenant user', async () => {
+      const { email, tenant } = await seedUser();
+      const res = await request(server)
+        .post('/auth/login')
+        .send({ email, password: TEST_PASSWORD })
+        .expect(200);
+      expect(res.body.memberships).toEqual([
+        { tenantId: tenant.id, tenantName: 'Demo', role: UserRole.ADMIN },
+      ]);
+    });
+
+    it('returns all memberships for a multi-tenant user', async () => {
+      const { email, user, tenant } = await seedUser();
+      const other = await prisma.tenant.create({
+        data: { name: 'Other Club', slug: `t-${randomUUID()}` },
+      });
+      tenantIds.push(other.id);
+      await prisma.membership.create({
+        data: { userId: user.id, tenantId: other.id, role: UserRole.EMPLOYEE },
+      });
+      const res = await request(server)
+        .post('/auth/login')
+        .send({ email, password: TEST_PASSWORD })
+        .expect(200);
+      expect(res.body.memberships).toHaveLength(2);
+      expect(res.body.memberships).toEqual(
+        expect.arrayContaining([
+          { tenantId: tenant.id, tenantName: 'Demo', role: UserRole.ADMIN },
+          { tenantId: other.id, tenantName: 'Other Club', role: UserRole.EMPLOYEE },
+        ]),
+      );
+    });
+
+    it('returns empty memberships for SUPER_ADMIN', async () => {
+      const email = `${randomUUID()}@super.local`;
+      const user = await createTestUser(prisma, {
+        email,
+        passwordHash: await auth.hashPassword(TEST_PASSWORD),
+        role: UserRole.SUPER_ADMIN,
+      });
+      userIds.push(user.id);
+      const res = await request(server)
+        .post('/auth/login')
+        .send({ email, password: TEST_PASSWORD })
+        .expect(200);
+      expect(res.body.memberships).toEqual([]);
+    });
+
+    it('returns 403 "No active memberships" for a tenant user with zero memberships', async () => {
+      const { email, user } = await seedUser();
+      await prisma.membership.deleteMany({ where: { userId: user.id } });
+      const res = await request(server)
+        .post('/auth/login')
+        .send({ email, password: TEST_PASSWORD })
+        .expect(403);
+      expect(res.body.message).toBe('No active memberships');
     });
 
     it('returns 401 on wrong password', async () => {
@@ -107,19 +195,26 @@ describe('AuthController (e2e-ish)', () => {
   });
 
   describe('POST /auth/refresh', () => {
-    it('rotates the refresh token and returns a new pair', async () => {
+    // TKT-0036 (approved TCR): rotation is now driven by the cookie. Same intent —
+    // presenting the issued token yields a new one and retires the old.
+    it('rotates via the cookie and keeps the new token out of the body', async () => {
       const { email } = await seedUser();
       const login = await request(server)
         .post('/auth/login')
         .send({ email, password: TEST_PASSWORD })
         .expect(200);
+      const first = refreshCookie(login) as string;
+
       const res = await request(server)
         .post('/auth/refresh')
-        .send({ refreshToken: login.body.refreshToken })
+        .set('Cookie', cookieHeader(first))
         .expect(200);
+
       expect(res.body.accessToken).toBeTruthy();
-      expect(res.body.refreshToken).toBeTruthy();
-      expect(res.body.refreshToken).not.toBe(login.body.refreshToken);
+      expect(res.body.refreshToken).toBeUndefined();
+      const rotated = refreshCookie(res);
+      expect(rotated).toBeTruthy();
+      expect(cookieValue(rotated as string)).not.toBe(cookieValue(first));
     });
 
     it('returns 401 for an unknown refresh token', async () => {
@@ -128,23 +223,66 @@ describe('AuthController (e2e-ish)', () => {
         .send({ refreshToken: 'not-real' })
         .expect(401);
     });
+
+    // Distinguishes the DTO change from a regression: with refreshToken still required,
+    // a bodyless post would be rejected by the ValidationPipe as 400 instead.
+    it('returns 401, not 400, when neither a cookie nor a body token is sent', async () => {
+      await request(server).post('/auth/refresh').send({}).expect(401);
+    });
+
+    // The non-browser path. A native client has no cookie jar, so it authenticates with
+    // the body and needs the rotation handed back the same way.
+    it('still rotates via the body and returns the token, setting no cookie', async () => {
+      const { email, user } = await seedUser();
+      await request(server).post('/auth/login').send({ email, password: TEST_PASSWORD }).expect(200);
+      const pair = await auth.login(user);
+
+      const res = await request(server)
+        .post('/auth/refresh')
+        .send({ refreshToken: pair.refreshToken })
+        .expect(200);
+
+      expect(res.body.accessToken).toBeTruthy();
+      expect(res.body.refreshToken).toBeTruthy();
+      expect(res.body.refreshToken).not.toBe(pair.refreshToken);
+      expect(refreshCookie(res)).toBeUndefined();
+    });
   });
 
   describe('POST /auth/logout', () => {
-    it('revokes the refresh token (returns 204) and subsequent refresh fails', async () => {
+    // TKT-0036 (approved TCR). Before the rewrite this passed vacuously: once the body
+    // stopped carrying refreshToken, logout received an empty body, skipped the revoke,
+    // and the follow-up 401 came from "no token" rather than "revoked token". Sending
+    // the captured cookie explicitly is what makes the 401 mean revocation again.
+    it('revokes the cookie token (204) and a refresh with it then fails', async () => {
       const { email } = await seedUser();
       const login = await request(server)
         .post('/auth/login')
         .send({ email, password: TEST_PASSWORD })
         .expect(200);
-      await request(server)
+      const cookie = refreshCookie(login) as string;
+      expect(cookieValue(cookie)).toBeTruthy(); // guards against the vacuum returning
+
+      const out = await request(server)
         .post('/auth/logout')
-        .send({ refreshToken: login.body.refreshToken })
+        .set('Cookie', cookieHeader(cookie))
         .expect(204);
+      // The browser is told to drop it as well as the server revoking it.
+      expect(refreshCookie(out)).toBeTruthy();
+
       await request(server)
         .post('/auth/refresh')
-        .send({ refreshToken: login.body.refreshToken })
+        .set('Cookie', cookieHeader(cookie))
         .expect(401);
+    });
+
+    // Same 204 as a real token: distinguishing them would leak whether a token
+    // is live. No Authorization header here either — the route stays @Public().
+    it('returns 204 for an unknown refresh token (no enumeration signal)', async () => {
+      await request(server)
+        .post('/auth/logout')
+        .send({ refreshToken: 'this-token-was-never-issued' })
+        .expect(204);
     });
   });
 

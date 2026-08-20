@@ -11,7 +11,8 @@ async function bootstrap(): Promise<void> {
 
   configureApp(app, config);
 
-  const port = config.get<number>('PORT') ?? 4000;
+  // Env values arrive as strings — get<number> would mistype it.
+  const port = Number(config.get<string>('PORT')) || 4000;
   await app.listen(port);
   Logger.log(`PulseDesk backend listening on http://localhost:${port}/api`, 'Bootstrap');
 }

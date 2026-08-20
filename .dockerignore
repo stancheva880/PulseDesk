@@ -6,9 +6,7 @@
 
 # Build outputs (rebuilt inside the image)
 **/dist
-**/build
 **/.next
-**/out
 **/*.tsbuildinfo
 
 # Database files (DB lives on a Docker volume, never baked into an image)
@@ -25,10 +23,8 @@
 
 # Test / coverage artifacts
 **/coverage
-**/.nyc_output
 
 # Docker artifacts themselves
-Dockerfile
 **/Dockerfile
 docker-compose*.yml
 .dockerignore
@@ -37,14 +33,12 @@ docker-compose*.yml
 .git
 .gitignore
 .idea
-.vscode
 **/.DS_Store
 **/Thumbs.db
 
 # Logs & caches
 **/*.log
 **/.cache
-**/.turbo
 **/.eslintcache
 
 # Docs (not needed at build time)

@@ -1,19 +1,19 @@
 'use client';
 
 import { useParams, useRouter } from 'next/navigation';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { ApiError } from '@/lib/api';
+import { apiErrorMessage } from '@/lib/api';
 import {
   Attendances,
   Sessions,
-  Trainees,
-  type Attendance,
   type AttendanceStatus,
+  type AttendanceWithTrainee,
   type SessionDetail,
   type Trainee,
+  listAll,
 } from '@/lib/api-resources';
 import { cn } from '@/lib/utils';
 
@@ -27,7 +27,7 @@ interface RowDraft {
 
 // Seed drafts: keep PENDING rows as PRESENT defaults so trainers can just hit Save All;
 // already-marked rows preserve their status.
-function seedDrafts(rows: Attendance[]): Record<string, RowDraft> {
+function seedDrafts(rows: AttendanceWithTrainee[]): Record<string, RowDraft> {
   const initial: Record<string, RowDraft> = {};
   for (const row of rows) {
     initial[row.id] = {
@@ -39,6 +39,10 @@ function seedDrafts(rows: Attendance[]): Record<string, RowDraft> {
   return initial;
 }
 
+// Still paged: the candidate set is filtered, not necessarily short.
+const listCandidates = (sessionId: string) =>
+  listAll((p) => Attendances.listCandidates(sessionId, p));
+
 export default function AttendancePage() {
   const { t } = useTranslation();
   const router = useRouter();
@@ -46,8 +50,9 @@ export default function AttendancePage() {
   const sessionId = params.id;
 
   const [session, setSession] = useState<SessionDetail | null>(null);
-  const [rows, setRows] = useState<Attendance[] | null>(null);
-  const [trainees, setTrainees] = useState<Trainee[]>([]);
+  const [rows, setRows] = useState<AttendanceWithTrainee[] | null>(null);
+  // The server's answer to "who can still be added", not a club-wide list to filter.
+  const [candidates, setCandidates] = useState<Trainee[]>([]);
   const [drafts, setDrafts] = useState<Record<string, RowDraft>>({});
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -56,33 +61,25 @@ export default function AttendancePage() {
   const [addId, setAddId] = useState('');
   const [addBusy, setAddBusy] = useState(false);
   const [addError, setAddError] = useState<string | null>(null);
+  // The API capped the response, so rows the trainer cannot see exist and Save All would not
+  // cover them. Never silent: that silence is what TKT-0068 fixed.
+  const [truncated, setTruncated] = useState(false);
 
   useEffect(() => {
     Promise.all([
       Sessions.get(sessionId),
       Attendances.listForSession(sessionId),
-      Trainees.list(),
+      listCandidates(sessionId),
     ])
-      .then(([s, a, ts]) => {
+      .then(([s, a, cs]) => {
         setSession(s);
-        setRows(a);
-        setTrainees(ts);
-        setDrafts(seedDrafts(a));
+        setRows(a.items);
+        setTruncated(a.truncated);
+        setCandidates(cs);
+        setDrafts(seedDrafts(a.items));
       })
-      .catch((e: unknown) => setLoadError(e instanceof Error ? e.message : 'load failed'));
+      .catch((e: unknown) => setLoadError(apiErrorMessage(e)));
   }, [sessionId]);
-
-  const traineeNameById = useMemo(
-    () => new Map(trainees.map((tr) => [tr.id, `${tr.firstName} ${tr.lastName}`])),
-    [trainees],
-  );
-
-  // Candidates for the Add-trainee control: active trainees not already on the session.
-  const enrolledIds = useMemo(() => new Set((rows ?? []).map((r) => r.traineeId)), [rows]);
-  const candidates = useMemo(
-    () => trainees.filter((tr) => tr.isActive && !enrolledIds.has(tr.id)),
-    [trainees, enrolledIds],
-  );
 
   const setDraftStatus = (rowId: string, status: AttendanceStatus) => {
     setSavedCount(null);
@@ -106,12 +103,18 @@ export default function AttendancePage() {
     setAddBusy(true);
     try {
       await Attendances.addTrainee(sessionId, addId);
-      const fresh = await Attendances.listForSession(sessionId);
-      setRows(fresh);
-      setDrafts(seedDrafts(fresh));
+      const [fresh, freshCandidates] = await Promise.all([
+        Attendances.listForSession(sessionId),
+        // The person just added is no longer a candidate, and the server is the one that knows.
+        listCandidates(sessionId),
+      ]);
+      setRows(fresh.items);
+      setTruncated(fresh.truncated);
+      setCandidates(freshCandidates);
+      setDrafts(seedDrafts(fresh.items));
       setAddId('');
     } catch (e) {
-      setAddError(e instanceof ApiError ? e.message : t('common.errors.generic'));
+      setAddError(apiErrorMessage(e));
     } finally {
       setAddBusy(false);
     }
@@ -143,9 +146,10 @@ export default function AttendancePage() {
       setSavedCount(result.updated);
       // Refetch to pick up updated marker info.
       const fresh = await Attendances.listForSession(sessionId);
-      setRows(fresh);
+      setRows(fresh.items);
+      setTruncated(fresh.truncated);
     } catch (e) {
-      setSaveError(e instanceof ApiError ? e.message : t('common.errors.generic'));
+      setSaveError(apiErrorMessage(e));
     } finally {
       setBusy(false);
     }
@@ -169,6 +173,11 @@ export default function AttendancePage() {
             <p className="text-sm text-muted-foreground">{session.location.name}</p>
           </CardHeader>
           <CardContent>
+            {truncated ? (
+              <p className="mb-4 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm">
+                {t('attendance.truncated')}
+              </p>
+            ) : null}
             {rows !== null ? (
               <div className="mb-4 flex flex-wrap items-center gap-2">
                 {candidates.length === 0 ? (
@@ -229,7 +238,7 @@ export default function AttendancePage() {
                     <tbody>
                       {rows.map((row) => {
                         const draft = drafts[row.id];
-                        const name = traineeNameById.get(row.traineeId) ?? row.traineeId;
+                        const name = `${row.trainee.firstName} ${row.trainee.lastName}`;
                         return (
                           <tr key={row.id} className="border-t align-top">
                             <td className="p-3 font-medium">{name}</td>

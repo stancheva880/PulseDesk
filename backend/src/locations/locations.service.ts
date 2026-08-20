@@ -1,8 +1,14 @@
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
-import { Prisma, type Location } from '@prisma/client';
+import { type Location } from '@prisma/client';
 import { LocationScopeService } from '@/auth/scope/location-scope.service';
+import { isUniqueConstraintError } from '@/common/prisma-relations';
 import type { AuthenticatedUser } from '@/auth/types/jwt-payload';
-import { DEFAULT_LIST_TAKE } from '@/common/dto/paginated-result';
+import {
+  buildPaginatedResult,
+  normalizePagination,
+  type PaginatedResult,
+  type PaginationInput,
+} from '@/common/dto/paginated-result';
 import { PrismaService } from '@/prisma/prisma.service';
 import type { CreateLocationDto } from './dto/create-location.dto';
 import type { UpdateLocationDto } from './dto/update-location.dto';
@@ -14,24 +20,34 @@ export class LocationsService {
     private readonly scope: LocationScopeService,
   ) {}
 
-  async list(tenantId: string, user: AuthenticatedUser): Promise<Location[]> {
-    const allowedIds = await this.scope.getAccessibleLocationIds(user, tenantId);
-    return this.prisma.location.findMany({
-      where: {
-        tenantId,
-        ...(allowedIds === null ? {} : { id: { in: allowedIds } }),
-      },
-      orderBy: { name: 'asc' },
-      take: DEFAULT_LIST_TAKE,
-    });
+  async list(
+    tenantId: string,
+    user: AuthenticatedUser,
+    pagination?: PaginationInput,
+  ): Promise<PaginatedResult<Location>> {
+    const where = {
+      tenantId,
+      ...(await this.scope.locationWhere(user, tenantId, 'id')),
+    };
+    const p = normalizePagination(pagination);
+    const [items, total] = await this.prisma.$transaction([
+      this.prisma.location.findMany({
+        where,
+        orderBy: { name: 'asc' },
+        skip: p.skip,
+        take: p.take,
+      }),
+      this.prisma.location.count({ where }),
+    ]);
+    return buildPaginatedResult(items, total, p);
   }
 
   async findById(tenantId: string, id: string, user: AuthenticatedUser): Promise<Location> {
-    const allowedIds = await this.scope.getAccessibleLocationIds(user, tenantId);
-    if (allowedIds !== null && !allowedIds.includes(id)) {
-      throw new NotFoundException(`Location ${id} not found`);
-    }
-    const loc = await this.prisma.location.findFirst({ where: { id, tenantId } });
+    // AND-composed, not spread: the scope filter keys on `id` too, so spreading it
+    // would clobber the requested id and match any accessible location.
+    const loc = await this.prisma.location.findFirst({
+      where: { AND: [{ id, tenantId }, await this.scope.locationWhere(user, tenantId, 'id')] },
+    });
     if (!loc) throw new NotFoundException(`Location ${id} not found`);
     return loc;
   }
@@ -43,7 +59,11 @@ export class LocationsService {
       });
     } catch (e) {
       if (isUniqueConstraintError(e)) {
-        throw new ConflictException(`Location "${dto.name}" already exists`);
+        throw new ConflictException({
+          message: `Location "${dto.name}" already exists`,
+          code: 'LOCATION_NAME_TAKEN',
+          params: { name: dto.name },
+        });
       }
       throw e;
     }
@@ -56,7 +76,10 @@ export class LocationsService {
       return await this.prisma.location.update({ where: { id }, data: dto });
     } catch (e) {
       if (isUniqueConstraintError(e)) {
-        throw new ConflictException('Location name already in use');
+        throw new ConflictException({
+          message: 'Location name already in use',
+          code: 'LOCATION_NAME_IN_USE',
+        });
       }
       throw e;
     }
@@ -69,6 +92,3 @@ export class LocationsService {
   }
 }
 
-function isUniqueConstraintError(e: unknown): boolean {
-  return e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002';
-}

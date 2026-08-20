@@ -8,34 +8,44 @@ import {
   Param,
   Patch,
   Post,
+  Query,
 } from '@nestjs/common';
+import { ApiBearerAuth } from '@nestjs/swagger';
 import { UserRole, type Location } from '@prisma/client';
 import { CurrentUser } from '@/auth/decorators/current-user.decorator';
 import { Roles } from '@/auth/decorators/roles.decorator';
 import { TenantId } from '@/auth/decorators/tenant-id.decorator';
 import type { AuthenticatedUser } from '@/auth/types/jwt-payload';
+import { PaginationQueryDto } from '@/common/dto/pagination-query.dto';
+import type { PaginatedResult } from '@/common/dto/paginated-result';
+import { NoContent, ResponseSchema } from '@/common/response-schema';
 import { CreateLocationDto } from './dto/create-location.dto';
 import { UpdateLocationDto } from './dto/update-location.dto';
+import { LocationSchema, PaginatedLocationSchema } from './locations.schema';
 import { LocationsService } from './locations.service';
 
 // Reads: ADMIN + EMPLOYEE (ADMIN list is scoped to their assigned locations).
 // Writes: SUPER_ADMIN only — managing the tenant's location footprint is a
 // system-administrator concern. The RolesGuard's SUPER_ADMIN bypass means SUPER_ADMIN
 // also passes the read-floor without listing them explicitly.
+@ApiBearerAuth()
 @Controller('locations')
 @Roles(UserRole.ADMIN, UserRole.EMPLOYEE)
 export class LocationsController {
   constructor(private readonly locations: LocationsService) {}
 
   @Get()
+  @ResponseSchema('PaginatedLocation', PaginatedLocationSchema)
   list(
     @TenantId() tenantId: string,
     @CurrentUser() user: AuthenticatedUser,
-  ): Promise<Location[]> {
-    return this.locations.list(tenantId, user);
+    @Query() query: PaginationQueryDto,
+  ): Promise<PaginatedResult<Location>> {
+    return this.locations.list(tenantId, user, query);
   }
 
   @Get(':id')
+  @ResponseSchema('Location', LocationSchema)
   findOne(
     @TenantId() tenantId: string,
     @CurrentUser() user: AuthenticatedUser,
@@ -46,12 +56,14 @@ export class LocationsController {
 
   @Post()
   @Roles(UserRole.SUPER_ADMIN)
+  @ResponseSchema('Location', LocationSchema)
   create(@TenantId() tenantId: string, @Body() dto: CreateLocationDto): Promise<Location> {
     return this.locations.create(tenantId, dto);
   }
 
   @Patch(':id')
   @Roles(UserRole.SUPER_ADMIN)
+  @ResponseSchema('Location', LocationSchema)
   update(
     @TenantId() tenantId: string,
     @Param('id') id: string,
@@ -63,6 +75,8 @@ export class LocationsController {
   @Delete(':id')
   @Roles(UserRole.SUPER_ADMIN)
   @HttpCode(HttpStatus.NO_CONTENT)
+  // Declared rather than skipped: an undeclared response is the same gap this epic closes.
+  @ResponseSchema('LocationNoContent', NoContent)
   async remove(@TenantId() tenantId: string, @Param('id') id: string): Promise<void> {
     await this.locations.delete(tenantId, id);
   }

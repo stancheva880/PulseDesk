@@ -1,3 +1,4 @@
+import { SUPER_ADMIN_USER as su } from '@/test-utils/auth-user';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { Test, type TestingModule } from '@nestjs/testing';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -11,7 +12,8 @@ import {
 } from '@prisma/client';
 import { LocationScopeService } from '@/auth/scope/location-scope.service';
 import { PrismaService } from '@/prisma/prisma.service';
-import { TraineesService } from './trainees.service';
+import { calculateAge, TraineesService } from './trainees.service';
+import { createTestUser } from '@/test-utils/create-user';
 
 describe('TraineesService', () => {
   let service: TraineesService;
@@ -43,13 +45,11 @@ describe('TraineesService', () => {
   }
 
   async function newCustomer(tenantId: string) {
-    return prisma.user.create({
-      data: {
-        tenantId,
-        email: `${randomUUID()}@test.local`,
-        passwordHash: 'x',
-        role: UserRole.CUSTOMER,
-      },
+    return createTestUser(prisma, {
+      tenantId,
+      email: `${randomUUID()}@test.local`,
+      passwordHash: 'x',
+      role: UserRole.CUSTOMER,
     });
   }
 
@@ -81,7 +81,7 @@ describe('TraineesService', () => {
         firstName: 'A',
         lastName: 'B',
         dateOfBirth: adultDobIso,
-      });
+      }, su);
       const future = new Date();
       future.setFullYear(future.getFullYear() + 1);
       const session = await prisma.session.create({
@@ -95,7 +95,7 @@ describe('TraineesService', () => {
         },
       });
 
-      await service.update(t.id, trainee.id, { classIds: [cls.id] });
+      await service.update(t.id, trainee.id, { classIds: [cls.id] }, su);
 
       const rows = await prisma.attendance.findMany({
         where: { sessionId: session.id, traineeId: trainee.id },
@@ -113,7 +113,7 @@ describe('TraineesService', () => {
           firstName: 'Kid',
           lastName: 'Smith',
           dateOfBirth: minorDobIso,
-        }),
+        }, su),
       ).rejects.toBeInstanceOf(BadRequestException);
     });
 
@@ -132,7 +132,7 @@ describe('TraineesService', () => {
             isPrimary: true,
           },
         ],
-      });
+      }, su);
       const persisted = await prisma.contactPerson.findMany({
         where: { traineeId: trainee.id },
       });
@@ -149,7 +149,7 @@ describe('TraineesService', () => {
           firstName: 'Adult',
           lastName: 'Smith',
           dateOfBirth: adultDobIso,
-        }),
+        }, su),
       ).resolves.toBeDefined();
     });
 
@@ -167,7 +167,7 @@ describe('TraineesService', () => {
               relationship: ContactRelationship.OTHER,
             },
           ],
-        }),
+        }, su),
       ).resolves.toBeDefined();
     });
   });
@@ -183,14 +183,17 @@ describe('TraineesService', () => {
           lastName: 'Y',
           dateOfBirth: adultDobIso,
           locationIds: [inB.id],
-        }),
+        }, su),
       ).rejects.toBeInstanceOf(BadRequestException);
     });
 
     it('rejects userId that is not a CUSTOMER', async () => {
       const t = await newTenant();
-      const admin = await prisma.user.create({
-        data: { tenantId: t.id, email: `${randomUUID()}@x`, passwordHash: 'x', role: UserRole.ADMIN },
+      const admin = await createTestUser(prisma, {
+        tenantId: t.id,
+        email: `${randomUUID()}@x`,
+        passwordHash: 'x',
+        role: UserRole.ADMIN,
       });
       await expect(
         service.create(t.id, {
@@ -198,14 +201,17 @@ describe('TraineesService', () => {
           lastName: 'Y',
           dateOfBirth: adultDobIso,
           userId: admin.id,
-        }),
+        }, su),
       ).rejects.toBeInstanceOf(BadRequestException);
     });
 
     it('rejects guardianUserIds that are not CUSTOMERs', async () => {
       const t = await newTenant();
-      const employee = await prisma.user.create({
-        data: { tenantId: t.id, email: `${randomUUID()}@x`, passwordHash: 'x', role: UserRole.EMPLOYEE },
+      const employee = await createTestUser(prisma, {
+        tenantId: t.id,
+        email: `${randomUUID()}@x`,
+        passwordHash: 'x',
+        role: UserRole.EMPLOYEE,
       });
       await expect(
         service.create(t.id, {
@@ -216,7 +222,7 @@ describe('TraineesService', () => {
             { firstName: 'P', lastName: 'S', relationship: ContactRelationship.PARENT },
           ],
           guardianUserIds: [employee.id],
-        }),
+        }, su),
       ).rejects.toBeInstanceOf(BadRequestException);
     });
 
@@ -231,8 +237,8 @@ describe('TraineesService', () => {
         contacts: [
           { firstName: 'P', lastName: 'X', relationship: ContactRelationship.GUARDIAN },
         ],
-      });
-      const fetched = await service.findById(t.id, trainee.id);
+      }, su);
+      const fetched = await service.findById(t.id, trainee.id, su);
       expect(fetched.guardians.map((g) => g.id)).toEqual([guardian.id]);
     });
   });
@@ -245,14 +251,14 @@ describe('TraineesService', () => {
         firstName: 'A',
         lastName: 'A',
         dateOfBirth: adultDobIso,
-      });
+      }, su);
       await service.create(b.id, {
         firstName: 'B',
         lastName: 'B',
         dateOfBirth: adultDobIso,
-      });
-      const list = await service.list(a.id);
-      expect(list.map((t) => t.lastName)).toEqual(['A']);
+      }, su);
+      const list = await service.list(a.id, su);
+      expect(list.items.map((t) => t.lastName)).toEqual(['A']);
     });
 
     it('findById throws NotFound for cross-tenant fetches', async () => {
@@ -262,17 +268,17 @@ describe('TraineesService', () => {
         firstName: 'A',
         lastName: 'A',
         dateOfBirth: adultDobIso,
-      });
-      await expect(service.findById(b.id, inA.id)).rejects.toBeInstanceOf(NotFoundException);
+      }, su);
+      await expect(service.findById(b.id, inA.id, su)).rejects.toBeInstanceOf(NotFoundException);
     });
 
     it('list orders by lastName then firstName', async () => {
       const t = await newTenant();
-      await service.create(t.id, { firstName: 'A', lastName: 'Smith', dateOfBirth: adultDobIso });
-      await service.create(t.id, { firstName: 'Z', lastName: 'Adams', dateOfBirth: adultDobIso });
-      await service.create(t.id, { firstName: 'B', lastName: 'Smith', dateOfBirth: adultDobIso });
-      const list = await service.list(t.id);
-      expect(list.map((tr) => `${tr.lastName} ${tr.firstName}`)).toEqual([
+      await service.create(t.id, { firstName: 'A', lastName: 'Smith', dateOfBirth: adultDobIso }, su);
+      await service.create(t.id, { firstName: 'Z', lastName: 'Adams', dateOfBirth: adultDobIso }, su);
+      await service.create(t.id, { firstName: 'B', lastName: 'Smith', dateOfBirth: adultDobIso }, su);
+      const list = await service.list(t.id, su);
+      expect(list.items.map((tr) => `${tr.lastName} ${tr.firstName}`)).toEqual([
         'Adams Z',
         'Smith A',
         'Smith B',
@@ -288,9 +294,9 @@ describe('TraineesService', () => {
         firstName: 'X',
         lastName: 'Y',
         dateOfBirth: adultDobIso,
-      });
+      }, su);
       await expect(
-        service.update(b.id, inA.id, { firstName: 'Hijack' }),
+        service.update(b.id, inA.id, { firstName: 'Hijack' }, su),
       ).rejects.toBeInstanceOf(NotFoundException);
     });
 
@@ -301,8 +307,8 @@ describe('TraineesService', () => {
         firstName: 'X',
         lastName: 'Y',
         dateOfBirth: adultDobIso,
-      });
-      await expect(service.delete(b.id, inA.id)).rejects.toBeInstanceOf(NotFoundException);
+      }, su);
+      await expect(service.delete(b.id, inA.id, su)).rejects.toBeInstanceOf(NotFoundException);
     });
 
     it('replaces locations on update (set semantics)', async () => {
@@ -314,9 +320,9 @@ describe('TraineesService', () => {
         lastName: 'Y',
         dateOfBirth: adultDobIso,
         locationIds: [loc1.id],
-      });
-      await service.update(t.id, trainee.id, { locationIds: [loc2.id] });
-      const fetched = await service.findById(t.id, trainee.id);
+      }, su);
+      await service.update(t.id, trainee.id, { locationIds: [loc2.id] }, su);
+      const fetched = await service.findById(t.id, trainee.id, su);
       expect(fetched.locations.map((l) => l.name)).toEqual(['B']);
     });
 
@@ -329,10 +335,36 @@ describe('TraineesService', () => {
         contacts: [
           { firstName: 'P', lastName: 'X', relationship: ContactRelationship.PARENT },
         ],
-      });
-      await service.delete(t.id, trainee.id);
+      }, su);
+      await service.delete(t.id, trainee.id, su);
       const orphaned = await prisma.contactPerson.count({ where: { traineeId: trainee.id } });
       expect(orphaned).toBe(0);
     });
+  });
+});
+
+describe('calculateAge', () => {
+  it('returns 18 the day someone turns 18 (boundary — not under 18)', () => {
+    expect(calculateAge(new Date('2008-05-06'), new Date('2026-05-06'))).toBe(18);
+  });
+
+  it('returns 17 the day before someone turns 18', () => {
+    expect(calculateAge(new Date('2008-05-06'), new Date('2026-05-05'))).toBe(17);
+  });
+
+  it('returns 17 when the birthday has not yet occurred this year', () => {
+    expect(calculateAge(new Date('2008-12-31'), new Date('2026-05-06'))).toBe(17);
+  });
+
+  it('returns 18 when the birthday has already passed this year', () => {
+    expect(calculateAge(new Date('2008-01-01'), new Date('2026-05-06'))).toBe(18);
+  });
+
+  it('returns 25 for a clearly adult date of birth', () => {
+    expect(calculateAge(new Date('2001-01-01'), new Date('2026-05-06'))).toBe(25);
+  });
+
+  it('returns 0 for a baby born today', () => {
+    expect(calculateAge(new Date('2026-05-06'), new Date('2026-05-06'))).toBe(0);
   });
 });

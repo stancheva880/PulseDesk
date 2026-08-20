@@ -3,26 +3,16 @@
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import {
-  flexRender,
-  getCoreRowModel,
-  getFilteredRowModel,
-  getSortedRowModel,
-  useReactTable,
-  type ColumnDef,
-  type SortingState,
-} from '@tanstack/react-table';
 import { Plus } from 'lucide-react';
-import { ConfirmDialog } from '@/components/confirm-dialog';
+import { DataTable, type DataTableColumn } from '@/components/data-table';
 import { useAuth } from '@/components/auth-provider';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Skeleton } from '@/components/ui/skeleton';
-import { ApiError } from '@/lib/api';
-import { isManager } from '@/lib/permissions';
+import { apiErrorMessage } from '@/lib/api';
+import { isManager } from '@/lib/auth-storage';
 import {
   Classes,
   Fees,
@@ -30,10 +20,15 @@ import {
   type ClassRow,
   type FeeRow,
   type FeeStatus,
+  type FeeStatusFilter,
   type GenerateFeesResult,
   type Trainee,
+  type UnbilledEntry,
+  listAll,
 } from '@/lib/api-resources';
-import { cn } from '@/lib/utils';
+import { cn, formatMoney } from '@/lib/utils';
+import { useCrudList } from '@/lib/use-crud-list';
+import { NativeSelect } from '@/components/ui/native-select';
 
 const STATUSES = ['UNPAID', 'PARTIAL', 'PAID'] as const satisfies readonly FeeStatus[];
 
@@ -46,45 +41,90 @@ interface FeeRowVM {
   outstanding: number;
 }
 
+// Numeric columns start desc on first click (matches the previous react-table behavior).
+const DESC_FIRST = new Set(['amount', 'outstanding']);
+
 export default function FeesListPage() {
   const { t } = useTranslation();
   const { user } = useAuth();
   const admin = isManager(user?.role);
-  const [fees, setFees] = useState<FeeRow[] | null>(null);
-  const [trainees, setTrainees] = useState<Trainee[]>([]);
-  const [classes, setClasses] = useState<ClassRow[]>([]);
-  const [error, setError] = useState<string | null>(null);
-  const [pendingDelete, setPendingDelete] = useState<FeeRow | null>(null);
-  const [delBusy, setDelBusy] = useState(false);
 
   // Filters live in URL-style state but we keep it local for now.
-  const [statusFilter, setStatusFilter] = useState<FeeStatus | ''>('');
-  const [periodFrom, setPeriodFrom] = useState('');
-  const [periodTo, setPeriodTo] = useState('');
+  const [statusFilter, setStatusFilter] = useState<FeeStatusFilter | ''>('');
+  const [classFilter, setClassFilter] = useState('');
+  // One <input type="month"> in place of two date inputs. A fee period is a month, and the
+  // question this page has to answer is "who owes for this month" — arbitrary ranges were
+  // never what anyone typed. Native element, so no picker dependency.
+  const [month, setMonth] = useState('');
   const [globalFilter, setGlobalFilter] = useState('');
-  const [sorting, setSorting] = useState<SortingState>([
-    { id: 'periodStart', desc: true },
-  ]);
+  // Bumped after a bulk generate, so the unbilled panel below re-reads with the list.
+  const [generation, setGeneration] = useState(0);
+  const [sort, setSort] = useState<{ key: string; desc: boolean }>({
+    key: 'periodStart',
+    desc: true,
+  });
 
-  const reload = () => {
-    Promise.all([
-      Fees.list({
-        status: statusFilter || undefined,
-        periodStartFrom: periodFrom || undefined,
-        periodStartTo: periodTo || undefined,
-      }),
-      Trainees.list(),
-      Classes.list(),
-    ])
-      .then(([f, tr, c]) => {
-        setFees(f);
+  const {
+    rows: fees,
+    setPage,
+    pageInfo,
+    error,
+    setError,
+    reload,
+    pendingDelete,
+    setPendingDelete,
+    busy,
+    onDelete,
+  } = useCrudList(Fees, {
+    params: {
+      status: statusFilter || undefined,
+      classId: classFilter || undefined,
+      periodStartFrom: monthBounds(month)?.from,
+      periodStartTo: monthBounds(month)?.to,
+    },
+    deps: [statusFilter, classFilter, month],
+  });
+
+  const [trainees, setTrainees] = useState<Trainee[]>([]);
+  const [classes, setClasses] = useState<ClassRow[]>([]);
+
+  useEffect(() => {
+    Promise.all([listAll(Trainees.list), listAll(Classes.list)])
+      .then(([tr, c]) => {
         setTrainees(tr);
         setClasses(c);
       })
-      .catch((e: unknown) => setError(e instanceof Error ? e.message : 'load failed'));
-  };
+      .catch((e: unknown) => setError(apiErrorMessage(e)));
+  }, [setError]);
 
-  useEffect(reload, [statusFilter, periodFrom, periodTo]);
+  // Enrolled trainees with no fee row for the chosen month. No status filter can surface
+  // them — there is nothing to filter — so this is the other half of "who has not paid".
+  //
+  // The result carries the filter it was fetched for. That is what lets the effect clear
+  // nothing synchronously (which would cascade a render) and still never show the previous
+  // class's names while the next request is in flight — the render just fails to match.
+  const unbilledKey = admin && classFilter && monthBounds(month) ? `${classFilter}|${month}` : '';
+  const [unbilled, setUnbilled] = useState<{ key: string; rows: UnbilledEntry[] } | null>(null);
+  useEffect(() => {
+    const bounds = monthBounds(month);
+    if (!unbilledKey || !bounds) return;
+    let stale = false;
+    Fees.unbilled({ classId: classFilter, periodStart: bounds.from, periodEnd: bounds.to })
+      .then((rows) => {
+        if (!stale) setUnbilled({ key: unbilledKey, rows });
+      })
+      .catch(() => {
+        // A failed preview is not worth an error banner over the list it sits above.
+      });
+    return () => {
+      stale = true;
+    };
+  }, [unbilledKey, classFilter, month, generation]);
+
+  const refreshAll = () => {
+    reload();
+    setGeneration((n) => n + 1);
+  };
 
   const traineeNameById = useMemo(
     () => new Map(trainees.map((tr) => [tr.id, `${tr.firstName} ${tr.lastName}`])),
@@ -95,36 +135,65 @@ export default function FeesListPage() {
     [classes],
   );
 
-  const data: FeeRowVM[] = useMemo(
+  const data: FeeRowVM[] | null = useMemo(
     () =>
-      (fees ?? []).map((fee) => {
-        const amount = Number(fee.amount);
-        const paid = Number(fee.paid);
-        return {
-          fee,
-          traineeName: traineeNameById.get(fee.traineeId) ?? '—',
-          className: classNameById.get(fee.classId) ?? '—',
-          amount,
-          paid,
-          outstanding: Math.max(0, amount - paid),
-        };
-      }),
+      fees === null
+        ? null
+        : fees.map((fee) => {
+            const amount = Number(fee.amount);
+            const paid = Number(fee.paid);
+            return {
+              fee,
+              traineeName: traineeNameById.get(fee.traineeId) ?? '—',
+              className: classNameById.get(fee.classId) ?? '—',
+              amount,
+              paid,
+              outstanding: Math.max(0, amount - paid),
+            };
+          }),
     [fees, traineeNameById, classNameById],
   );
 
-  const onDelete = async () => {
-    if (!pendingDelete) return;
-    setDelBusy(true);
-    try {
-      await Fees.remove(pendingDelete.id);
-      setPendingDelete(null);
-      reload();
-    } catch (e) {
-      setError(e instanceof ApiError ? e.message : t('common.errors.generic'));
-      setPendingDelete(null);
-    } finally {
-      setDelBusy(false);
-    }
+  const sortValues: Record<string, (row: FeeRowVM) => string | number> = useMemo(
+    () => ({
+      periodStart: (row) => row.fee.periodStart,
+      trainee: (row) => row.traineeName,
+      class: (row) => row.className,
+      amount: (row) => row.amount,
+      outstanding: (row) => row.outstanding,
+      status: (row) => row.fee.status,
+    }),
+    [],
+  );
+
+  // Client-side filter + sort over the current server page (parity with the
+  // removed react-table setup: includesString across the same accessor values).
+  const displayed: FeeRowVM[] | null = useMemo(() => {
+    if (data === null) return null;
+    const q = globalFilter.toLowerCase();
+    const filtered = q
+      ? data.filter((row) =>
+          Object.values(sortValues).some((get) => String(get(row)).toLowerCase().includes(q)),
+        )
+      : data;
+    const get = sortValues[sort.key];
+    if (!get) return filtered;
+    const sorted = [...filtered].sort((a, b) => {
+      const va = get(a);
+      const vb = get(b);
+      const cmp =
+        typeof va === 'number' && typeof vb === 'number'
+          ? va - vb
+          : String(va).localeCompare(String(vb));
+      return sort.desc ? -cmp : cmp;
+    });
+    return sorted;
+  }, [data, globalFilter, sort, sortValues]);
+
+  const onSortToggle = (key: string) => {
+    setSort((prev) =>
+      prev.key === key ? { key, desc: !prev.desc } : { key, desc: DESC_FIRST.has(key) },
+    );
   };
 
   const feeStatusVariant = (status: FeeStatus): 'success' | 'warning' | 'secondary' => {
@@ -133,92 +202,56 @@ export default function FeesListPage() {
     return 'secondary';
   };
 
-  const columns = useMemo<ColumnDef<FeeRowVM>[]>(
-    () => [
-      {
-        id: 'periodStart',
-        accessorFn: (row) => row.fee.periodStart,
-        header: t('fees.fields.period'),
-        cell: ({ row }) => formatPeriod(row.original.fee),
-      },
-      {
-        id: 'trainee',
-        accessorKey: 'traineeName',
-        header: t('fees.fields.trainee'),
-        filterFn: 'includesString',
-      },
-      {
-        id: 'class',
-        accessorKey: 'className',
-        header: t('fees.fields.class'),
-        filterFn: 'includesString',
-      },
-      {
-        id: 'amount',
-        accessorKey: 'amount',
-        header: t('fees.fields.amount'),
-        cell: ({ row }) => `${row.original.amount.toFixed(2)} ${t('fees.currency')}`,
-      },
-      {
-        id: 'outstanding',
-        accessorKey: 'outstanding',
-        header: t('fees.fields.outstanding'),
-        cell: ({ row }) => {
-          const o = row.original.outstanding;
-          return (
-            <span className={cn(o > 0 ? 'font-medium text-warning-foreground dark:text-warning' : 'text-muted-foreground')}>
-              {o.toFixed(2)} {t('fees.currency')}
-            </span>
-          );
-        },
-      },
-      {
-        id: 'status',
-        accessorFn: (row) => row.fee.status,
-        header: t('fees.fields.status'),
-        cell: ({ row }) => {
-          const status = row.original.fee.status;
-          return <Badge variant={feeStatusVariant(status)}>{t(`fees.status.${status}`)}</Badge>;
-        },
-      },
-      ...(admin
-        ? [
-            {
-              id: 'actions',
-              header: '',
-              cell: ({ row }) => (
-                <div className="flex justify-end gap-1">
-                  <Button asChild variant="ghost" size="sm">
-                    <Link href={`/fees/${row.original.fee.id}`}>{t('common.edit')}</Link>
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="text-destructive hover:bg-destructive/10 hover:text-destructive"
-                    onClick={() => setPendingDelete(row.original.fee)}
-                  >
-                    {t('common.delete')}
-                  </Button>
-                </div>
-              ),
-            } satisfies ColumnDef<FeeRowVM>,
-          ]
-        : []),
-    ],
-    [t, classNameById, traineeNameById, admin],
-  );
-
-  const table = useReactTable({
-    data,
-    columns,
-    state: { sorting, globalFilter },
-    onSortingChange: setSorting,
-    onGlobalFilterChange: setGlobalFilter,
-    globalFilterFn: 'includesString',
-    getCoreRowModel: getCoreRowModel(),
-    getSortedRowModel: getSortedRowModel(),
-    getFilteredRowModel: getFilteredRowModel(),
-  });
+  const columns: DataTableColumn<FeeRowVM>[] = [
+    {
+      key: 'periodStart',
+      header: t('fees.fields.period'),
+      cell: (row) => formatPeriod(row.fee),
+      sortValue: sortValues.periodStart,
+    },
+    {
+      key: 'trainee',
+      header: t('fees.fields.trainee'),
+      cell: (row) => row.traineeName,
+      sortValue: sortValues.trainee,
+    },
+    {
+      key: 'class',
+      header: t('fees.fields.class'),
+      cell: (row) => row.className,
+      sortValue: sortValues.class,
+    },
+    {
+      key: 'amount',
+      header: t('fees.fields.amount'),
+      cell: (row) => formatMoney(row.amount, t('fees.currency')),
+      sortValue: sortValues.amount,
+    },
+    {
+      key: 'outstanding',
+      header: t('fees.fields.outstanding'),
+      cell: (row) => (
+        <span
+          className={cn(
+            row.outstanding > 0
+              ? 'font-medium text-warning-foreground dark:text-warning'
+              : 'text-muted-foreground',
+          )}
+        >
+          {formatMoney(row.outstanding, t('fees.currency'))}
+        </span>
+      ),
+      sortValue: sortValues.outstanding,
+    },
+    {
+      key: 'status',
+      header: t('fees.fields.status'),
+      cell: (row) => (
+        <Badge variant={feeStatusVariant(row.fee.status)}>{t(`fees.status.${row.fee.status}`)}</Badge>
+      ),
+      sortValue: sortValues.status,
+    },
+  ];
 
   return (
     <div className="space-y-6">
@@ -245,49 +278,55 @@ export default function FeesListPage() {
 
       {admin ? (
         <div className="grid gap-4 md:grid-cols-2">
-          <GenerateMonthlyCard onGenerated={reload} classes={classes} />
-          <GenerateSessionCard onGenerated={reload} classes={classes} />
+          <GenerateMonthlyCard onGenerated={refreshAll} classes={classes} />
+          <GenerateSessionCard onGenerated={refreshAll} classes={classes} />
         </div>
       ) : null}
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">{t('fees.filters.status')}</CardTitle>
+          <CardTitle className="text-base">{t('fees.filters.title')}</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="grid gap-4 md:grid-cols-4">
             <div className="space-y-1.5">
               <Label htmlFor="status">{t('fees.filters.status')}</Label>
-              <select
+              <NativeSelect
                 id="status"
                 value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value as FeeStatus | '')}
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                onChange={(e) => { setStatusFilter(e.target.value as FeeStatusFilter | ''); setPage(1); }}
               >
                 <option value="">{t('fees.filters.all')}</option>
+                <option value="OUTSTANDING">{t('fees.filters.outstanding')}</option>
                 {STATUSES.map((s) => (
                   <option key={s} value={s}>
                     {t(`fees.status.${s}`)}
                   </option>
                 ))}
-              </select>
+              </NativeSelect>
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="periodFrom">{t('fees.filters.periodFrom')}</Label>
-              <Input
-                id="periodFrom"
-                type="date"
-                value={periodFrom}
-                onChange={(e) => setPeriodFrom(e.target.value)}
-              />
+              <Label htmlFor="classFilter">{t('fees.filters.class')}</Label>
+              <NativeSelect
+                id="classFilter"
+                value={classFilter}
+                onChange={(e) => { setClassFilter(e.target.value); setPage(1); }}
+              >
+                <option value="">{t('fees.filters.all')}</option>
+                {classes.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </NativeSelect>
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="periodTo">{t('fees.filters.periodTo')}</Label>
+              <Label htmlFor="month">{t('fees.filters.month')}</Label>
               <Input
-                id="periodTo"
-                type="date"
-                value={periodTo}
-                onChange={(e) => setPeriodTo(e.target.value)}
+                id="month"
+                type="month"
+                value={month}
+                onChange={(e) => { setMonth(e.target.value); setPage(1); }}
               />
             </div>
             <div className="space-y-1.5">
@@ -303,76 +342,80 @@ export default function FeesListPage() {
         </CardContent>
       </Card>
 
-      <div className="overflow-hidden rounded-lg border bg-card">
-        <table className="w-full text-sm">
-          <thead className="bg-muted/50">
-            {table.getHeaderGroups().map((hg) => (
-              <tr key={hg.id}>
-                {hg.headers.map((h) => (
-                  <th
-                    key={h.id}
-                    className={cn(
-                      'p-3 text-left font-medium',
-                      h.column.getCanSort() && 'cursor-pointer select-none',
-                    )}
-                    onClick={h.column.getToggleSortingHandler()}
-                  >
-                    {flexRender(h.column.columnDef.header, h.getContext())}
-                    {h.column.getIsSorted() === 'asc'
-                      ? ' ▲'
-                      : h.column.getIsSorted() === 'desc'
-                        ? ' ▼'
-                        : null}
-                  </th>
-                ))}
-              </tr>
-            ))}
-          </thead>
-          <tbody>
-            {fees === null ? (
-              Array.from({ length: 3 }).map((_, i) => (
-                <tr key={`sk-${i}`} className="border-t">
-                  {Array.from({ length: columns.length }).map((__, j) => (
-                    <td key={j} className="p-3">
-                      <Skeleton className="h-4 w-24" />
-                    </td>
-                  ))}
-                </tr>
-              ))
-            ) : table.getRowModel().rows.length === 0 ? (
-              <tr>
-                <td colSpan={columns.length} className="p-10 text-center text-sm text-muted-foreground">
-                  {t('fees.empty')}
-                </td>
-              </tr>
-            ) : (
-              table.getRowModel().rows.map((row) => (
-                <tr key={row.id} className="border-t transition-colors hover:bg-muted/30">
-                  {row.getVisibleCells().map((cell) => (
-                    <td key={cell.id} className="p-3">
-                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                    </td>
-                  ))}
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
+      {unbilled && unbilled.key === unbilledKey && unbilled.rows.length > 0 ? (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">
+              {t('fees.unbilled.title', { n: unbilled.rows.length })}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="mb-3 text-sm text-muted-foreground">{t('fees.unbilled.hint')}</p>
+            <ul className="space-y-1 text-sm">
+              {unbilled.rows.map((u) => (
+                <li key={`${u.classId}|${u.traineeId}`}>
+                  {`${u.traineeFirstName} ${u.traineeLastName} · ${u.className} · ${formatMoney(
+                    u.amount,
+                    t('fees.currency'),
+                  )}`}
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      ) : null}
 
-      <ConfirmDialog
-        open={pendingDelete !== null}
-        onOpenChange={(open) => {
-          if (!open) setPendingDelete(null);
+      <DataTable
+        columns={columns}
+        rows={displayed}
+        rowKey={(row) => row.fee.id}
+        emptyText={t('fees.empty')}
+        sort={sort}
+        onSortToggle={onSortToggle}
+        actions={
+          admin
+            ? (row) => (
+                <div className="flex justify-end gap-1">
+                  <Button asChild variant="ghost" size="sm">
+                    <Link href={`/fees/${row.fee.id}`}>{t('common.edit')}</Link>
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                    onClick={() => setPendingDelete(row.fee)}
+                  >
+                    {t('common.delete')}
+                  </Button>
+                </div>
+              )
+            : undefined
+        }
+        pageInfo={pageInfo}
+        onPageChange={setPage}
+        confirm={{
+          open: pendingDelete !== null,
+          onOpenChange: (open) => {
+            if (!open) setPendingDelete(null);
+          },
+          title: t('fees.deleteConfirm'),
+          confirmLabel: t('common.delete'),
+          cancelLabel: t('common.cancel'),
+          onConfirm: onDelete,
+          busy,
         }}
-        title={t('fees.deleteConfirm')}
-        confirmLabel={t('common.delete')}
-        cancelLabel={t('common.cancel')}
-        onConfirm={onDelete}
-        busy={delBusy}
       />
     </div>
   );
+}
+
+// "2026-06" -> the inclusive day bounds the API filters on. Returns undefined for the
+// empty value the month input starts at, which is what leaves the filter off.
+function monthBounds(month: string): { from: string; to: string } | undefined {
+  if (!/^\d{4}-\d{2}$/.test(month)) return undefined;
+  const [year, m] = month.split('-').map(Number);
+  const lastDay = new Date(Date.UTC(year!, m!, 0)).getUTCDate();
+  return { from: `${month}-01`, to: `${month}-${String(lastDay).padStart(2, '0')}` };
 }
 
 function formatPeriod(fee: FeeRow): string {
@@ -415,7 +458,7 @@ function GenerateMonthlyCard({
       setResult(r);
       onGenerated();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : t('common.errors.generic'));
+      setError(apiErrorMessage(err));
     } finally {
       setBusy(false);
     }
@@ -451,11 +494,10 @@ function GenerateMonthlyCard({
           </div>
           <div className="space-y-1.5 sm:col-span-2">
             <Label htmlFor="m-class">{t('fees.fields.class')}</Label>
-            <select
+            <NativeSelect
               id="m-class"
               value={classId}
               onChange={(e) => setClassId(e.target.value)}
-              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
             >
               <option value="">{t('fees.filters.all')}</option>
               {monthlyClasses.map((c) => (
@@ -463,7 +505,7 @@ function GenerateMonthlyCard({
                   {c.name}
                 </option>
               ))}
-            </select>
+            </NativeSelect>
           </div>
           <div className="flex items-end sm:col-span-2">
             <Button type="submit" disabled={busy || !periodStart || !periodEnd}>
@@ -516,7 +558,7 @@ function GenerateSessionCard({
       setResult(r);
       onGenerated();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : t('common.errors.generic'));
+      setError(apiErrorMessage(err));
     } finally {
       setBusy(false);
     }
@@ -552,11 +594,10 @@ function GenerateSessionCard({
           </div>
           <div className="space-y-1.5 sm:col-span-2">
             <Label htmlFor="s-class">{t('fees.fields.class')}</Label>
-            <select
+            <NativeSelect
               id="s-class"
               value={classId}
               onChange={(e) => setClassId(e.target.value)}
-              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
             >
               <option value="">{t('fees.filters.all')}</option>
               {sessionClasses.map((c) => (
@@ -564,7 +605,7 @@ function GenerateSessionCard({
                   {c.name}
                 </option>
               ))}
-            </select>
+            </NativeSelect>
           </div>
           <div className="flex items-end sm:col-span-2">
             <Button type="submit" disabled={busy || !from || !to}>

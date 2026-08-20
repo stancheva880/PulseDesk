@@ -4,13 +4,12 @@ import { Plus } from 'lucide-react';
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ConfirmDialog } from '@/components/confirm-dialog';
+import { DataTable, type DataTableColumn } from '@/components/data-table';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Skeleton } from '@/components/ui/skeleton';
-import { ApiError } from '@/lib/api';
+import { apiErrorMessage } from '@/lib/api';
 import {
   ClassSchedules,
   Classes,
@@ -19,16 +18,26 @@ import {
   type ClassSchedule,
   type GenerateSessionsResult,
   type Location,
+  listAll,
 } from '@/lib/api-resources';
+import { useCrudList } from '@/lib/use-crud-list';
+import { NativeSelect } from '@/components/ui/native-select';
 
 export default function SchedulesListPage() {
   const { t } = useTranslation();
-  const [rows, setRows] = useState<ClassSchedule[] | null>(null);
+  const {
+    rows,
+    setPage,
+    pageInfo,
+    error,
+    setError,
+    pendingDelete,
+    setPendingDelete,
+    busy,
+    onDelete,
+  } = useCrudList(ClassSchedules);
   const [classes, setClasses] = useState<ClassRow[]>([]);
   const [locations, setLocations] = useState<Location[]>([]);
-  const [error, setError] = useState<string | null>(null);
-  const [pendingDelete, setPendingDelete] = useState<ClassSchedule | null>(null);
-  const [delBusy, setDelBusy] = useState(false);
 
   // Generate-sessions form state.
   const [from, setFrom] = useState('');
@@ -38,41 +47,20 @@ export default function SchedulesListPage() {
   const [genError, setGenError] = useState<string | null>(null);
   const [genBusy, setGenBusy] = useState(false);
 
-  const reload = () => {
-    Promise.all([ClassSchedules.list(), Classes.list(), Locations.list()])
-      .then(([s, c, l]) => {
-        setRows(s);
+  useEffect(() => {
+    Promise.all([listAll(Classes.list), listAll(Locations.list)])
+      .then(([c, l]) => {
         setClasses(c);
         setLocations(l);
       })
-      .catch((e: unknown) => setError(e instanceof Error ? e.message : 'load failed'));
-  };
+      .catch((e: unknown) => setError(apiErrorMessage(e)));
+  }, [setError]);
 
-  useEffect(reload, []);
-
-  const classNameById = useMemo(
-    () => new Map(classes.map((c) => [c.id, c.name])),
-    [classes],
-  );
+  const classNameById = useMemo(() => new Map(classes.map((c) => [c.id, c.name])), [classes]);
   const locationNameById = useMemo(
     () => new Map(locations.map((l) => [l.id, l.name])),
     [locations],
   );
-
-  const onDelete = async () => {
-    if (!pendingDelete) return;
-    setDelBusy(true);
-    try {
-      await ClassSchedules.remove(pendingDelete.id);
-      setPendingDelete(null);
-      reload();
-    } catch (e) {
-      setError(e instanceof ApiError ? e.message : t('common.errors.generic'));
-      setPendingDelete(null);
-    } finally {
-      setDelBusy(false);
-    }
-  };
 
   const onGenerate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -91,11 +79,48 @@ export default function SchedulesListPage() {
       });
       setGenResult(result);
     } catch (err) {
-      setGenError(err instanceof ApiError ? err.message : t('common.errors.generic'));
+      setGenError(apiErrorMessage(err));
     } finally {
       setGenBusy(false);
     }
   };
+
+  const columns: DataTableColumn<ClassSchedule>[] = [
+    {
+      key: 'class',
+      header: t('schedules.fields.class'),
+      cell: (s) => classNameById.get(s.classId) ?? '—',
+      cellClassName: 'font-medium',
+      skeleton: 'h-4 w-32',
+    },
+    {
+      key: 'location',
+      header: t('schedules.fields.location'),
+      cell: (s) => locationNameById.get(s.locationId) ?? '—',
+      cellClassName: 'text-muted-foreground',
+      skeleton: 'h-4 w-24',
+    },
+    {
+      key: 'dayOfWeek',
+      header: t('schedules.fields.dayOfWeek'),
+      cell: (s) => t(`schedules.days.${s.dayOfWeek}`),
+      skeleton: 'h-4 w-20',
+    },
+    {
+      key: 'startTime',
+      header: t('schedules.fields.startTime'),
+      cell: (s) => s.startTime,
+      cellClassName: 'text-muted-foreground',
+      skeleton: 'h-4 w-12',
+    },
+    {
+      key: 'endTime',
+      header: t('schedules.fields.endTime'),
+      cell: (s) => s.endTime,
+      cellClassName: 'text-muted-foreground',
+      skeleton: 'h-4 w-12',
+    },
+  ];
 
   return (
     <div className="space-y-6">
@@ -147,9 +172,8 @@ export default function SchedulesListPage() {
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="classFilter">{t('schedules.fields.classFilter')}</Label>
-              <select
+              <NativeSelect
                 id="classFilter"
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                 value={classFilter}
                 onChange={(e) => setClassFilter(e.target.value)}
               >
@@ -159,7 +183,7 @@ export default function SchedulesListPage() {
                     {c.name}
                   </option>
                 ))}
-              </select>
+              </NativeSelect>
             </div>
             <div className="flex items-end">
               <Button type="submit" disabled={genBusy || !from || !to}>
@@ -176,76 +200,39 @@ export default function SchedulesListPage() {
         </CardContent>
       </Card>
 
-      <div className="overflow-hidden rounded-lg border bg-card">
-        <table className="w-full text-sm">
-          <thead className="bg-muted/50">
-            <tr>
-              <th className="p-3 text-left font-medium text-muted-foreground">{t('schedules.fields.class')}</th>
-              <th className="p-3 text-left font-medium text-muted-foreground">{t('schedules.fields.location')}</th>
-              <th className="p-3 text-left font-medium text-muted-foreground">{t('schedules.fields.dayOfWeek')}</th>
-              <th className="p-3 text-left font-medium text-muted-foreground">{t('schedules.fields.startTime')}</th>
-              <th className="p-3 text-left font-medium text-muted-foreground">{t('schedules.fields.endTime')}</th>
-              <th className="w-1 p-3"></th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows === null ? (
-              Array.from({ length: 3 }).map((_, i) => (
-                <tr key={`sk-${i}`} className="border-t">
-                  <td className="p-3"><Skeleton className="h-4 w-32" /></td>
-                  <td className="p-3"><Skeleton className="h-4 w-24" /></td>
-                  <td className="p-3"><Skeleton className="h-4 w-20" /></td>
-                  <td className="p-3"><Skeleton className="h-4 w-12" /></td>
-                  <td className="p-3"><Skeleton className="h-4 w-12" /></td>
-                  <td className="p-3"></td>
-                </tr>
-              ))
-            ) : rows.length === 0 ? (
-              <tr>
-                <td colSpan={6} className="p-10 text-center text-sm text-muted-foreground">
-                  {t('schedules.empty')}
-                </td>
-              </tr>
-            ) : (
-              rows.map((s) => (
-                <tr key={s.id} className="border-t transition-colors hover:bg-muted/30">
-                  <td className="p-3 font-medium">{classNameById.get(s.classId) ?? '—'}</td>
-                  <td className="p-3 text-muted-foreground">
-                    {locationNameById.get(s.locationId) ?? '—'}
-                  </td>
-                  <td className="p-3">{t(`schedules.days.${s.dayOfWeek}`)}</td>
-                  <td className="p-3 text-muted-foreground">{s.startTime}</td>
-                  <td className="p-3 text-muted-foreground">{s.endTime}</td>
-                  <td className="whitespace-nowrap p-3 text-right">
-                    <Button asChild variant="ghost" size="sm">
-                      <Link href={`/schedules/${s.id}/edit`}>{t('common.edit')}</Link>
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="ml-1 text-destructive hover:bg-destructive/10 hover:text-destructive"
-                      onClick={() => setPendingDelete(s)}
-                    >
-                      {t('common.delete')}
-                    </Button>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
-
-      <ConfirmDialog
-        open={pendingDelete !== null}
-        onOpenChange={(open) => {
-          if (!open) setPendingDelete(null);
+      <DataTable
+        columns={columns}
+        rows={rows}
+        rowKey={(s) => s.id}
+        emptyText={t('schedules.empty')}
+        actions={(s) => (
+          <>
+            <Button asChild variant="ghost" size="sm">
+              <Link href={`/schedules/${s.id}/edit`}>{t('common.edit')}</Link>
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="ml-1 text-destructive hover:bg-destructive/10 hover:text-destructive"
+              onClick={() => setPendingDelete(s)}
+            >
+              {t('common.delete')}
+            </Button>
+          </>
+        )}
+        pageInfo={pageInfo}
+        onPageChange={setPage}
+        confirm={{
+          open: pendingDelete !== null,
+          onOpenChange: (open) => {
+            if (!open) setPendingDelete(null);
+          },
+          title: t('schedules.deleteConfirm'),
+          confirmLabel: t('common.delete'),
+          cancelLabel: t('common.cancel'),
+          onConfirm: onDelete,
+          busy,
         }}
-        title={t('schedules.deleteConfirm')}
-        confirmLabel={t('common.delete')}
-        cancelLabel={t('common.cancel')}
-        onConfirm={onDelete}
-        busy={delBusy}
       />
     </div>
   );

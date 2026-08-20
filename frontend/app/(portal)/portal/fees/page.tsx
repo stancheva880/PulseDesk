@@ -4,7 +4,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Fees, type CustomerFeeEntry } from '@/lib/api-resources';
-import { cn } from '@/lib/utils';
+import { cn, formatMoney } from '@/lib/utils';
+import { apiErrorMessage } from '@/lib/api';
 
 interface GroupedFees {
   traineeId: string;
@@ -20,7 +21,7 @@ export default function PortalFeesPage() {
   useEffect(() => {
     Fees.myFees()
       .then(setEntries)
-      .catch((e: unknown) => setError(e instanceof Error ? e.message : 'load failed'));
+      .catch((e: unknown) => setError(apiErrorMessage(e)));
   }, []);
 
   // Group by trainee so a parent with multiple kids gets a clean per-trainee section.
@@ -105,13 +106,13 @@ function FeeCard({ fee }: { fee: CustomerFeeEntry }) {
             <div>
               <dt className="text-xs text-muted-foreground">{t('fees.fields.amount')}</dt>
               <dd className="font-medium">
-                {amount.toFixed(2)} {t('fees.currency')}
+                {formatMoney(amount, t('fees.currency'))}
               </dd>
             </div>
             <div>
               <dt className="text-xs text-muted-foreground">{t('portal.paid')}</dt>
               <dd className="font-medium">
-                {paid.toFixed(2)} {t('fees.currency')}
+                {formatMoney(paid, t('fees.currency'))}
               </dd>
             </div>
             <div>
@@ -122,7 +123,7 @@ function FeeCard({ fee }: { fee: CustomerFeeEntry }) {
                   outstanding > 0 ? 'text-amber-700' : 'text-muted-foreground',
                 )}
               >
-                {outstanding.toFixed(2)} {t('fees.currency')}
+                {formatMoney(outstanding, t('fees.currency'))}
               </dd>
             </div>
           </dl>
@@ -142,7 +143,7 @@ function FeeCard({ fee }: { fee: CustomerFeeEntry }) {
                       {p.method ? ` · ${p.method}` : ''}
                     </span>
                     <span className="font-medium">
-                      {Number(p.amount).toFixed(2)} {t('fees.currency')}
+                      {formatMoney(p.amount, t('fees.currency'))}
                     </span>
                   </li>
                 ))}

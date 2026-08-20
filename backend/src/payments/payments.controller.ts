@@ -8,20 +8,25 @@ import {
   Param,
   Post,
 } from '@nestjs/common';
+import { ApiBearerAuth } from '@nestjs/swagger';
 import { UserRole } from '@prisma/client';
 import { CurrentUser } from '@/auth/decorators/current-user.decorator';
 import { Roles } from '@/auth/decorators/roles.decorator';
 import { TenantId } from '@/auth/decorators/tenant-id.decorator';
 import type { AuthenticatedUser } from '@/auth/types/jwt-payload';
+import { NoContent, ResponseSchema } from '@/common/response-schema';
 import { CreatePaymentDto } from './dto/create-payment.dto';
+import { PaymentListSchema, PaymentSchema } from './payments.schema';
 import { PaymentsService } from './payments.service';
 
+@ApiBearerAuth()
 @Controller('fees/:feeId/payments')
 @Roles(UserRole.ADMIN, UserRole.EMPLOYEE)
 export class PaymentsController {
   constructor(private readonly payments: PaymentsService) {}
 
   @Get()
+  @ResponseSchema('PaymentList', PaymentListSchema)
   list(
     @TenantId() tenantId: string,
     @CurrentUser() user: AuthenticatedUser,
@@ -32,6 +37,7 @@ export class PaymentsController {
 
   @Post()
   @Roles(UserRole.ADMIN)
+  @ResponseSchema('Payment', PaymentSchema)
   record(
     @TenantId() tenantId: string,
     @Param('feeId') feeId: string,
@@ -44,6 +50,7 @@ export class PaymentsController {
   @Delete(':id')
   @Roles(UserRole.ADMIN)
   @HttpCode(HttpStatus.NO_CONTENT)
+  @ResponseSchema('PaymentNoContent', NoContent)
   async remove(
     @TenantId() tenantId: string,
     @CurrentUser() user: AuthenticatedUser,

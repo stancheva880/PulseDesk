@@ -8,12 +8,14 @@ import {
 } from '@nestjs/common';
 import type { Request, Response } from 'express';
 
-interface SanitizedErrorResponse {
-  statusCode: number;
-  message: string;
-  error: string;
-  path: string;
-  timestamp: string;
+// What a throw site adds when the message is one a user can act on, so the client can
+// show it in the user's language: `throw new BadRequestException({ message, code, params })`.
+// `error` cannot serve for this — it is the Nest class name, so every Conflict in the app
+// collapses to the same value. `message` stays English and is the client's fallback for a
+// code its bundle has no key for, which is what lets codes be added a few at a time.
+interface CodedResponse {
+  code?: string;
+  params?: Record<string, string | number>;
 }
 
 @Catch()
@@ -25,17 +27,19 @@ export class AllExceptionsFilter implements ExceptionFilter {
     const response = ctx.getResponse<Response>();
     const request = ctx.getRequest<Request>();
 
-    const { statusCode, message, error } = this.classify(exception);
+    const { statusCode, message, error, code, params } = this.classify(exception);
 
     if (statusCode >= HttpStatus.INTERNAL_SERVER_ERROR) {
       const stack = exception instanceof Error ? exception.stack : String(exception);
       this.logger.error(`${request.method} ${request.url} -> ${statusCode}: ${message}`, stack);
     }
 
-    const body: SanitizedErrorResponse = {
+    const body = {
       statusCode,
       message,
       error,
+      ...(code ? { code } : {}),
+      ...(params ? { params } : {}),
       path: request.url,
       timestamp: new Date().toISOString(),
     };
@@ -43,13 +47,17 @@ export class AllExceptionsFilter implements ExceptionFilter {
     response.status(statusCode).json(body);
   }
 
-  private classify(exception: unknown): { statusCode: number; message: string; error: string } {
+  private classify(exception: unknown): {
+    statusCode: number;
+    message: string;
+    error: string;
+  } & CodedResponse {
     if (exception instanceof HttpException) {
       const statusCode = exception.getStatus();
       const res = exception.getResponse();
       const error = exception.name.replace(/Exception$/, '');
       const message = this.extractMessage(res) ?? exception.message;
-      return { statusCode, message, error };
+      return { statusCode, message, error, ...this.extractCode(res) };
     }
     return {
       statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
@@ -66,5 +74,14 @@ export class AllExceptionsFilter implements ExceptionFilter {
       if (Array.isArray(value)) return value.join('; ');
     }
     return undefined;
+  }
+
+  private extractCode(res: unknown): CodedResponse {
+    if (!res || typeof res !== 'object') return {};
+    const { code, params } = res as CodedResponse;
+    return {
+      ...(typeof code === 'string' ? { code } : {}),
+      ...(params && typeof params === 'object' ? { params } : {}),
+    };
   }
 }

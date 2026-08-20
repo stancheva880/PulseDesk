@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
+import { endOfMonth, startOfMonth } from '@/common/dates';
 import { Prisma } from '@prisma/client';
 import { LocationScopeService } from '@/auth/scope/location-scope.service';
 import type { AuthenticatedUser } from '@/auth/types/jwt-payload';
@@ -33,7 +34,7 @@ export class DashboardService {
   async getFeesSummary(
     tenantId: string,
     filters: FeesSummaryFilters,
-    user?: AuthenticatedUser,
+    user: AuthenticatedUser,
   ): Promise<FeesSummaryEntry[]> {
     const { from, to } = resolveAndValidateRange(filters);
     const classFilter = await this.classScopeFilter(tenantId, user);
@@ -73,7 +74,7 @@ export class DashboardService {
   async getCashflowSummary(
     tenantId: string,
     filters: FeesSummaryFilters,
-    user?: AuthenticatedUser,
+    user: AuthenticatedUser,
   ): Promise<CashflowSummaryEntry[]> {
     const { from, to } = resolveAndValidateRange(filters);
     const classFilter = await this.classScopeFilter(tenantId, user);
@@ -114,48 +115,64 @@ export class DashboardService {
   }
 
   // Returns a Prisma where fragment that scopes Fee queries to the user's accessible
-  // classes (via class.locations). SUPER_ADMIN and missing user → no constraint.
+  // classes (via class.locations). SUPER_ADMIN → no constraint.
   private async classScopeFilter(
     tenantId: string,
-    user?: AuthenticatedUser,
+    user: AuthenticatedUser,
   ): Promise<{ class?: Prisma.ClassWhereInput }> {
-    if (!user) return {};
-    const allowedIds = await this.scope.getAccessibleLocationIds(user, tenantId);
-    if (allowedIds === null) return {};
-    return { class: { locations: { some: { id: { in: allowedIds } } } } };
+    const scoped = await this.scope.locationsWhere(user, tenantId);
+    return scoped.locations ? { class: scoped } : {};
   }
 }
 
+// The result is one entry per month in [from, to], so an unbounded range is a denial of
+// service on the client: an open `to` used to reach year 9999 (~96k entries, ~4.6 MB)
+// and froze the browser. Both ends are bounded and the span is capped.
+const MAX_MONTHS = 120;
+const DEFAULT_MONTHS = 6;
+
 function resolveAndValidateRange(filters: FeesSummaryFilters): { from: Date; to: Date } {
-  const { from, to } = resolveRange(filters);
+  const now = new Date();
+  const fromRaw = filters.from ? new Date(filters.from) : null;
+  const toRaw = filters.to ? new Date(filters.to) : null;
+  if (
+    (fromRaw && Number.isNaN(fromRaw.getTime())) ||
+    (toRaw && Number.isNaN(toRaw.getTime()))
+  ) {
+    throw new BadRequestException('Invalid date in from/to');
+  }
+
+  // An omitted `to` means "until now" — unless `from` is in the future, where it means
+  // that single month. An omitted `from` means the default window back from `to`. With
+  // neither, this is the last 6 contiguous months ending in the current month.
+  const to = endOfMonth(
+    toRaw ?? (fromRaw && fromRaw.getTime() > now.getTime() ? fromRaw : now),
+  );
+  const from = startOfMonth(
+    fromRaw ??
+      new Date(Date.UTC(to.getUTCFullYear(), to.getUTCMonth() - (DEFAULT_MONTHS - 1), 1)),
+  );
+
+  // Compare month-rounded (same-month inverted inputs are fine).
   if (to.getTime() < from.getTime()) {
     throw new BadRequestException('"to" must be on or after "from"');
   }
+  if (monthSpan(from, to) > MAX_MONTHS) {
+    throw new BadRequestException(`Range too large: max ${MAX_MONTHS} months`);
+  }
   return { from, to };
 }
 
-function resolveRange(filters: FeesSummaryFilters): { from: Date; to: Date } {
-  if (filters.from || filters.to) {
-    const from = filters.from ? new Date(filters.from) : new Date(0);
-    const to = filters.to ? new Date(filters.to) : new Date('9999-12-31');
-    if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime())) {
-      throw new BadRequestException('Invalid date in from/to');
-    }
-    return { from: startOfMonth(from), to: endOfMonth(to) };
-  }
-  // Default: last 6 contiguous months ending in the current month.
-  const now = new Date();
-  const to = endOfMonth(now);
-  const from = startOfMonth(
-    new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 5, 1)),
+function monthSpan(from: Date, to: Date): number {
+  return (
+    (to.getUTCFullYear() - from.getUTCFullYear()) * 12 +
+    (to.getUTCMonth() - from.getUTCMonth()) +
+    1
   );
-  return { from, to };
 }
 
 function monthKey(d: Date): string {
-  const y = d.getUTCFullYear();
-  const m = String(d.getUTCMonth() + 1).padStart(2, '0');
-  return `${y}-${m}`;
+  return d.toISOString().slice(0, 7);
 }
 
 function enumerateMonths(from: Date, to: Date): string[] {
@@ -169,12 +186,6 @@ function enumerateMonths(from: Date, to: Date): string[] {
   return out;
 }
 
-function startOfMonth(d: Date): Date {
-  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1, 0, 0, 0, 0));
-}
-function endOfMonth(d: Date): Date {
-  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0, 23, 59, 59, 999));
-}
 function round2(n: number): number {
   return Math.round(n * 100) / 100;
 }

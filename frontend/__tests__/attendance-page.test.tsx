@@ -1,10 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import AttendancePage from '@/app/(dashboard)/sessions/[id]/attendance/page';
 import { AuthProvider } from '@/components/auth-provider';
 import { I18nProvider } from '@/components/i18n-provider';
-import { writeStoredTokens } from '@/lib/auth-storage';
+import { setAccessToken } from '@/lib/auth-storage';
 
 const back = vi.fn();
 vi.mock('next/navigation', () => ({
@@ -26,6 +26,10 @@ function jsonResponse(status: number, body: unknown): Response {
   });
 }
 
+function paged<T>(items: T[]): unknown {
+  return { items, page: 1, pageSize: 100, total: items.length, totalPages: 1 };
+}
+
 const SESSION_DETAIL = {
   id: 'session-1',
   tenantId: 't',
@@ -42,12 +46,14 @@ const SESSION_DETAIL = {
   trainers: [],
 };
 
+// Mirrors the endpoint: GET /sessions/:id/attendances includes the trainee on each row.
 const ATTENDANCE_ROWS = [
   {
     id: 'a1',
     tenantId: 't',
     sessionId: 'session-1',
     traineeId: 'tr1',
+    trainee: { id: 'tr1', firstName: 'Ada', lastName: 'Lovelace' },
     status: 'PENDING',
     traineeRsvp: null,
     notes: null,
@@ -63,6 +69,7 @@ const ATTENDANCE_ROWS = [
     tenantId: 't',
     sessionId: 'session-1',
     traineeId: 'tr2',
+    trainee: { id: 'tr2', firstName: 'Bob', lastName: 'Builder' },
     status: 'PENDING',
     traineeRsvp: 'CONFIRMED',
     notes: null,
@@ -119,10 +126,7 @@ function renderPage() {
 describe('AttendancePage — toggle group + Save All', () => {
   beforeEach(() => {
     const exp = Math.floor(Date.now() / 1000) + 600;
-    writeStoredTokens({
-      accessToken: buildJwt({ sub: 'u', email: 'admin@x', role: 'ADMIN', tenantId: 't', exp }),
-      refreshToken: 'R',
-    });
+    setAccessToken(buildJwt({ sub: 'u', email: 'admin@x', role: 'ADMIN', tenantId: 't', exp }));
     back.mockClear();
   });
 
@@ -137,11 +141,11 @@ describe('AttendancePage — toggle group + Save All', () => {
     });
   }
 
-  it('renders one row per attendance with the trainee name resolved from /trainees', async () => {
+  it('renders one row per attendance with the trainee name', async () => {
     mockFetch((url) => {
       if (url.endsWith('/sessions/session-1')) return jsonResponse(200, SESSION_DETAIL);
       if (url.endsWith('/sessions/session-1/attendances')) return jsonResponse(200, ATTENDANCE_ROWS);
-      if (url.endsWith('/trainees')) return jsonResponse(200, TRAINEES);
+      if (url.includes('/attendance-candidates')) return jsonResponse(200, paged([]));
       return jsonResponse(404, null);
     });
     renderPage();
@@ -149,12 +153,102 @@ describe('AttendancePage — toggle group + Save All', () => {
     expect(screen.getByText('Bob Builder')).toBeInTheDocument();
   });
 
+  // TKT-0068: the endpoint is unpaginated and stops at 100 rows, and Save All submits a snapshot
+  // of what was rendered. A full page therefore means "there may be attendees you cannot see and
+  // are about to leave unmarked", and saying so is the whole fix — the silence was the bug.
+  const fullPage = Array.from({ length: 100 }, (_, i) => ({
+    ...ATTENDANCE_ROWS[0],
+    id: `full-${i}`,
+    traineeId: `tr-full-${i}`,
+    trainee: { id: `tr-full-${i}`, firstName: 'Crowd', lastName: String(i) },
+  }));
+
+  it('warns that the list may be incomplete when the response fills the cap', async () => {
+    mockFetch((url) => {
+      if (url.endsWith('/sessions/session-1')) return jsonResponse(200, SESSION_DETAIL);
+      if (url.endsWith('/sessions/session-1/attendances')) return jsonResponse(200, fullPage);
+      if (url.includes('/attendance-candidates')) return jsonResponse(200, paged([]));
+      return jsonResponse(404, null);
+    });
+    renderPage();
+
+    expect(await screen.findByText(/непълен|incomplete/i)).toBeInTheDocument();
+    // The rows that did arrive are still markable — a warning, not a blocked screen.
+    expect(
+      screen.getByRole('button', { name: /Save all|Запазване на всички/ }),
+    ).toBeEnabled();
+  });
+
+  it('says nothing when the response is short of the cap', async () => {
+    mockFetch((url) => {
+      if (url.endsWith('/sessions/session-1')) return jsonResponse(200, SESSION_DETAIL);
+      if (url.endsWith('/sessions/session-1/attendances')) return jsonResponse(200, ATTENDANCE_ROWS);
+      if (url.includes('/attendance-candidates')) return jsonResponse(200, paged([]));
+      return jsonResponse(404, null);
+    });
+    renderPage();
+
+    expect(await screen.findByText('Ada Lovelace')).toBeInTheDocument();
+    expect(screen.queryByText(/непълен|incomplete/i)).not.toBeInTheDocument();
+  });
+
+  // A trainee on the session whom the picker would never mention — the candidates endpoint
+  // excludes anyone already attending. The name has to come off the attendance row itself.
+  const OVERFLOW_ROW = {
+    ...ATTENDANCE_ROWS[0],
+    id: 'a9',
+    traineeId: 'tr101',
+    trainee: { id: 'tr101', firstName: 'Zoe', lastName: 'Overflow' },
+  };
+
+  it('names a trainee the candidates endpoint would never return', async () => {
+    mockFetch((url) => {
+      if (url.endsWith('/sessions/session-1')) return jsonResponse(200, SESSION_DETAIL);
+      if (url.endsWith('/sessions/session-1/attendances')) {
+        return jsonResponse(200, [OVERFLOW_ROW]);
+      }
+      // tr101 is deliberately absent from this page.
+      if (url.includes('/attendance-candidates')) return jsonResponse(200, paged([]));
+      return jsonResponse(404, null);
+    });
+    renderPage();
+
+    expect(await screen.findByText('Zoe Overflow')).toBeInTheDocument();
+    expect(screen.queryByText('tr101')).not.toBeInTheDocument();
+  });
+
+  it('keeps trainee names after Save All refetches the rows', async () => {
+    const user = userEvent.setup();
+    let saved = false;
+    mockFetch((url, init) => {
+      if (url.endsWith('/sessions/session-1') && (init?.method ?? 'GET') === 'GET') {
+        return jsonResponse(200, SESSION_DETAIL);
+      }
+      if (url.endsWith('/sessions/session-1/attendances')) {
+        if (init?.method === 'PUT') {
+          saved = true;
+          return jsonResponse(200, { updated: 1 });
+        }
+        return jsonResponse(200, [OVERFLOW_ROW]);
+      }
+      if (url.includes('/attendance-candidates')) return jsonResponse(200, paged([]));
+      return jsonResponse(404, null);
+    });
+    renderPage();
+    await screen.findByText('Zoe Overflow');
+
+    await user.click(screen.getByRole('button', { name: /Save all|Запазване на всички/ }));
+
+    await waitFor(() => expect(saved).toBe(true));
+    expect(await screen.findByText('Zoe Overflow')).toBeInTheDocument();
+  });
+
   it('PENDING rows default to PRESENT and toggling switches aria-pressed', async () => {
     const user = userEvent.setup();
     mockFetch((url) => {
       if (url.endsWith('/sessions/session-1')) return jsonResponse(200, SESSION_DETAIL);
       if (url.endsWith('/sessions/session-1/attendances')) return jsonResponse(200, ATTENDANCE_ROWS);
-      if (url.endsWith('/trainees')) return jsonResponse(200, TRAINEES);
+      if (url.includes('/attendance-candidates')) return jsonResponse(200, paged([]));
       return jsonResponse(404, null);
     });
     renderPage();
@@ -183,7 +277,7 @@ describe('AttendancePage — toggle group + Save All', () => {
         }
         return jsonResponse(200, ATTENDANCE_ROWS);
       }
-      if (url.endsWith('/trainees')) return jsonResponse(200, TRAINEES);
+      if (url.includes('/attendance-candidates')) return jsonResponse(200, paged([]));
       return jsonResponse(404, null);
     });
     renderPage();
@@ -201,9 +295,16 @@ describe('AttendancePage — toggle group + Save All', () => {
   it('adds a trainee not yet on the session via POST and shows the new row', async () => {
     const user = userEvent.setup();
     const tr3 = { ...TRAINEES[0], id: 'tr3', firstName: 'Cleo', lastName: 'Newton' };
-    const newRow = { ...ATTENDANCE_ROWS[0], id: 'a3', traineeId: 'tr3', traineeRsvp: null };
+    const newRow = {
+      ...ATTENDANCE_ROWS[0],
+      id: 'a3',
+      traineeId: 'tr3',
+      trainee: { id: 'tr3', firstName: 'Cleo', lastName: 'Newton' },
+      traineeRsvp: null,
+    };
     let postBody: unknown = null;
     let added = false;
+    let candidatesUrl: string | null = null;
     mockFetch((url, init) => {
       if (url.endsWith('/sessions/session-1') && (init?.method ?? 'GET') === 'GET') {
         return jsonResponse(200, SESSION_DETAIL);
@@ -216,16 +317,24 @@ describe('AttendancePage — toggle group + Save All', () => {
         }
         return jsonResponse(200, added ? [...ATTENDANCE_ROWS, newRow] : ATTENDANCE_ROWS);
       }
-      if (url.endsWith('/trainees')) return jsonResponse(200, [...TRAINEES, tr3]);
+      if (url.includes('/attendance-candidates')) {
+        candidatesUrl = url;
+        // Modelled on the endpoint: tr1/tr2 are on the session, so only tr3 is ever a candidate,
+        // and once tr3 is added nobody is left.
+        return jsonResponse(200, paged(added ? [] : [tr3]));
+      }
       return jsonResponse(404, null);
     });
     renderPage();
     await screen.findByText('Ada Lovelace');
 
-    // tr1/tr2 are already on the session; only tr3 is offered as a candidate.
+    // The candidate set comes from the server now — the page no longer pages /trainees to work it
+    // out, so it must have asked the session's own endpoint for it.
+    expect(candidatesUrl).toContain('/sessions/session-1/attendance-candidates');
     const select = screen.getByRole('combobox', {
       name: /Add a trainee|Добавяне на трениращ/,
     });
+    expect(within(select).queryByRole('option', { name: 'Ada Lovelace' })).toBeNull();
     await user.selectOptions(select, 'tr3');
     await user.click(screen.getByRole('button', { name: /^Add$|^Добавяне$/ }));
 

@@ -4,13 +4,13 @@ import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { ApiError } from '@/lib/api';
+import { apiErrorMessage } from '@/lib/api';
 import {
   Attendances,
   type AttendanceRsvp,
   type CustomerSessionEntry,
 } from '@/lib/api-resources';
-import { cn } from '@/lib/utils';
+import { cn, formatDateTime } from '@/lib/utils';
 
 const RSVP_OPTIONS = ['CONFIRMED', 'DECLINED', 'RESCHEDULE_REQUESTED'] as const satisfies readonly AttendanceRsvp[];
 
@@ -19,12 +19,12 @@ export default function PortalSchedulePage() {
   const [entries, setEntries] = useState<CustomerSessionEntry[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [pendingId, setPendingId] = useState<string | null>(null);
-  const [flash, setFlash] = useState<{ type: 'ok' | 'err'; key: string } | null>(null);
+  const [flash, setFlash] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
 
   const reload = () => {
     Attendances.myUpcoming()
       .then(setEntries)
-      .catch((e: unknown) => setLoadError(e instanceof Error ? e.message : 'load failed'));
+      .catch((e: unknown) => setLoadError(apiErrorMessage(e)));
   };
 
   useEffect(reload, []);
@@ -49,22 +49,15 @@ export default function PortalSchedulePage() {
             )
           : prev,
       );
-      setFlash({ type: 'ok', key: 'rsvpSaved' });
-    } catch (e) {
-      setFlash({ type: 'err', key: e instanceof ApiError ? e.message : 'rsvpFailed' });
+      setFlash({ type: 'ok', text: t('portal.rsvpSaved') });
+    } catch {
+      // Deliberately generic, not apiErrorMessage: the portal is the one surface a customer
+      // sees, and the RSVP failures the server can answer with are staff-facing English.
+      setFlash({ type: 'err', text: t('portal.rsvpFailed') });
     } finally {
       setPendingId(null);
     }
   };
-
-  const formatTime = (iso: string): string =>
-    new Date(iso).toLocaleString(undefined, {
-      year: 'numeric',
-      month: 'short',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
@@ -75,10 +68,14 @@ export default function PortalSchedulePage() {
 
       {loadError ? <p className="text-sm text-destructive">{loadError}</p> : null}
 
-      {flash?.type === 'ok' ? (
-        <p className="text-sm text-green-700">{t(`portal.${flash.key}`)}</p>
-      ) : flash?.type === 'err' ? (
-        <p className="text-sm text-destructive">{t('portal.rsvpFailed')}</p>
+      {flash ? (
+        <p
+          className={
+            flash.type === 'ok' ? 'text-sm text-green-700' : 'text-sm text-destructive'
+          }
+        >
+          {flash.text}
+        </p>
       ) : null}
 
       {entries === null ? (
@@ -92,7 +89,7 @@ export default function PortalSchedulePage() {
               <Card>
                 <CardHeader>
                   <CardTitle className="text-base">
-                    {entry.class.name} · {formatTime(entry.startsAt)}
+                    {entry.class.name} · {formatDateTime(entry.startsAt)}
                   </CardTitle>
                   <p className="text-sm text-muted-foreground">{entry.location.name}</p>
                 </CardHeader>

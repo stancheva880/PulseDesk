@@ -4,8 +4,24 @@ import userEvent from '@testing-library/user-event';
 import LoginPage from '@/app/login/page';
 import { AuthProvider } from '@/components/auth-provider';
 import { I18nProvider } from '@/components/i18n-provider';
-import { ThemeProvider } from '@/components/theme-provider';
-import { clearStoredTokens, readStoredTokens } from '@/lib/auth-storage';
+import { ThemeProvider } from 'next-themes';
+import { clearStoredTokens, getAccessToken } from '@/lib/auth-storage';
+
+// TKT-0036: AuthProvider asks /auth/refresh on mount whether a session cookie exists, so
+// every render here makes one extra call. Route by URL instead of by mock ordering, and
+// give the bootstrap its honest anonymous answer.
+function mockLogin(body: unknown, status = 200) {
+  return vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
+    const url = String(input);
+    if (url.endsWith('/auth/refresh')) return Promise.resolve(jsonResponse(401, { message: 'No session' }));
+    if (url.endsWith('/auth/login')) return Promise.resolve(jsonResponse(status, body));
+    return Promise.resolve(jsonResponse(200, []));
+  });
+}
+
+function loginCalls(m: { mock: { calls: unknown[][] } }) {
+  return m.mock.calls.filter((c) => String(c[0]).endsWith('/auth/login'));
+}
 
 const replace = vi.fn();
 let searchParamsValue = '';
@@ -43,6 +59,7 @@ function renderLogin() {
 describe('LoginPage', () => {
   beforeEach(() => {
     clearStoredTokens();
+    window.localStorage.removeItem('pulsedesk.tenantContext');
     replace.mockClear();
     searchParamsValue = '';
   });
@@ -67,9 +84,7 @@ describe('LoginPage', () => {
       tenantId: 't1',
       exp,
     });
-    const fetchMock = vi
-      .spyOn(globalThis, 'fetch')
-      .mockResolvedValueOnce(jsonResponse(200, { accessToken, refreshToken: 'R' }));
+    const fetchMock = mockLogin({ accessToken });
 
     renderLogin();
     await user.type(await screen.findByLabelText(/Email|Имейл/), 'admin@demo.local');
@@ -77,20 +92,81 @@ describe('LoginPage', () => {
     await user.click(screen.getByRole('button', { name: /Sign in|Вход/ }));
 
     await vi.waitFor(() => expect(replace).toHaveBeenCalledWith('/dashboard'));
-    expect(fetchMock).toHaveBeenCalledOnce();
-    const [, init] = fetchMock.mock.calls[0]!;
+    // Scoped to /auth/login under the approved TCR: the mount-time bootstrap call means
+    // total request count is no longer a statement about login behaviour.
+    expect(loginCalls(fetchMock)).toHaveLength(1);
+    const [, init] = loginCalls(fetchMock)[0]!;
     expect(JSON.parse(String((init as RequestInit).body))).toEqual({
       email: 'admin@demo.local',
       password: 'pass1234',
     });
-    expect(readStoredTokens()).toEqual({ accessToken, refreshToken: 'R' });
+    // TKT-0036 (approved TCR): the refresh token arrives as an httpOnly Set-Cookie and
+    // is never visible to this code. Only the access token is held, and in memory.
+    expect(getAccessToken()).toBe(accessToken);
+    expect(window.localStorage.getItem('pulsedesk.refresh')).toBeNull();
+  });
+
+  it('single membership: writes the tenant context and redirects per the membership role (no picker)', async () => {
+    const user = userEvent.setup();
+    const exp = Math.floor(Date.now() / 1000) + 600;
+    const accessToken = buildJwt({
+      sub: 'u1',
+      email: 'coach@demo.local',
+      role: 'EMPLOYEE',
+      tenantId: 't1',
+      exp,
+    });
+    mockLogin({
+      accessToken,
+      memberships: [{ tenantId: 't1', tenantName: 'Club One', role: 'EMPLOYEE' }],
+    });
+
+    renderLogin();
+    await user.type(await screen.findByLabelText(/Email|Имейл/), 'coach@demo.local');
+    await user.type(screen.getByLabelText(/Password|Парола/), 'pass1234');
+    await user.click(screen.getByRole('button', { name: /Sign in|Вход/ }));
+
+    await vi.waitFor(() => expect(replace).toHaveBeenCalledWith('/dashboard'));
+    expect(window.localStorage.getItem('pulsedesk.tenantContext')).toBe('t1');
+    expect(screen.queryByText('Club One')).toBeNull();
+  });
+
+  it('multiple memberships: shows the tenant picker; picking writes the context and redirects per that role', async () => {
+    const user = userEvent.setup();
+    const exp = Math.floor(Date.now() / 1000) + 600;
+    const accessToken = buildJwt({
+      sub: 'u1',
+      email: 'owner@demo.local',
+      role: 'ADMIN',
+      tenantId: 't1',
+      exp,
+    });
+    mockLogin({
+      accessToken,
+      memberships: [
+        { tenantId: 't1', tenantName: 'Club One', role: 'ADMIN' },
+        { tenantId: 't2', tenantName: 'Club Two', role: 'CUSTOMER' },
+      ],
+    });
+
+    renderLogin();
+    await user.type(await screen.findByLabelText(/Email|Имейл/), 'owner@demo.local');
+    await user.type(screen.getByLabelText(/Password|Парола/), 'pass1234');
+    await user.click(screen.getByRole('button', { name: /Sign in|Вход/ }));
+
+    // Picker visible, no redirect yet.
+    expect(await screen.findByText('Club One')).toBeInTheDocument();
+    expect(screen.getByText('Club Two')).toBeInTheDocument();
+    expect(replace).not.toHaveBeenCalled();
+
+    await user.click(screen.getByText('Club Two'));
+    await vi.waitFor(() => expect(replace).toHaveBeenCalledWith('/portal/schedule'));
+    expect(window.localStorage.getItem('pulsedesk.tenantContext')).toBe('t2');
   });
 
   it('shows the invalid-credentials message on a 401 response', async () => {
     const user = userEvent.setup();
-    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
-      jsonResponse(401, { message: 'Invalid credentials' }),
-    );
+    mockLogin({ message: 'Invalid credentials' }, 401);
 
     renderLogin();
     await user.type(await screen.findByLabelText(/Email|Имейл/), 'admin@demo.local');
@@ -109,7 +185,7 @@ describe('LoginPage', () => {
     renderLogin();
     await user.click(await screen.findByRole('button', { name: /Sign in|Вход/ }));
 
-    expect(fetchMock).not.toHaveBeenCalled();
+    expect(loginCalls(fetchMock)).toHaveLength(0);
   });
 
   it('renders a "Forgot your password?" link to /forgot-password', async () => {

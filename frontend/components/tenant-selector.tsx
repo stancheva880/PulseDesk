@@ -1,77 +1,122 @@
 'use client';
 
+import { Plus } from 'lucide-react';
+import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { Button } from '@/components/ui/button';
+import { listClubs, type TenantSummary } from '@/lib/api-resources';
+import { landingRoute, readStoredMemberships } from '@/lib/auth-storage';
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import { ApiError } from '@/lib/api';
-import { Tenants, type TenantSummary } from '@/lib/api-resources';
-import {
+  hardNavigate,
   readTenantContext,
   subscribeTenantContext,
   writeTenantContext,
 } from '@/lib/tenant-context';
 import { useAuth } from './auth-provider';
 
-const NONE_VALUE = '__none__';
+const SELECT_CLASS =
+  'h-8 w-[200px] rounded-md border border-input bg-background px-2 text-sm';
 
-// Visible only to SUPER_ADMIN. Sets the X-Tenant-Id header on outgoing API calls so
-// tenant-scoped endpoints (locations, classes, etc.) operate on the chosen tenant.
-// On change, the page reloads so cached lists rebuild against the new tenant.
+// Sets the active tenant (X-Tenant-Id on outgoing API calls). SUPER_ADMIN picks from
+// all tenants; tenant users switch between their own memberships (hidden with fewer
+// than two). On change, a full reload rebuilds every cached list against the new tenant.
 export function TenantSelector() {
-  const { t } = useTranslation();
   const { user } = useAuth();
+  if (!user) return null;
+  return user.role === 'SUPER_ADMIN' ? <SuperAdminSelector /> : <MembershipSwitcher />;
+}
+
+function SuperAdminSelector() {
+  const { t } = useTranslation();
   const [tenants, setTenants] = useState<TenantSummary[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<string>(() => readTenantContext() ?? '');
 
+  // Shares one request with the active-tenant gate. A failure is reported by that gate's
+  // panel in <main>, so this control stays silent rather than repeating the message.
   useEffect(() => {
-    if (user?.role !== 'SUPER_ADMIN') return;
-    Tenants.list()
-      .then(setTenants)
-      .catch((e: unknown) => {
-        setError(e instanceof ApiError ? e.message : 'load failed');
-      });
-  }, [user]);
+    let cancelled = false;
+    void listClubs().then(
+      ({ clubs }) => {
+        if (!cancelled) setTenants(clubs);
+      },
+      () => {
+        /* the gate renders the failure */
+      },
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     return subscribeTenantContext((next) => setSelected(next ?? ''));
   }, []);
 
-  if (user?.role !== 'SUPER_ADMIN') return null;
-
   const onChange = (value: string) => {
-    const next = value === NONE_VALUE ? '' : value;
-    setSelected(next);
-    writeTenantContext(next || null);
+    setSelected(value);
+    writeTenantContext(value || null);
     if (typeof window !== 'undefined') window.location.reload();
   };
 
   return (
     <div className="flex items-center gap-2 text-sm">
-      <Select value={selected || NONE_VALUE} onValueChange={onChange}>
-        <SelectTrigger
-          aria-label={t('tenants.selector', 'Tenant')}
-          className="h-8 w-[200px] text-sm"
-        >
-          <SelectValue placeholder={t('tenants.none', '— select tenant —')} />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value={NONE_VALUE}>{t('tenants.none', '— select tenant —')}</SelectItem>
-          {tenants?.map((tenant) => (
-            <SelectItem key={tenant.id} value={tenant.id}>
-              {tenant.name}
-              <span className="ml-2 text-xs text-muted-foreground">{tenant.slug}</span>
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-      {error ? <span className="text-xs text-destructive">{error}</span> : null}
+      <select
+        aria-label={t('tenants.selector', 'Tenant')}
+        className={SELECT_CLASS}
+        value={selected}
+        onChange={(e) => onChange(e.target.value)}
+      >
+        <option value="">{t('tenants.none', '— select tenant —')}</option>
+        {tenants?.map((tenant) => (
+          <option key={tenant.id} value={tenant.id}>
+            {tenant.name} · {tenant.slug}
+          </option>
+        ))}
+      </select>
+      {/* Onboarding a club is SUPER_ADMIN-only, so its entry point lives with their selector. */}
+      <Button asChild variant="outline" size="sm" title={t('tenants.new')}>
+        <Link href="/tenants/new" aria-label={t('tenants.new')}>
+          <Plus className="h-4 w-4" />
+        </Link>
+      </Button>
     </div>
+  );
+}
+
+// Own memberships come from localStorage (persisted at login) — no API call, and
+// never a list of other tenants. Switching lands per the NEW membership's role.
+function MembershipSwitcher() {
+  const { t } = useTranslation();
+  const [memberships] = useState(readStoredMemberships);
+  const [selected, setSelected] = useState<string>(() => readTenantContext() ?? '');
+
+  useEffect(() => {
+    return subscribeTenantContext((next) => setSelected(next ?? ''));
+  }, []);
+
+  if (memberships.length < 2) return null;
+
+  const onChange = (tenantId: string) => {
+    const next = memberships.find((m) => m.tenantId === tenantId);
+    if (!next || tenantId === selected) return;
+    setSelected(tenantId);
+    writeTenantContext(tenantId);
+    hardNavigate(landingRoute(next.role));
+  };
+
+  return (
+    <select
+      aria-label={t('tenants.switcher', 'Club')}
+      className={SELECT_CLASS}
+      value={selected}
+      onChange={(e) => onChange(e.target.value)}
+    >
+      {memberships.map((m) => (
+        <option key={m.tenantId} value={m.tenantId}>
+          {m.tenantName} · {t(`login.pickTenant.roles.${m.role}`)}
+        </option>
+      ))}
+    </select>
   );
 }

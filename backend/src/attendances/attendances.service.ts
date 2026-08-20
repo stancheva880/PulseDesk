@@ -4,18 +4,32 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { AttendanceStatus, Prisma, UserRole, type Attendance } from '@prisma/client';
+import { AttendanceStatus, Prisma, UserRole, type Attendance, type Trainee } from '@prisma/client';
 import { LocationScopeService } from '@/auth/scope/location-scope.service';
 import type { AuthenticatedUser } from '@/auth/types/jwt-payload';
-import { DEFAULT_LIST_TAKE } from '@/common/dto/paginated-result';
+import { resolveActorSnapshot } from '@/common/actor-snapshot';
+import {
+  buildPaginatedResult,
+  normalizePagination,
+  DEFAULT_LIST_TAKE,
+  type PaginatedResult,
+  type PaginationInput,
+} from '@/common/dto/paginated-result';
 import { PrismaService } from '@/prisma/prisma.service';
 import type { AddAttendanceDto } from './dto/add-attendance.dto';
 import type { BulkMarkAttendancesDto } from './dto/bulk-mark-attendances.dto';
 import type { RsvpDto } from './dto/rsvp.dto';
 
-export interface BulkMarkResult {
-  updated: number;
-}
+// The row shape the attendance screen renders: the audit row plus the trainee's name, so
+// a client never has to resolve traineeId against a separately-paged trainee list.
+// Same select listCustomerSessions already uses for its nested attendances.
+const ATTENDANCE_WITH_TRAINEE = {
+  trainee: { select: { id: true, firstName: true, lastName: true } },
+} satisfies Prisma.AttendanceInclude;
+
+export type AttendanceWithTrainee = Prisma.AttendanceGetPayload<{
+  include: typeof ATTENDANCE_WITH_TRAINEE;
+}>;
 
 @Injectable()
 export class AttendancesService {
@@ -28,13 +42,56 @@ export class AttendancesService {
     tenantId: string,
     sessionId: string,
     viewer: AuthenticatedUser,
-  ): Promise<Attendance[]> {
+  ): Promise<AttendanceWithTrainee[]> {
     await this.assertSessionVisible(tenantId, sessionId, viewer);
     return this.prisma.attendance.findMany({
       where: { sessionId, tenantId },
+      include: ATTENDANCE_WITH_TRAINEE,
       orderBy: { traineeId: 'asc' },
       take: DEFAULT_LIST_TAKE,
     });
+  }
+
+  /**
+   * The trainees who may still be added to this session: active, in the tenant, inside the
+   * viewer's location scope, and without an attendance row for the session already.
+   *
+   * It exists because the screen could not ask for this. It used to page every trainee in the club
+   * on every session open and apply both filters in the browser (TKT-0038's deferred follow-up),
+   * and no `pageSize` could help, because neither filter existed server-side.
+   *
+   * Session visibility comes first and uses the same `assertSessionVisible` as every other route
+   * here, so a trainer cannot enumerate a club's trainees through a session they do not work — the
+   * 404 lands before any trainee is read. Trainee visibility then uses `locationsWhere`, the same
+   * helper `GET /trainees` uses, which is what keeps this endpoint from widening the scope
+   * TKT-0054 deliberately narrowed.
+   */
+  async listCandidates(
+    tenantId: string,
+    sessionId: string,
+    viewer: AuthenticatedUser,
+    pagination?: PaginationInput,
+  ): Promise<PaginatedResult<Trainee>> {
+    await this.assertSessionVisible(tenantId, sessionId, viewer);
+    const where: Prisma.TraineeWhereInput = {
+      tenantId,
+      isActive: true,
+      // The exclusion the client used to do with a Set of already-rendered rows.
+      attendances: { none: { sessionId } },
+      ...(await this.scope.locationsWhere(viewer, tenantId)),
+    };
+    const p = normalizePagination(pagination);
+    const [items, total] = await this.prisma.$transaction([
+      this.prisma.trainee.findMany({
+        where,
+        // Same order as GET /trainees, so paging is stable and the picker reads alphabetically.
+        orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }],
+        skip: p.skip,
+        take: p.take,
+      }),
+      this.prisma.trainee.count({ where }),
+    ]);
+    return buildPaginatedResult(items, total, p);
   }
 
   async bulkMark(
@@ -42,20 +99,11 @@ export class AttendancesService {
     sessionId: string,
     viewer: AuthenticatedUser,
     dto: BulkMarkAttendancesDto,
-  ): Promise<BulkMarkResult> {
+  ): Promise<{ updated: number }> {
     await this.assertSessionVisible(tenantId, sessionId, viewer);
 
     // Resolve audit-snapshot fields once per call (the marker user is the viewer).
-    const marker = await this.prisma.user.findUnique({
-      where: { id: viewer.id },
-      select: { email: true, firstName: true, lastName: true },
-    });
-    if (!marker) {
-      // Authenticated viewer must always exist; treat as 404 for the actor.
-      throw new NotFoundException('Marker user not found');
-    }
-    const nameSnapshot =
-      [marker.firstName, marker.lastName].filter(Boolean).join(' ').trim() || null;
+    const marker = await resolveActorSnapshot(this.prisma, viewer.id, 'Marker user not found');
     const markedAt = new Date();
 
     return this.prisma.$transaction(async (tx) => {
@@ -78,7 +126,7 @@ export class AttendancesService {
         markedAt,
         markedById: viewer.id,
         markedByEmailSnapshot: marker.email,
-        markedByNameSnapshot: nameSnapshot,
+        markedByNameSnapshot: marker.nameSnapshot,
       };
 
       // Partition the batch: items without notes can be coalesced by status into
@@ -138,7 +186,10 @@ export class AttendancesService {
       select: { id: true },
     });
     if (existing) {
-      throw new ConflictException('Trainee is already on this session');
+      throw new ConflictException({
+        message: 'Trainee is already on this session',
+        code: 'ATTENDANCE_TRAINEE_ALREADY_ON_SESSION',
+      });
     }
 
     return this.prisma.attendance.create({
@@ -180,17 +231,19 @@ export class AttendancesService {
       throw new ForbiddenException('You may only RSVP for your own trainees');
     }
 
-    const result = await this.prisma.attendance.updateMany({
-      where: { sessionId, tenantId, traineeId: dto.traineeId },
-      data: { traineeRsvp: dto.traineeRsvp },
-    });
-    if (result.count === 0) {
-      throw new NotFoundException('Attendance row not found for this session/trainee');
+    // The session was already tenant-checked above, so the compound unique is enough
+    // to scope the write. P2025 (no such row) keeps the 404 the old count check gave.
+    try {
+      return await this.prisma.attendance.update({
+        where: { sessionId_traineeId: { sessionId, traineeId: dto.traineeId } },
+        data: { traineeRsvp: dto.traineeRsvp },
+      });
+    } catch (e) {
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2025') {
+        throw new NotFoundException('Attendance row not found for this session/trainee');
+      }
+      throw e;
     }
-    const row = await this.prisma.attendance.findFirst({
-      where: { sessionId, tenantId, traineeId: dto.traineeId },
-    });
-    return row!;
   }
 
   async listCustomerSessions(tenantId: string, customerUserId: string) {
@@ -238,8 +291,7 @@ export class AttendancesService {
     if (viewer.role === UserRole.EMPLOYEE) {
       where.trainers = { some: { id: viewer.id } };
     } else {
-      const allowedIds = await this.scope.getAccessibleLocationIds(viewer, tenantId);
-      if (allowedIds !== null) where.locationId = { in: allowedIds };
+      Object.assign(where, await this.scope.locationWhere(viewer, tenantId));
     }
     const found = await this.prisma.session.count({ where });
     if (!found) throw new NotFoundException(`Session ${sessionId} not found`);

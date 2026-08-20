@@ -7,6 +7,7 @@ import { LocationScopeService } from '@/auth/scope/location-scope.service';
 import type { AuthenticatedUser } from '@/auth/types/jwt-payload';
 import { PrismaService } from '@/prisma/prisma.service';
 import { LocationsService } from './locations.service';
+import { createTestUser } from '@/test-utils/create-user';
 
 describe('LocationsService', () => {
   let service: LocationsService;
@@ -49,14 +50,12 @@ describe('LocationsService', () => {
   }
 
   async function newAdmin(tenantId: string, locationIds: string[] = []): Promise<AuthenticatedUser> {
-    const user = await prisma.user.create({
-      data: {
-        email: `${randomUUID()}@x.local`,
-        passwordHash: 'x',
-        role: UserRole.ADMIN,
-        tenantId,
-        locations: { connect: locationIds.map((id) => ({ id })) },
-      },
+    const user = await createTestUser(prisma, {
+      email: `${randomUUID()}@x.local`,
+      passwordHash: 'x',
+      role: UserRole.ADMIN,
+      tenantId,
+      locations: { connect: locationIds.map((id) => ({ id })) },
     });
     createdUserIds.push(user.id);
     return { id: user.id, email: user.email, role: UserRole.ADMIN, tenantId };
@@ -69,7 +68,9 @@ describe('LocationsService', () => {
       await service.create(t.id, { name: 'Gym' });
       await service.create(t.id, { name: 'Field' });
       const result = await service.list(t.id, SUPER);
-      expect(result.map((l) => l.name)).toEqual(['Field', 'Gym', 'Pool']);
+      expect(result.items.map((l) => l.name)).toEqual(['Field', 'Gym', 'Pool']);
+      expect(result.total).toBe(3);
+      expect(result.page).toBe(1);
     });
 
     it('does not return locations from other tenants', async () => {
@@ -78,7 +79,7 @@ describe('LocationsService', () => {
       await service.create(a.id, { name: 'A-Loc' });
       await service.create(b.id, { name: 'B-Loc' });
       const result = await service.list(a.id, SUPER);
-      expect(result.map((l) => l.name)).toEqual(['A-Loc']);
+      expect(result.items.map((l) => l.name)).toEqual(['A-Loc']);
     });
 
     it('returns only ADMIN-assigned locations for ADMIN', async () => {
@@ -88,15 +89,29 @@ describe('LocationsService', () => {
       await service.create(t.id, { name: 'Field' });
       const admin = await newAdmin(t.id, [gym.id, pool.id]);
       const result = await service.list(t.id, admin);
-      expect(result.map((l) => l.name)).toEqual(['Gym', 'Pool']);
+      expect(result.items.map((l) => l.name)).toEqual(['Gym', 'Pool']);
     });
 
-    it('returns [] for ADMIN with no assigned locations', async () => {
+    it('returns empty items for ADMIN with no assigned locations', async () => {
       const t = await newTenant();
       await service.create(t.id, { name: 'Gym' });
       const admin = await newAdmin(t.id, []);
       const result = await service.list(t.id, admin);
-      expect(result).toEqual([]);
+      expect(result.items).toEqual([]);
+      expect(result.total).toBe(0);
+    });
+
+    it('paginates: pageSize slices results and total counts all matches', async () => {
+      const t = await newTenant();
+      await service.create(t.id, { name: 'A' });
+      await service.create(t.id, { name: 'B' });
+      await service.create(t.id, { name: 'C' });
+      const page1 = await service.list(t.id, SUPER, { page: 1, pageSize: 2 });
+      expect(page1.items.map((l) => l.name)).toEqual(['A', 'B']);
+      expect(page1).toMatchObject({ page: 1, pageSize: 2, total: 3, totalPages: 2 });
+      const page2 = await service.list(t.id, SUPER, { page: 2, pageSize: 2 });
+      expect(page2.items.map((l) => l.name)).toEqual(['C']);
+      expect(page2).toMatchObject({ page: 2, pageSize: 2, total: 3, totalPages: 2 });
     });
   });
 

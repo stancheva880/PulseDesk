@@ -9,16 +9,14 @@ import { TenantSelector } from '@/components/tenant-selector';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Separator } from '@/components/ui/separator';
+
 
 interface TopbarProps {
   /** Optional left-side nav (used by the customer portal). */
   nav?: ReactNode;
-  /** Show the SUPER_ADMIN tenant selector (dashboard only). */
-  showTenantSelector?: boolean;
 }
 
-export function Topbar({ nav, showTenantSelector = false }: TopbarProps) {
+export function Topbar({ nav }: TopbarProps) {
   const { t } = useTranslation();
   const router = useRouter();
   const { user, logout } = useAuth();
@@ -31,12 +29,12 @@ export function Topbar({ nav, showTenantSelector = false }: TopbarProps) {
           <>
             <span className="hidden text-sm text-muted-foreground md:inline">{user.email}</span>
             <Badge variant="outline" className="hidden font-mono text-[10px] uppercase tracking-wide md:inline-flex">
-              {user.role}
+              {t(`login.pickTenant.roles.${user.role}`, user.role)}
             </Badge>
-            <Separator orientation="vertical" className="mx-1 hidden h-6 md:block" />
+            <span aria-hidden className="mx-1 hidden h-6 w-px bg-border md:block" />
           </>
         ) : null}
-        {showTenantSelector ? <TenantSelector /> : null}
+        <TenantSelector />
         <ThemeToggle />
         <LanguageSwitcher />
         {user ? (

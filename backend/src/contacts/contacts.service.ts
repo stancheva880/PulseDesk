@@ -17,7 +17,7 @@ export class ContactsService {
   async list(
     tenantId: string,
     traineeId: string,
-    user?: AuthenticatedUser,
+    user: AuthenticatedUser,
   ): Promise<ContactPerson[]> {
     await this.assertTraineeAccessible(tenantId, traineeId, user);
     return this.prisma.contactPerson.findMany({
@@ -31,7 +31,7 @@ export class ContactsService {
     tenantId: string,
     traineeId: string,
     id: string,
-    user?: AuthenticatedUser,
+    user: AuthenticatedUser,
   ): Promise<ContactPerson> {
     await this.assertTraineeAccessible(tenantId, traineeId, user);
     const contact = await this.prisma.contactPerson.findFirst({
@@ -45,7 +45,7 @@ export class ContactsService {
     tenantId: string,
     traineeId: string,
     dto: CreateContactDto,
-    user?: AuthenticatedUser,
+    user: AuthenticatedUser,
   ): Promise<ContactPerson> {
     await this.assertTraineeAccessible(tenantId, traineeId, user);
     return this.prisma.contactPerson.create({
@@ -67,7 +67,7 @@ export class ContactsService {
     traineeId: string,
     id: string,
     dto: UpdateContactDto,
-    user?: AuthenticatedUser,
+    user: AuthenticatedUser,
   ): Promise<ContactPerson> {
     await this.findById(tenantId, traineeId, id, user);
     const data: Prisma.ContactPersonUpdateInput = {};
@@ -84,7 +84,7 @@ export class ContactsService {
     tenantId: string,
     traineeId: string,
     id: string,
-    user?: AuthenticatedUser,
+    user: AuthenticatedUser,
   ): Promise<void> {
     await this.findById(tenantId, traineeId, id, user);
     await this.prisma.contactPerson.delete({ where: { id } });
@@ -93,16 +93,13 @@ export class ContactsService {
   private async assertTraineeAccessible(
     tenantId: string,
     traineeId: string,
-    user?: AuthenticatedUser,
+    user: AuthenticatedUser,
   ): Promise<void> {
-    const allowedIds = user ? await this.scope.getAccessibleLocationIds(user, tenantId) : null;
     const trainee = await this.prisma.trainee.findFirst({
       where: {
         id: traineeId,
         tenantId,
-        ...(allowedIds === null
-          ? {}
-          : { locations: { some: { id: { in: allowedIds } } } }),
+        ...(await this.scope.locationsWhere(user, tenantId)),
       },
       select: { id: true },
     });

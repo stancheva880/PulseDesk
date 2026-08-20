@@ -1,0 +1,98 @@
+name: Build & Publish
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: file:/tmp/pulsedesk-ci.db # throwaway SQLite for the backend test suite
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - name: Generate Prisma client
+        run: npx prisma generate # client needed by backend tsc + tests
+        working-directory: backend
+      - run: npm run typecheck
+      - run: npm run lint # backend eslint (+ security plugin); frontend eslint-config-next
+      - name: Apply migrations to the test database
+        run: npx prisma migrate deploy # same mechanism as the prod entrypoint
+        working-directory: backend
+      - run: npm run test # backend (real SQLite) + frontend (jsdom)
+      - name: Check the generated API contract is current
+        # Runs after `prisma migrate deploy`: gen:api boots the Nest app, which needs a
+        # migrated database. Both artifacts are generated and committed, so regenerating
+        # must be a no-op — a diff here means someone changed a route or a schema and did
+        # not run `gen:api` + `gen:types`. Scoped to the two artifacts so the earlier
+        # `eslint --fix` step cannot be misread as contract drift.
+        run: |
+          npm run gen:api --workspace backend
+          npm run gen:types --workspace frontend
+          git diff --exit-code -- backend/openapi.json frontend/lib/api-schema.d.ts
+
+  images:
+    needs: verify
+    # Build + publish images only when a v* tag is created (release event).
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write # push to GHCR
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: backend
+            dockerfile: backend/Dockerfile
+            image: pulsedesk-backend
+          - name: frontend
+            dockerfile: frontend/Dockerfile
+            image: pulsedesk-frontend
+            build_args: |
+              NEXT_PUBLIC_API_URL=${{ vars.NEXT_PUBLIC_API_URL || 'http://localhost:4000' }}
+              NEXT_PUBLIC_DEFAULT_LOCALE=${{ vars.NEXT_PUBLIC_DEFAULT_LOCALE || 'bg' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/${{ matrix.image }}
+          # latest=auto (default) also tags :latest for a valid semver tag.
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          target: prod
+          build-args: ${{ matrix.build_args }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

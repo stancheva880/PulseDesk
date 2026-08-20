@@ -1,0 +1,279 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Super Administrator — PulseDesk</title>
+    <link rel="stylesheet" href="../assets/docs.css" />
+  </head>
+  <body>
+    <nav class="topnav">
+      <a class="home" href="../index.html">PulseDesk</a>
+      <a href="basics.html">Getting started</a>
+      <a href="admin.html">Administrator</a>
+      <a href="trainer.html">Employee</a>
+      <a href="customer.html">Customer</a>
+      <span class="spacer"></span>
+      <a class="lang" href="../bg/super-admin.html">BG</a>
+    </nav>
+
+    <h1>Super Administrator</h1>
+    <p class="lead">
+      You have access to every club and the rights nobody else has: creating locations and changing
+      roles.
+    </p>
+    <p class="crumbs">
+      Read <a href="basics.html">Getting started</a> first. Day-to-day work inside one club is
+      described in <a href="admin.html">Administrator</a> — all of it applies to you as well.
+    </p>
+
+    <h2>Pick a club first</h2>
+    <p>
+      Data in the system belongs to clubs. So your first action after signing in is to pick a club
+      from the list in the top bar. Until you do, screens show
+      <span class="ui">No club selected</span> and invite you to select one. The first option in the
+      list reads <span class="ui">— select a club —</span>. This applies when at least one club
+      exists. If the system has no club yet, PulseDesk opens the new-club form instead — see story 2
+      below.
+    </p>
+    <p>
+      After you pick, every list is fetched again for that club. Switching club works the same way,
+      at any time.
+    </p>
+
+    <h2>What you see</h2>
+    <p>
+      You see every menu: <span class="ui">Dashboard</span>,
+      <span class="ui">Locations</span>, <span class="ui">Classes</span>,
+      <span class="ui">Schedules</span>, <span class="ui">Sessions</span>,
+      <span class="ui">Trainees</span>, <span class="ui">Fees</span> and
+      <span class="ui">Users</span> — with full rights in each of them, for the club you selected.
+      Location restrictions do not apply to you.
+    </p>
+
+    <h2>What you can do that an administrator cannot</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Action</th>
+          <th>Why it sits with you</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Create a club, with its first location and administrator</td>
+          <td>
+            A new club is a new customer of the system. You are the only role that works outside the
+            boundary of a single club.
+          </td>
+        </tr>
+        <tr>
+          <td>Create and edit locations</td>
+          <td>
+            Locations are the base that classes, schedules and location-based access all stand on,
+            so they are managed centrally.
+          </td>
+        </tr>
+        <tr>
+          <td>Change an existing user's role</td>
+          <td>Promoting someone to administrator grants full control of a club. That call is yours.</td>
+        </tr>
+        <tr>
+          <td>Create a user with the administrator or super administrator role</td>
+          <td>An administrator can only add employees and customers.</td>
+        </tr>
+        <tr>
+          <td>Delete an account outright</td>
+          <td>
+            An administrator only removes a person from their own club. Deleting the account itself
+            is yours.
+          </td>
+        </tr>
+        <tr>
+          <td>Work in any club</td>
+          <td>An administrator sees only the clubs they belong to.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="note">
+      <strong>You create a new club in the application.</strong>
+      A <span class="ui">+</span> button sits next to the club list in the top bar. It opens the
+      new-club form, which creates the club, its first location and its administrator in one step —
+      see story 2 below.
+    </div>
+
+    <div class="note">
+      <strong>On a new system the form opens by itself.</strong>
+      If no club exists yet, PulseDesk sends you to the new-club form directly after you sign in. You
+      do not press the <span class="ui">+</span> button. The menus do not open other screens until
+      the first club exists — they return you to the form. After you save the club, every screen
+      opens as usual.
+    </div>
+
+    <h2>Step by step</h2>
+
+    <div class="story">
+      <h3>1. As a super administrator I want to work in one specific club</h3>
+      <ol>
+        <li>Sign in.</li>
+        <li>Open the club list in the top bar.</li>
+        <li>Pick the club. Its short name is shown beside the name.</li>
+        <li>
+          The page reloads. From then on every create, edit and delete applies to that club.
+        </li>
+      </ol>
+      <div class="warn">
+        <strong>Check the selected club before you change anything.</strong>
+        The same screen looks identical for every club. The list in the top bar always shows which
+        club you are working in.
+      </div>
+    </div>
+
+    <div class="story">
+      <h3>2. As a super administrator I want to create a new club</h3>
+      <ol>
+        <li>
+          Press the <span class="ui">+</span> button next to the club list in the top bar. If the
+          system has no club yet, the form is already open. Go to step 2.
+        </li>
+        <li>Fill in the <span class="ui">Club name</span> — this is how people see it in the system.</li>
+        <li>
+          Fill in the <span class="ui">Identifier</span> — a short name of lowercase letters, digits
+          and hyphens, for example <span class="ui">sofia-judo</span>. If a club already uses that
+          identifier, the form tells you to pick another.
+        </li>
+        <li>
+          Fill in the <span class="ui">First location</span> and, if you like, its address. Every
+          club needs somewhere to train, and an administrator sees the data of their own locations
+          only — which is why the location is created with the club.
+        </li>
+        <li>
+          Fill in the <span class="ui">Administrator email</span> and optionally a name. You do not
+          choose a password — the person sets their own.
+        </li>
+        <li>Press <span class="ui">Save</span>.</li>
+        <li>
+          The club is created and you land inside it — it is already selected in the top bar.
+        </li>
+      </ol>
+      <div class="note">
+        <strong>If the email already has an account,</strong> it gains administrator access to the
+        new club and its password stays unchanged. That is how one person runs several clubs with one
+        account. An email is sent telling them about the new club, with no link — they sign in as
+        usual. A super administrator account cannot become a club administrator.
+      </div>
+      <p>
+        The new administrator receives an email with a link that lets them choose their own
+        password. The link is valid for 48 hours and works once. Until they open it, the account
+        appears as <span class="ui">Pending invite</span> in <span class="ui">Users</span>, and they
+        cannot sign in. If the email does not arrive, open <span class="ui">Users</span> and press
+        <span class="ui">Resend invite</span> on that row.
+      </p>
+    </div>
+
+    <div class="story">
+      <h3>3. As a super administrator I want to add a location</h3>
+      <ol>
+        <li>Select the club the location belongs to.</li>
+        <li>Open <span class="ui">Locations</span> and press <span class="ui">New location</span>.</li>
+        <li>Fill in <span class="ui">Name</span> and <span class="ui">Address</span>.</li>
+        <li>Leave <span class="ui">Active</span> ticked.</li>
+        <li>Press <span class="ui">Save</span>.</li>
+      </ol>
+      <p>
+        <span class="ui">A location with this name already exists</span> means this club already has
+        a location with the same name. Pick a different one.
+      </p>
+      <p>
+        For a hall that closes: open <span class="ui">Edit</span> and clear
+        <span class="ui">Active</span>. History is kept, and the location drops out of the choices
+        for new classes and sessions.
+      </p>
+    </div>
+
+    <div class="story">
+      <h3>4. As a super administrator I want to create an administrator for a club</h3>
+      <ol>
+        <li>Select the club.</li>
+        <li>Open <span class="ui">Users</span> and press <span class="ui">New user</span>.</li>
+        <li>Fill in <span class="ui">Email</span>. You do not choose a password — the person sets their own.</li>
+        <li>
+          Fill in <span class="ui">First name</span> and <span class="ui">Last name</span>, and
+          <span class="ui">Phone</span> if you have it.
+        </li>
+        <li>Set <span class="ui">Role</span> to <span class="ui">Administrator</span>.</li>
+        <li>
+          Choose the <span class="ui">Locations</span> they are responsible for. Press the field to
+          see the list, or type to make it shorter, then press a location. It becomes a chip above
+          the field; press the chip to remove it. At least one is required: an administrator and an
+          employee see the data of their own locations only, so the form will not save without a
+          choice.
+        </li>
+        <li>Press <span class="ui">Save</span>.</li>
+      </ol>
+      <div class="note">
+        <strong>The location picker disappears for the super administrator role.</strong>
+        That is expected: this role is not limited by location.
+      </div>
+      <div class="note">
+        <strong>The new administrator receives an invitation by email.</strong>
+        A link is sent to that address which lets them choose their own password. The link is valid
+        for 48 hours and works once. Until then the account exists but cannot be signed into.
+      </div>
+      <p>
+        If the email already exists in the system, that account is added to the selected club and its
+        password is unchanged — no invitation is sent, because the person already has a password. A
+        message says exactly that.
+      </p>
+    </div>
+
+    <div class="story">
+      <h3>5. As a super administrator I want to change someone's role</h3>
+      <ol>
+        <li>Select the club the person works in.</li>
+        <li>Open <span class="ui">Users</span> and press <span class="ui">Edit</span> on their row.</li>
+        <li>Choose the new value in <span class="ui">Role</span>.</li>
+        <li>Check <span class="ui">Locations</span> — the new role may need a different scope.</li>
+        <li>Press <span class="ui">Save</span>.</li>
+      </ol>
+      <div class="warn">
+        <strong>The role applies to this club.</strong>
+        The same person can be an administrator in one club and a customer in another. Changing it
+        here does not touch their other clubs.
+      </div>
+    </div>
+
+    <div class="story">
+      <h3>6. As a super administrator I want to delete an account</h3>
+      <ol>
+        <li>Open <span class="ui">Users</span>.</li>
+        <li>Press <span class="ui">Delete</span> on their row.</li>
+        <li>
+          The confirmation asks
+          <span class="ui">Delete user ivan@example.com?</span>
+        </li>
+        <li>Confirm.</li>
+      </ol>
+      <div class="stop">
+        <strong>Consider deactivating first.</strong>
+        <span class="ui">Edit</span> with the <span class="ui">Active</span> tick cleared stops
+        access and keeps the history. Delete an account only when it was created by mistake or
+        removal was asked for.
+      </div>
+    </div>
+
+    <h2>Day-to-day work</h2>
+    <p>
+      Trainees, classes, schedules, sessions, attendance, fees and payments work for you exactly as
+      they do for an administrator. The steps are in the
+      <a href="admin.html">administrator guide</a> — including the rule for trainees under 18 and
+      the way a fee status is worked out from its payments.
+    </p>
+
+    <footer>
+      All names and email addresses in the examples are invented. ·
+      <a href="../index.html">Back to the start</a>
+    </footer>
+  </body>
+</html>

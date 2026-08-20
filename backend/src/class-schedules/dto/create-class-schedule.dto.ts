@@ -1,7 +1,7 @@
 import { DayOfWeek } from '@prisma/client';
 import { IsBoolean, IsEnum, IsOptional, IsString, Matches } from 'class-validator';
 
-const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/;
+export const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/;
 
 export class CreateClassScheduleDto {
   @IsString()
