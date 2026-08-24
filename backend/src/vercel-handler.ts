@@ -7,7 +7,7 @@
  * `@/` aliases at all (https://github.com/vercel/vercel/discussions/10717). The whole `AppModule`
  * graph uses `@/` throughout, so importing this file's TypeScript source directly from `api/`
  * crashed every request with "Cannot find module '@/auth/decorators/current-user.decorator'" (or
- * whichever file Vercel's bundler happened to hit first). `api/[[...path]].ts` is a thin
+ * whichever file Vercel's bundler happened to hit first). `api/index.ts` is a thin
  * `require()` shim that loads this file's compiled, alias-free `dist/` output instead.
  *
  * The counterpart of `src/main.ts`: same app, same `configureApp()`, no `listen()`. A serverless
