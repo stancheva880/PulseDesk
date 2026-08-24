@@ -33,14 +33,59 @@ patterns=(
 )
 [[ -n $extra ]] && { IFS=, read -ra more <<<"$extra"; patterns+=("${more[@]}"); }
 
+ps_quote() { printf "'%s'" "$(printf '%s' "$1" | sed "s/'/''/g")"; }
+
 cd "$root"
 if command -v zip >/dev/null; then
   ex=(); for p in "${patterns[@]}"; do ex+=(-x "$p" "*/$p" "$p/*" "*/$p/*"); done
   zip -qr "$out" . "${ex[@]}"
-else
-  command -v 7z >/dev/null || { echo "archive.sh: need zip or 7z (choco install zip / apt install zip)" >&2; exit 1; }
+elif command -v 7z >/dev/null; then
   ex=(); for p in "${patterns[@]}"; do ex+=("-xr!$p"); done
   7z a -tzip -bso0 -bsp0 "$out" . "${ex[@]}" >/dev/null
+elif command -v powershell.exe >/dev/null; then
+  # No zip/7z installed - fall back to PowerShell's built-in ZipFile, which
+  # every Windows machine already has.
+  win_root="$(pwd -W)"
+  win_out="$(cd "$(dirname "$out")" && printf '%s/%s' "$(pwd -W)" "$(basename "$out")")"
+  ps1="$(mktemp --suffix=.ps1)"
+  {
+    echo '$ErrorActionPreference = "Stop"'
+    printf '$root = %s\n' "$(ps_quote "$win_root")"
+    printf '$out = %s\n' "$(ps_quote "$win_out")"
+    printf '$patterns = @('
+    for i in "${!patterns[@]}"; do
+      [[ $i -gt 0 ]] && printf ','
+      printf '%s' "$(ps_quote "${patterns[$i]}")"
+    done
+    echo ')'
+    cat <<'PS'
+Add-Type -AssemblyName System.IO.Compression.FileSystem
+if (Test-Path $out) { Remove-Item $out -Force }
+$zip = [System.IO.Compression.ZipFile]::Open($out, 'Create')
+function Add-Tree($dir, $relPrefix) {
+  foreach ($item in Get-ChildItem -LiteralPath $dir -Force) {
+    $excluded = $false
+    foreach ($p in $patterns) {
+      if ($item.Name -like $p) { $excluded = $true; break }
+    }
+    if ($excluded) { continue }
+    $rel = if ($relPrefix) { "$relPrefix/$($item.Name)" } else { $item.Name }
+    if ($item.PSIsContainer) {
+      Add-Tree $item.FullName $rel
+    } else {
+      [System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile($zip, $item.FullName, $rel, [System.IO.Compression.CompressionLevel]::Optimal) | Out-Null
+    }
+  }
+}
+Add-Tree $root ''
+$zip.Dispose()
+PS
+  } >"$ps1"
+  powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$(cd "$(dirname "$ps1")" && pwd -W)/$(basename "$ps1")"
+  rm -f "$ps1"
+else
+  echo "archive.sh: need zip, 7z, or PowerShell (choco install zip / apt install zip)" >&2
+  exit 1
 fi
 
 echo "$out ($(du -h "$out" | cut -f1))"
