@@ -12,11 +12,12 @@
  * would instead fail `npm run typecheck` on a fresh clone and in CI, where typecheck runs before
  * `nest build` produces `dist/`.
  *
- * The filename is an optional catch-all on purpose. Every route this app serves lives under the
- * global `api` prefix, so `api/[[...path]].ts` collects all of them through Vercel's own filesystem
- * routing and the request arrives with its original URL. A single-file `api/index.ts` plus a
- * `"rewrites"` entry in vercel.json would hand Nest the rewritten path instead — `/api` for every
- * request — and every route would 404.
+ * The filename is plain `index.ts`, not an optional catch-all bracket name — that Next.js-style
+ * convention is not reliably honored by Vercel's generic Node.js function builder outside a
+ * Next.js project. Every route this app serves is instead funneled here by the `"rewrites"` entry
+ * in vercel.json (`/api/:path*` -> `/api`). Vercel's Node.js functions receive the request's
+ * original, unmodified `req.url` regardless of the rewrite destination, so Nest's own router still
+ * sees and dispatches the real path — the rewrite only selects which function handles the request.
  */
 // eslint-disable-next-line @typescript-eslint/no-require-imports -- see docblock above
 module.exports = require('../dist/vercel-handler.js');

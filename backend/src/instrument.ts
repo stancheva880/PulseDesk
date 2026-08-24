@@ -1,6 +1,6 @@
 /**
  * Sentry bootstrap. Must be the first import of both entry points (src/main.ts and
- * api/[[...path]].ts) — the SDK has to load before Nest does (TKT-0097 / RES-0005).
+ * api/index.ts) — the SDK has to load before Nest does (TKT-0097 / RES-0005).
  *
  * The DSN is the whole switch: unset or empty means Sentry never initializes and the
  * app behaves exactly as before. A set-but-malformed DSN only warns here; production

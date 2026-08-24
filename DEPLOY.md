@@ -22,7 +22,7 @@ Appendix A of this document.
 
 The backend and the frontend deploy as **two separate Vercel projects** from the
 same repository. The backend runs as one serverless function
-(`backend/api/[[...path]].ts`); the frontend runs as a normal Next.js app.
+(`backend/api/index.ts`); the frontend runs as a normal Next.js app.
 
 The frontend then proxies `/api/*` to the backend. Do not remove this proxy. The
 refresh-token cookie is `httpOnly` and `sameSite=strict` on path `/api/auth`
