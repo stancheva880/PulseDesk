@@ -470,22 +470,27 @@ export class AttendancesService {
       where: { id: sessionId },
       select: { startsAt: true, class: { select: { name: true } } },
     });
-    for (const { traineeId } of promoted) {
-      // Linked account wins; otherwise every contact with an address; none → skip.
-      const { traineeName, emails } = await traineeRecipients(this.prisma, traineeId);
-      for (const to of emails) {
-        try {
-          await this.mail.sendWaitlistPromotion({
-            to,
-            traineeName,
-            className: session.class.name,
-            startsAt: session.startsAt,
-          });
-        } catch {
-          // The booking is committed; a dead mailbox must not surface as a failed delete.
-        }
-      }
-    }
+    // TKT-0129: concurrent, for the reasons in sendClaimOffers below.
+    await Promise.allSettled(
+      promoted.map(async ({ traineeId }) => {
+        // Linked account wins; otherwise every contact with an address; none → skip.
+        const { traineeName, emails } = await traineeRecipients(this.prisma, traineeId);
+        await Promise.all(
+          emails.map(async (to) => {
+            try {
+              await this.mail.sendWaitlistPromotion({
+                to,
+                traineeName,
+                className: session.class.name,
+                startsAt: session.startsAt,
+              });
+            } catch {
+              // The booking is committed; a dead mailbox must not surface as a failed delete.
+            }
+          }),
+        );
+      }),
+    );
   }
 
   // TKT-0114: the claim window is open; every queued trainee's people get the link.
@@ -498,22 +503,30 @@ export class AttendancesService {
     const frontendUrl = (
       this.config.get<string>('FRONTEND_URL') ?? 'http://localhost:3000'
     ).replace(/\/$/, '');
-    for (const offer of offers) {
-      const { traineeName, emails } = await traineeRecipients(this.prisma, offer.traineeId);
-      for (const to of emails) {
-        try {
-          await this.mail.sendWaitlistClaimOffer({
-            to,
-            traineeName,
-            className: session.class.name,
-            startsAt: session.startsAt,
-            claimUrl: `${frontendUrl}/claim?token=${offer.token}`,
-          });
-        } catch {
-          // The window is open regardless — a dead mailbox must not fail the delete.
-        }
-      }
-    }
+    // TKT-0129: one offer per queued entry, so this fans out with the queue. `allSettled`
+    // on the outer level because traineeRecipients can reject and one unreadable trainee
+    // must not cost the rest their link; the inner level is `all` because the catch below
+    // means those promises cannot reject at all.
+    await Promise.allSettled(
+      offers.map(async (offer) => {
+        const { traineeName, emails } = await traineeRecipients(this.prisma, offer.traineeId);
+        await Promise.all(
+          emails.map(async (to) => {
+            try {
+              await this.mail.sendWaitlistClaimOffer({
+                to,
+                traineeName,
+                className: session.class.name,
+                startsAt: session.startsAt,
+                claimUrl: `${frontendUrl}/claim?token=${offer.token}`,
+              });
+            } catch {
+              // The window is open regardless — a dead mailbox must not fail the delete.
+            }
+          }),
+        );
+      }),
+    );
   }
 
   async rsvp(

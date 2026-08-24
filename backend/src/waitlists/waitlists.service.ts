@@ -129,16 +129,22 @@ export class WaitlistsService {
     startsAt: Date,
     entries: { traineeId: string }[],
   ): Promise<void> {
-    for (const { traineeId } of entries) {
-      const { traineeName, emails } = await traineeRecipients(this.prisma, traineeId);
-      for (const to of emails) {
-        try {
-          await this.mail.sendWaitlistSpotFilled({ to, traineeName, className, startsAt });
-        } catch {
-          // Booking already committed; a dead mailbox is not the claimant's problem.
-        }
-      }
-    }
+    // TKT-0129: concurrent — `allSettled` outside because traineeRecipients can reject,
+    // `all` inside because the catch below means those promises never do.
+    await Promise.allSettled(
+      entries.map(async ({ traineeId }) => {
+        const { traineeName, emails } = await traineeRecipients(this.prisma, traineeId);
+        await Promise.all(
+          emails.map(async (to) => {
+            try {
+              await this.mail.sendWaitlistSpotFilled({ to, traineeName, className, startsAt });
+            } catch {
+              // Booking already committed; a dead mailbox is not the claimant's problem.
+            }
+          }),
+        );
+      }),
+    );
   }
 
   async listForSession(tenantId: string, sessionId: string, viewer: AuthenticatedUser) {
