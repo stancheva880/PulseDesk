@@ -108,7 +108,6 @@ describe('Users pages — Bulgarian locale', () => {
       'removeConfirm.confirm',
       'fields.email',
       'fields.name',
-      'fields.password',
       'fields.passwordOptional',
       'fields.firstName',
       'fields.lastName',
@@ -124,6 +123,13 @@ describe('Users pages — Bulgarian locale', () => {
     // presence check it replaces — a hint returning in one language only now fails here.
     expect(collectKeys(bg.users)).not.toContain('fields.locationsHint');
     expect(collectKeys(en.users)).not.toContain('fields.locationsHint');
+    // TKT-0123 (approved TEST CHANGE REQUEST): `fields.password` was the admin-typed password on
+    // the create form, which TKT-0058's invite flow removed — `fields.passwordOptional` above is
+    // the surviving key and the only one any screen reads. Same pattern as the hint: asserting
+    // absence in BOTH bundles is stricter than the presence row it replaces, so a key returning in
+    // one language only fails here.
+    expect(collectKeys(bg.users)).not.toContain('fields.password');
+    expect(collectKeys(en.users)).not.toContain('fields.password');
   });
 
   it('list page renders in Bulgarian with no English fallbacks', async () => {

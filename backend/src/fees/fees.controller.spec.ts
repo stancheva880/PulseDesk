@@ -381,6 +381,117 @@ describe('FeesController (e2e-ish)', () => {
     });
   });
 
+  // TKT-0110: gap-healer for PER_COURSE classes — the class carries its own period and price.
+  describe('POST /fees/generate-course', () => {
+    const COURSE_START = new Date('2026-03-01');
+    const COURSE_END = new Date('2026-08-31');
+    async function newCourseClass(
+      tenantId: string,
+      traineeIds: string[] = [],
+      locationId?: string,
+      coursePrice = 300,
+    ) {
+      return prisma.class.create({
+        data: {
+          tenantId,
+          name: `Course-${randomUUID()}`,
+          billingMode: BillingMode.PER_COURSE,
+          courseStart: COURSE_START,
+          courseEnd: COURSE_END,
+          coursePrice,
+          trainees: traineeIds.length
+            ? { connect: traineeIds.map((id) => ({ id })) }
+            : undefined,
+          locations: locationId ? { connect: [{ id: locationId }] } : undefined,
+        },
+      });
+    }
+    const generate = (a: TestActor, body: object = {}) =>
+      request(server)
+        .post('/fees/generate-course')
+        .set('Authorization', `Bearer ${a.accessToken}`)
+        .set('X-Tenant-Id', a.tenantId)
+        .send(body);
+
+    it('creates the missing course fees and skips already-billed trainees', async () => {
+      const a = await setupActor(UserRole.ADMIN);
+      const t1 = await newTrainee(a.tenantId);
+      const t2 = await newTrainee(a.tenantId);
+      const cls = await newCourseClass(a.tenantId, [t1.id, t2.id], a.locationId);
+      // t1 is already billed for exactly this period — the generator must not double-bill.
+      await prisma.fee.create({
+        data: {
+          tenantId: a.tenantId,
+          classId: cls.id,
+          traineeId: t1.id,
+          periodStart: COURSE_START,
+          periodEnd: COURSE_END,
+          amount: 300,
+        },
+      });
+
+      const res = await generate(a).expect(200);
+      expect(res.body).toEqual({ created: 1, skipped: 1 });
+
+      const fee = await prisma.fee.findFirst({
+        where: { classId: cls.id, traineeId: t2.id },
+      });
+      expect(Number(fee?.amount)).toBe(300);
+      expect(fee?.periodStart.toISOString()).toBe(COURSE_START.toISOString());
+      expect(fee?.periodEnd.toISOString()).toBe(COURSE_END.toISOString());
+      expect(fee?.sessionId).toBeNull();
+    });
+
+    it('honors the classId filter', async () => {
+      const a = await setupActor(UserRole.ADMIN);
+      const t1 = await newTrainee(a.tenantId);
+      const t2 = await newTrainee(a.tenantId);
+      const target = await newCourseClass(a.tenantId, [t1.id], a.locationId);
+      const other = await newCourseClass(a.tenantId, [t2.id], a.locationId);
+
+      const res = await generate(a, { classId: target.id }).expect(200);
+      expect(res.body).toEqual({ created: 1, skipped: 0 });
+      expect(await prisma.fee.count({ where: { classId: other.id } })).toBe(0);
+    });
+
+    it('returns 403 for employee', async () => {
+      const a = await setupActor(UserRole.EMPLOYEE);
+      await generate(a).expect(403);
+    });
+
+    // AC #4: edits never rewrite money rows; the generator bills the *current* values.
+    it('leaves an existing fee untouched after a price edit, and bills new gaps at the new price', async () => {
+      const a = await setupActor(UserRole.ADMIN);
+      const t1 = await newTrainee(a.tenantId);
+      const cls = await newCourseClass(a.tenantId, [t1.id], a.locationId);
+      await generate(a, { classId: cls.id }).expect(200);
+      const before = await prisma.fee.findFirst({
+        where: { classId: cls.id, traineeId: t1.id },
+      });
+      expect(Number(before?.amount)).toBe(300);
+
+      // Price edit + a second, not-yet-billed enrollee (seeded directly — the sync-on-enroll
+      // path is pinned in classes/trainees specs; this test isolates the generator).
+      await prisma.class.update({ where: { id: cls.id }, data: { coursePrice: 400 } });
+      const t2 = await newTrainee(a.tenantId);
+      await prisma.class.update({
+        where: { id: cls.id },
+        data: { trainees: { connect: [{ id: t2.id }] } },
+      });
+
+      const res = await generate(a, { classId: cls.id }).expect(200);
+      expect(res.body).toEqual({ created: 1, skipped: 1 });
+      const after = await prisma.fee.findFirst({
+        where: { classId: cls.id, traineeId: t1.id },
+      });
+      expect(after).toEqual(before);
+      const t2Fee = await prisma.fee.findFirst({
+        where: { classId: cls.id, traineeId: t2.id },
+      });
+      expect(Number(t2Fee?.amount)).toBe(400);
+    });
+  });
+
   describe('DELETE /fees/:id', () => {
     it('admin deletes (204)', async () => {
       const a = await setupActor(UserRole.ADMIN);
@@ -517,6 +628,127 @@ describe('FeesController (e2e-ish)', () => {
     });
   });
 
+  // TKT-0095: server-side fee search. Matching runs over the related trainee (first/last/email)
+  // through searchVariants; the clause nests under AND so it narrows the tenant and location
+  // scope rather than widening it (the RES-0003 trap).
+  describe('GET /fees?search=', () => {
+    async function seedFee(
+      a: TestActor,
+      trainee: { firstName: string; lastName: string; email?: string },
+      opts: { status?: FeeStatus; locationId?: string } = {},
+    ) {
+      const tr = await prisma.trainee.create({
+        data: {
+          tenantId: a.tenantId,
+          firstName: trainee.firstName,
+          lastName: trainee.lastName,
+          email: trainee.email,
+          dateOfBirth: new Date('2000-01-01'),
+        },
+      });
+      const cls = await newMonthlyClass(a.tenantId, [tr.id], opts.locationId ?? a.locationId);
+      const fee = await prisma.fee.create({
+        data: {
+          tenantId: a.tenantId,
+          classId: cls.id,
+          traineeId: tr.id,
+          periodStart: new Date('2026-05-01'),
+          periodEnd: new Date('2026-05-31'),
+          amount: 100,
+          ...(opts.status ? { status: opts.status } : {}),
+        },
+      });
+      return { tr, cls, fee };
+    }
+
+    const listWith = (a: TestActor, qs: string) =>
+      request(server)
+        .get(`/fees${qs}`)
+        .set('Authorization', `Bearer ${a.accessToken}`)
+        .set('X-Tenant-Id', a.tenantId);
+
+    const idsOf = (res: { body: { items: Array<{ id: string }> } }) =>
+      res.body.items.map((f) => f.id);
+
+    it('rejects a 101-character search (400)', async () => {
+      const a = await setupActor(UserRole.ADMIN);
+      await listWith(a, `?search=${'x'.repeat(101)}`).expect(400);
+    });
+
+    it('an omitted search changes nothing', async () => {
+      const a = await setupActor(UserRole.ADMIN);
+      await seedFee(a, { firstName: 'Ада', lastName: 'Лъвлейс' });
+      await seedFee(a, { firstName: 'Боб', lastName: 'Строителят' });
+
+      const res = await listWith(a, '').expect(200);
+
+      expect(res.body.items).toHaveLength(2);
+    });
+
+    it("finds a fee by the trainee's Cyrillic last name in any casing", async () => {
+      const a = await setupActor(UserRole.ADMIN);
+      const { fee } = await seedFee(a, { firstName: 'Георги', lastName: 'Иванов' });
+      await seedFee(a, { firstName: 'Мария', lastName: 'Петрова' });
+
+      for (const q of ['иванов', 'ИВАНОВ', 'Иванов']) {
+        const res = await listWith(a, `?search=${encodeURIComponent(q)}`).expect(200);
+        expect(idsOf(res), q).toEqual([fee.id]);
+      }
+    });
+
+    it("matches the trainee's email substring", async () => {
+      const a = await setupActor(UserRole.ADMIN);
+      const { fee } = await seedFee(a, {
+        firstName: 'Ада',
+        lastName: 'Лъвлейс',
+        email: `ada-${randomUUID()}@math.example`,
+      });
+      await seedFee(a, {
+        firstName: 'Боб',
+        lastName: 'Строителят',
+        email: `bob-${randomUUID()}@build.example`,
+      });
+
+      const res = await listWith(a, '?search=math').expect(200);
+
+      expect(idsOf(res)).toEqual([fee.id]);
+    });
+
+    it('composes with status as AND', async () => {
+      const a = await setupActor(UserRole.ADMIN);
+      const { fee: unpaid } = await seedFee(a, { firstName: 'Иван', lastName: 'Иванов' });
+      await seedFee(a, { firstName: 'Иванка', lastName: 'Иванова' }, { status: FeeStatus.PAID });
+
+      const res = await listWith(
+        a,
+        `?search=${encodeURIComponent('иван')}&status=UNPAID`,
+      ).expect(200);
+
+      expect(idsOf(res)).toEqual([unpaid.id]);
+    });
+
+    it("does not return a fee outside the caller's location scope, with or without search", async () => {
+      const a = await setupActor(UserRole.EMPLOYEE);
+      // Same tenant, second location the employee is NOT assigned to.
+      const other = await prisma.location.create({
+        data: { tenantId: a.tenantId, name: `Other-${randomUUID()}` },
+      });
+      const hidden = await seedFee(
+        a,
+        { firstName: 'Скрит', lastName: 'Иванов' },
+        { locationId: other.id },
+      );
+      const visible = await seedFee(a, { firstName: 'Видим', lastName: 'Иванов' });
+
+      const unfiltered = await listWith(a, '').expect(200);
+      expect(idsOf(unfiltered)).toEqual([visible.fee.id]);
+
+      const searched = await listWith(a, `?search=${encodeURIComponent('иванов')}`).expect(200);
+      expect(idsOf(searched)).toEqual([visible.fee.id]);
+      expect(idsOf(searched)).not.toContain(hidden.fee.id);
+    });
+  });
+
   // A trainee nobody billed has no fee row, so no status filter can ever surface them.
   // This is the other half of "who has not paid".
   describe('GET /fees/unbilled', () => {
@@ -610,6 +842,114 @@ describe('FeesController (e2e-ish)', () => {
         .set('Authorization', `Bearer ${a.accessToken}`)
         .set('X-Tenant-Id', a.tenantId)
         .expect(400);
+    });
+  });
+
+  // TKT-0104: a fee may have no class (tenant-wide card purchase fees, TKT-0106).
+  // Serialization must admit the null; creation paths still require a class.
+  describe('fees without a class', () => {
+    it('lists a fee without a class (super admin)', async () => {
+      const a = await setupActor(UserRole.SUPER_ADMIN);
+      const tr = await newTrainee(a.tenantId);
+      const fee = await prisma.fee.create({
+        data: {
+          tenantId: a.tenantId,
+          classId: null,
+          traineeId: tr.id,
+          periodStart: new Date('2026-08-01'),
+          periodEnd: new Date('2026-08-01'),
+          amount: 120,
+        },
+      });
+
+      const res = await request(server)
+        .get('/fees')
+        .set('Authorization', `Bearer ${a.accessToken}`)
+        .set('X-Tenant-Id', a.tenantId)
+        .expect(200);
+      const row = res.body.items.find((f: { id: string }) => f.id === fee.id);
+      expect(row).toBeDefined();
+      expect(row.classId).toBeNull();
+    });
+
+    it('returns detail for a fee without a class (super admin)', async () => {
+      const a = await setupActor(UserRole.SUPER_ADMIN);
+      const tr = await newTrainee(a.tenantId);
+      const fee = await prisma.fee.create({
+        data: {
+          tenantId: a.tenantId,
+          classId: null,
+          traineeId: tr.id,
+          periodStart: new Date('2026-08-01'),
+          periodEnd: new Date('2026-08-01'),
+          amount: 120,
+        },
+      });
+
+      const res = await request(server)
+        .get(`/fees/${fee.id}`)
+        .set('Authorization', `Bearer ${a.accessToken}`)
+        .set('X-Tenant-Id', a.tenantId)
+        .expect(200);
+      expect(res.body.classId).toBeNull();
+      expect(res.body.class).toBeNull();
+      expect(res.body.trainee.id).toBe(tr.id);
+    });
+
+    // TKT-0106: class-less fees are tenant-level money — location scoping must not hide them.
+    it('location-scoped admin still sees a class-less fee in list and detail', async () => {
+      const a = await setupActor(UserRole.ADMIN);
+      const tr = await newTrainee(a.tenantId);
+      const fee = await prisma.fee.create({
+        data: {
+          tenantId: a.tenantId,
+          classId: null,
+          traineeId: tr.id,
+          periodStart: new Date('2026-08-01'),
+          periodEnd: new Date('2026-08-01'),
+          amount: 120,
+        },
+      });
+
+      const list = await request(server)
+        .get('/fees')
+        .set('Authorization', `Bearer ${a.accessToken}`)
+        .set('X-Tenant-Id', a.tenantId)
+        .expect(200);
+      expect(list.body.items.map((f: { id: string }) => f.id)).toContain(fee.id);
+
+      await request(server)
+        .get(`/fees/${fee.id}`)
+        .set('Authorization', `Bearer ${a.accessToken}`)
+        .set('X-Tenant-Id', a.tenantId)
+        .expect(200);
+    });
+
+    // TKT-0105: the staff detail page renders both ledgers from one fetch.
+    it('detail embeds refunds[] beside payments[]', async () => {
+      const a = await setupActor(UserRole.SUPER_ADMIN);
+      const tr = await newTrainee(a.tenantId);
+      const fee = await prisma.fee.create({
+        data: {
+          tenantId: a.tenantId,
+          classId: null,
+          traineeId: tr.id,
+          periodStart: new Date('2026-08-01'),
+          periodEnd: new Date('2026-08-01'),
+          amount: 120,
+          payments: { create: { tenantId: a.tenantId, amount: 100, paidAt: new Date('2026-08-05') } },
+          refunds: { create: { tenantId: a.tenantId, amount: 30, refundedAt: new Date('2026-08-10') } },
+        },
+      });
+
+      const res = await request(server)
+        .get(`/fees/${fee.id}`)
+        .set('Authorization', `Bearer ${a.accessToken}`)
+        .set('X-Tenant-Id', a.tenantId)
+        .expect(200);
+      expect(res.body.payments).toHaveLength(1);
+      expect(res.body.refunds).toHaveLength(1);
+      expect(res.body.refunds[0].amount).toBe('30');
     });
   });
 });

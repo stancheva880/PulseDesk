@@ -13,14 +13,17 @@
       <a href="super-admin.html">Super Administrator</a>
       <a href="admin.html">Administrator</a>
       <a href="trainer.html">Employee</a>
+      <a href="examples.html">Examples</a>
       <span class="spacer"></span>
       <a class="lang" href="../bg/klient.html">BG</a>
     </nav>
 
     <h1>Customer (trainee or parent)</h1>
     <p class="lead">
-      You have two screens: <span class="ui">Schedule</span> and <span class="ui">Fees</span>. They
-      show the upcoming sessions, let you answer invitations, and show what has been paid.
+      You have three screens: <span class="ui">Schedule</span>, <span class="ui">Fees</span> and
+      <span class="ui">Cards</span>. They show the upcoming sessions, let you answer invitations,
+      and show what has been paid and how many prepaid visits are left. For classes the club has
+      opened up, you can also book and cancel your own spot.
     </p>
     <p class="crumbs">
       Read <a href="basics.html">Getting started</a> first — signing in and forgotten passwords.
@@ -39,7 +42,7 @@
           <td>Schedule</td>
           <td>
             <span class="ui">My schedule</span> — upcoming sessions for you and your trainees, with
-            answer buttons.
+            answer buttons and, where the club allows it, booking.
           </td>
         </tr>
         <tr>
@@ -49,11 +52,18 @@
             trainees.
           </td>
         </tr>
+        <tr>
+          <td>Cards</td>
+          <td>
+            <span class="ui">My cards</span> — prepaid visit cards for you and your trainees, with
+            the visits remaining.
+          </td>
+        </tr>
       </tbody>
     </table>
     <p>
-      If you are the parent of more than one child, both screens show every child linked to your
-      account, each under their own name.
+      If you are the parent of more than one child, all three screens show every child linked to
+      your account, each under their own name.
     </p>
 
     <h2>What you can do</h2>
@@ -64,6 +74,14 @@
         <span class="ui">Decline</span> or <span class="ui">Reschedule</span>.
       </li>
       <li>Check what has been charged, what has been paid and what is left.</li>
+      <li>See how many visits are left on a prepaid card, and when the card expires.</li>
+      <li>
+        Book a spot for yourself or your child — on the classes where the club allows it, and up to
+        the deadline it set.
+      </li>
+      <li>Cancel a booking the same way, whoever made it.</li>
+      <li>Join the waiting list of a full session yourself, and leave it again.</li>
+      <li>Take a freed spot on a full session by opening the link from a waitlist email.</li>
       <li>Change language and theme, and sign out, from the top bar.</li>
     </ul>
 
@@ -77,15 +95,22 @@
       <li>
         <strong>You cannot change sessions.</strong> Times and places are set by the club. That is
         what <span class="ui">Reschedule</span> is for — it asks the club rather than moving the
-        session yourself.
+        session yourself. Booking is a different thing: it puts you on a session that already
+        exists.
+      </li>
+      <li>
+        <strong>You cannot book everywhere.</strong> The <span class="ui">Book</span> button appears
+        only on classes the club opened for self-booking, only for trainees already enrolled in that
+        class, and only before the deadline. Where it is missing, the club books for you — ask them.
       </li>
       <li>
         <strong>You cannot change fees or payments.</strong> Amounts and payments are entered by the
         club. If something looks wrong, contact them.
       </li>
       <li>
-        <strong>There is no payment in the system.</strong> PulseDesk takes no cards. You pay the
-        way you agreed with the club, and the club records it.
+        <strong>There is no payment in the system.</strong> PulseDesk takes no bank card. You pay
+        the way you agreed with the club, and the club records it — visit cards included: buying
+        one is arranged with the club, not in the portal.
       </li>
       <li>
         <strong>Your answer is not attendance.</strong> Attendance is marked by the trainer after
@@ -150,7 +175,38 @@
     </div>
 
     <div class="story">
-      <h3>3. As a customer I want to see what I owe</h3>
+      <h3>3. As a parent I want to put my child on a session — or take them off</h3>
+      <ol>
+        <li>Open <span class="ui">Schedule</span> and find the session's card.</li>
+        <li>
+          Under the child's name press <span class="ui">Book</span>.
+          <span class="ui">Booked</span> appears and the card now shows the normal answer buttons —
+          the booking is made and counts as <span class="ui">Confirmed</span>.
+        </li>
+        <li>
+          To undo it, press <span class="ui">Cancel booking</span> next to those buttons. It works
+          on any booking of your trainee, including one the club made.
+        </li>
+      </ol>
+      <div class="note">
+        <strong>No button? Then this class is not open for it.</strong>
+        <span class="ui">Book</span> shows up only when the club allowed self-booking for that
+        class, your trainee is enrolled in it, there is a free place, and the deadline has not
+        passed. Once it has, the card reads
+        <span class="ui">The self-service window has closed — contact the club to change this</span>
+        instead.
+      </div>
+      <div class="note">
+        <strong>A card visit is used, as always.</strong>
+        Booking spends one visit from a prepaid card, and cancelling gives it back — exactly as
+        when the club books for you. If nothing usable is left you may still book; the card shows
+        <span class="ui">No card visits left — arrange a new card or a fee with the club. Booking
+        is still allowed.</span>
+      </div>
+    </div>
+
+    <div class="story">
+      <h3>4. As a customer I want to see what I owe</h3>
       <ol>
         <li>Open <span class="ui">Fees</span>.</li>
         <li>
@@ -175,7 +231,67 @@
     </div>
 
     <div class="story">
-      <h3>4. As a customer I want another language or a darker screen</h3>
+      <h3>5. As a customer I want to know how many prepaid visits are left</h3>
+      <ol>
+        <li>Open <span class="ui">Cards</span>.</li>
+        <li>
+          Each card shows the class it is for (or <span class="ui">Whole club</span>), the
+          <span class="ui">Visits remaining</span> out of the total, and
+          <span class="ui">Valid until</span> — or <span class="ui">Never expires</span>.
+        </li>
+        <li>
+          A card that is finished carries a mark: <span class="ui">Used up</span>,
+          <span class="ui">Expired</span> or <span class="ui">Cancelled</span>. That is the signal
+          to arrange the next one with the club — buying is done at the club, not in the portal.
+        </li>
+      </ol>
+      <div class="note">
+        <strong>Visits are spent by bookings.</strong>
+        When the trainee is put on a session — by the club or by you — one visit leaves the card by
+        itself; if the booking is removed, the visit comes back. There is nothing to press for it.
+      </div>
+    </div>
+
+    <div class="story">
+      <h3>6. As a customer I want a place on a full session</h3>
+      <p>
+        A full session shows <span class="ui">No spots left.</span> If the class keeps a waiting
+        list — and allows self-booking — you get <span class="ui">Join waitlist</span> instead.
+        Press it and the row reads <span class="ui">On the waitlist</span> with a
+        <span class="ui">Leave waitlist</span> button next to it. Leaving is always allowed, even
+        after the booking deadline; joining is not. The club can also put you on the list itself.
+        Once the session has started the row goes: no place can free up for you any more.
+      </p>
+      <p>
+        Being on the list costs nothing and uses no card visit — that happens only if you actually
+        get the place. What happens when a spot frees up depends on how the class is set up — you
+        will get one of two emails:
+      </p>
+      <ol>
+        <li>
+          <strong>"Your trainee was booked."</strong> The first in the queue got the spot
+          automatically. There is nothing to do — the session appears in
+          <span class="ui">My schedule</span>.
+        </li>
+        <li>
+          <strong>An offer with a link.</strong> Everyone in the queue gets the same link, and the
+          first to open it takes the spot. The page answers at once:
+          <span class="ui">The spot is yours!</span> with the class and time, or
+          <span class="ui">The spot has already been taken</span> — you stay in the queue and get a
+          new link at the next opening. <span class="ui">This link is invalid or has expired</span>
+          means a newer offer replaced it, or the booking deadline of the class has passed.
+        </li>
+      </ol>
+      <div class="note">
+        <strong>Very late openings are not passed on.</strong>
+        If the place frees up after the class's booking deadline — or after the session has
+        started — nobody is booked from the list and no email goes out. The club fills the place by
+        hand at that point.
+      </div>
+    </div>
+
+    <div class="story">
+      <h3>7. As a customer I want another language or a darker screen</h3>
       <ol>
         <li>Look at the top right corner.</li>
         <li>Press <span class="ui">BG</span> or <span class="ui">EN</span> for the language.</li>

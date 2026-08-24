@@ -17,7 +17,7 @@ export default function LocationsListPage() {
   // location footprint is a system-administrator concern (locations.controller.ts:52,58,68).
   const canWrite = user?.role === 'SUPER_ADMIN';
   const { rows, setPage, pageInfo, error, pendingDelete, setPendingDelete, busy, onDelete } =
-    useCrudList(Locations);
+    useCrudList(Locations, { deletedName: (loc) => loc.name });
 
   const columns: DataTableColumn<Location>[] = [
     {
@@ -74,6 +74,9 @@ export default function LocationsListPage() {
         rows={rows}
         rowKey={(loc) => loc.id}
         emptyText={t('locations.empty')}
+        // Location edits are SUPER_ADMIN-only and the layout bounces everyone else off the
+        // route (layout.tsx DENY_RULES) — an inert row is honest, a bounce is not (TKT-0088).
+        rowHref={canWrite ? (loc) => `/locations/${loc.id}/edit` : undefined}
         actions={(loc) =>
           canWrite ? (
             <>

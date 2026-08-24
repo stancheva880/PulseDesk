@@ -2,11 +2,13 @@
 
 import { Plus } from 'lucide-react';
 import Link from 'next/link';
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '@/components/auth-provider';
 import { DataTable, type DataTableColumn } from '@/components/data-table';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { DebouncedSearchInput } from '@/components/ui/debounced-search-input';
 import { calculateAge } from '@/lib/age';
 import { isManager } from '@/lib/auth-storage';
 import { Trainees, type Trainee } from '@/lib/api-resources';
@@ -16,8 +18,14 @@ export default function TraineesListPage() {
   const { t } = useTranslation();
   const { user } = useAuth();
   const admin = isManager(user?.role);
+  // TKT-0093: server-side search via the DTO's existing `search` parameter.
+  const [query, setQuery] = useState('');
   const { rows, setPage, pageInfo, error, pendingDelete, setPendingDelete, busy, onDelete } =
-    useCrudList(Trainees);
+    useCrudList(Trainees, {
+      params: { search: query || undefined },
+      deps: [query],
+      deletedName: (tr) => `${tr.firstName} ${tr.lastName}`,
+    });
 
   const columns: DataTableColumn<Trainee>[] = [
     {
@@ -69,6 +77,17 @@ export default function TraineesListPage() {
         ) : null}
       </div>
 
+      <div className="sm:max-w-xs">
+        <DebouncedSearchInput
+          value={query}
+          onApply={(q) => {
+            setQuery(q);
+            setPage(1); // a search from page 3 must not request page 3 of the filtered set
+          }}
+          placeholder={t('trainees.search')}
+        />
+      </div>
+
       {error ? (
         <p role="alert" className="text-sm text-destructive">
           {error}
@@ -80,6 +99,7 @@ export default function TraineesListPage() {
         rows={rows}
         rowKey={(tr) => tr.id}
         emptyText={t('trainees.empty')}
+        rowHref={(tr) => `/trainees/${tr.id}`}
         actions={(tr) => (
           <>
             {/* Read-only detail — the only way a trainer reaches phone and guardian contacts. */}

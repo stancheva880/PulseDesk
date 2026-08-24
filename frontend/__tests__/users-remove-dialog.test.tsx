@@ -5,6 +5,7 @@ import userEvent from '@testing-library/user-event';
 import UsersListPage from '@/app/(dashboard)/users/page';
 import { AuthProvider } from '@/components/auth-provider';
 import { I18nProvider } from '@/components/i18n-provider';
+import { ToastViewport } from '@/components/toast';
 import bg from '@/locales/bg/common.json';
 import en from '@/locales/en/common.json';
 
@@ -65,6 +66,7 @@ function mockApi(memberships: unknown[]) {
 function renderPage() {
   return render(
     <I18nProvider>
+      <ToastViewport />
       <AuthProvider>
         <UsersListPage />
       </AuthProvider>
@@ -94,6 +96,23 @@ describe('Users list — per-actor removal dialog copy', () => {
     ).toBeInTheDocument();
     expect(
       screen.getByRole('button', { name: /Remove from club|Премахване от клуба/ }),
+    ).toBeInTheDocument();
+  });
+
+  // TKT-0092 AC — a confirmed delete raises a toast naming what was removed, via useCrudList.
+  it('confirms a completed removal with a toast naming the account', async () => {
+    seedSession('ADMIN', 't1');
+    mockApi([{ tenantId: 't1', tenantName: 'Club One', role: 'ADMIN' }]);
+    const user = userEvent.setup();
+
+    renderPage();
+    await user.click(await screen.findByRole('button', { name: /Delete|Изтриване/ }));
+    await user.click(
+      await screen.findByRole('button', { name: /Remove from club|Премахване от клуба/ }),
+    );
+
+    expect(
+      await screen.findByText(/Removed: emp@demo\.local|Премахнато: emp@demo\.local/),
     ).toBeInTheDocument();
   });
 

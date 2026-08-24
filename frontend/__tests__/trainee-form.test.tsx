@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event';
 import NewTraineePage from '@/app/(dashboard)/trainees/new/page';
 import { AuthProvider } from '@/components/auth-provider';
 import { I18nProvider } from '@/components/i18n-provider';
+import { ToastViewport } from '@/components/toast';
 import { setAccessToken } from '@/lib/auth-storage';
 
 const replace = vi.fn();
@@ -32,6 +33,7 @@ function paged<T>(items: T[]): unknown {
 function renderForm() {
   return render(
     <I18nProvider>
+      <ToastViewport />
       <AuthProvider>
         <NewTraineePage />
       </AuthProvider>
@@ -91,6 +93,57 @@ describe('NewTraineePage — dynamic guardian-contacts section (PRD)', () => {
     expect(await screen.findByText(/Guardian contacts|настойника/)).toBeInTheDocument();
   });
 
+  // TKT-0090: a future date of birth is rejected — the input caps at today and the schema
+  // refuses a typed future date before any request is sent.
+  it('rejects a future date of birth and caps the input at today', async () => {
+    const user = userEvent.setup();
+    renderForm();
+    await user.type(await screen.findByLabelText(/First name|^Име$/), 'Kid');
+    await user.type(screen.getByLabelText(/Last name|Фамилия/), 'Smith');
+    const dob = screen.getByLabelText(/Date of birth|Дата на раждане/);
+    // Local date, computed as the component computes it — UTC would flake near midnight.
+    const now = new Date();
+    const pad = (x: number) => String(x).padStart(2, '0');
+    expect(dob).toHaveAttribute(
+      'max',
+      `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`,
+    );
+
+    const future = new Date();
+    future.setFullYear(future.getFullYear() + 1);
+    // fireEvent, not user.type — a real date input blocks typing past max, jsdom does not.
+    fireEvent.change(dob, { target: { value: future.toISOString().slice(0, 10) } });
+    await user.click(screen.getByRole('button', { name: /^Save$|^Запазване$/ }));
+
+    const message = await screen.findByText(
+      /Датата на раждане не може да е в бъдещето|cannot be in the future/,
+    );
+    expect(message).toHaveAttribute('role', 'alert');
+    expect(message).toHaveAttribute('id', 'dateOfBirth-error');
+    expect(dob).toHaveAttribute('aria-invalid', 'true');
+    expect(dob).toHaveAttribute('aria-describedby', 'dateOfBirth-error');
+    expect(createdBody).toBeNull();
+  });
+
+  // TKT-0090: a failed field says what is wrong in words, wired for assistive tech.
+  it('says what is wrong and wires the a11y attributes when submitted empty', async () => {
+    const user = userEvent.setup();
+    renderForm();
+    await screen.findByLabelText(/First name|^Име$/);
+
+    await user.click(screen.getByRole('button', { name: /^Save$|^Запазване$/ }));
+
+    const messages = await screen.findAllByText('Това поле е задължително.');
+    expect(messages.length).toBeGreaterThanOrEqual(3); // first name, last name, DOB
+    const firstName = screen.getByLabelText(/First name|^Име$/);
+    expect(firstName).toHaveAttribute('aria-invalid', 'true');
+    expect(firstName).toHaveAttribute('aria-describedby', 'firstName-error');
+    const firstNameError = messages.find((m) => m.id === 'firstName-error');
+    expect(firstNameError).toBeDefined();
+    expect(firstNameError).toHaveAttribute('role', 'alert');
+    expect(createdBody).toBeNull();
+  });
+
   it('blocks submission for a minor with no contacts and surfaces the inline error', async () => {
     const user = userEvent.setup();
     renderForm();
@@ -127,6 +180,12 @@ describe('NewTraineePage — dynamic guardian-contacts section (PRD)', () => {
 
     await vi.waitFor(() => {
       expect(createdBody).toMatchObject({ classIds: ['cls-1'] });
+    });
+    // TKT-0092: create stays on the form, confirms with a toast, and resets.
+    expect(await screen.findByText(/Запазено|^Saved$/)).toBeInTheDocument();
+    expect(replace).not.toHaveBeenCalled();
+    await vi.waitFor(() => {
+      expect(screen.getByLabelText<HTMLInputElement>(/First name|^Име$/).value).toBe('');
     });
   });
 });

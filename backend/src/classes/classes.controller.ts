@@ -10,7 +10,7 @@ import {
   Patch,
   Post,
 } from '@nestjs/common';
-import { ApiBearerAuth } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { UserRole } from '@prisma/client';
 import { CurrentUser } from '@/auth/decorators/current-user.decorator';
 import { Roles } from '@/auth/decorators/roles.decorator';
@@ -33,6 +33,7 @@ import { UpdateClassDto } from './dto/update-class.dto';
 export class ClassesController {
   constructor(private readonly classes: ClassesService) {}
 
+  @ApiOperation({ summary: 'List the classes of the club. Filtered and paginated.' })
   @Get()
   @ResponseSchema('PaginatedClassRow', PaginatedClassRowSchema)
   list(
@@ -44,6 +45,7 @@ export class ClassesController {
     return this.classes.list(tenantId, user, query, query);
   }
 
+  @ApiOperation({ summary: 'Read one class with its trainers, trainees and locations.' })
   @Get(':id')
   @ResponseSchema('ClassDetail', ClassDetailSchema)
   findOne(
@@ -54,6 +56,7 @@ export class ClassesController {
     return this.classes.findById(tenantId, id, user);
   }
 
+  @ApiOperation({ summary: 'Create a class: billing mode, price, capacity and waiting-list mode.' })
   @Post()
   @Roles(UserRole.ADMIN)
   @ResponseSchema('ClassRow', ClassRowSchema)
@@ -65,6 +68,7 @@ export class ClassesController {
     return this.classes.create(tenantId, dto, user);
   }
 
+  @ApiOperation({ summary: 'Change a class. You cannot detach a location you do not hold.' })
   @Patch(':id')
   @Roles(UserRole.ADMIN)
   @ResponseSchema('ClassRow', ClassRowSchema)
@@ -77,6 +81,7 @@ export class ClassesController {
     return this.classes.update(tenantId, id, dto, user);
   }
 
+  @ApiOperation({ summary: 'Delete a class. Refused when its fees carry payments or refunds.' })
   @Delete(':id')
   @Roles(UserRole.ADMIN)
   @HttpCode(HttpStatus.NO_CONTENT)

@@ -1,5 +1,5 @@
 import { Body, Controller, Get, Post } from '@nestjs/common';
-import { ApiBearerAuth } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { UserRole } from '@prisma/client';
 import { Roles } from '@/auth/decorators/roles.decorator';
 import { DEFAULT_LIST_TAKE } from '@/common/dto/paginated-result';
@@ -33,6 +33,7 @@ export class TenantsController {
     private readonly tenants: TenantsService,
   ) {}
 
+  @ApiOperation({ summary: 'List every club, for the club picker.' })
   @Get()
   @ResponseSchema('TenantSummaryList', TenantSummaryListSchema)
   list(): Promise<TenantSummary[]> {
@@ -45,6 +46,7 @@ export class TenantsController {
 
   // Onboards a club with its first location and first administrator. PRD: the super admin is the
   // only role that creates tenants and assigns their initial admins.
+  @ApiOperation({ summary: 'Create a club with its first location and its first administrator.' })
   @Post()
   @ResponseSchema('CreatedTenant', CreatedTenantSchema)
   create(@Body() dto: CreateTenantDto): Promise<CreatedTenant> {

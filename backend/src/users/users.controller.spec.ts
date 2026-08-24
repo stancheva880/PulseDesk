@@ -470,6 +470,97 @@ describe('UsersController (e2e-ish)', () => {
       expect(res.body.locations).toEqual([]);
     });
 
+    // TKT-0123. The attach path on POST /users gives one account memberships in several clubs,
+    // and this route used to resolve the target's membership as memberships[0] — the OLDEST one,
+    // never the club the request is acting in. DELETE /users/:id already gets this right
+    // ("only their tenant's membership is deleted"); these are the same guarantees for PATCH.
+    describe('a member of two clubs', () => {
+      async function memberOfTwo(roleInB: UserRole = UserRole.EMPLOYEE) {
+        const a = await newTenantWithLocation();
+        const b = await newTenantWithLocation();
+        const member = await createTestUser(prisma, {
+          email: `${randomUUID()}@both.local`,
+          passwordHash: await auth.hashPassword(PASSWORD),
+          role: UserRole.EMPLOYEE,
+          tenantId: a.tenant.id,
+          locations: { connect: [{ id: a.location.id }, { id: b.location.id }] },
+        });
+        userIds.push(member.id);
+        await prisma.membership.create({
+          data: { userId: member.id, tenantId: b.tenant.id, role: roleInB },
+        });
+        return { a, b, member };
+      }
+
+      it("an ADMIN of club B reassigns locations without touching club A's", async () => {
+        const { a, b, member } = await memberOfTwo();
+        const second = await prisma.location.create({
+          data: { tenantId: b.tenant.id, name: `Second-${randomUUID()}` },
+        });
+        const admin = await newAdmin(b.tenant.id, [b.location.id, second.id]);
+
+        const res = await request(server)
+          .patch(`/users/${member.id}`)
+          .set('Authorization', `Bearer ${admin.accessToken}`)
+          .set('X-Tenant-Id', b.tenant.id)
+          .send({ locationIds: [second.id] })
+          .expect(200);
+
+        // The response is scoped to the acting club.
+        expect(res.body.locations.map((l: { id: string }) => l.id)).toEqual([second.id]);
+        // Club A's assignment survives — `set` used to wipe it, since the relation is global.
+        const after = await prisma.user.findUniqueOrThrow({
+          where: { id: member.id },
+          select: { locations: { select: { id: true, tenantId: true } } },
+        });
+        expect(after.locations.map((l) => l.id).sort()).toEqual([a.location.id, second.id].sort());
+      });
+
+      it('reports the role of the acting club, not the oldest membership', async () => {
+        const { a, b, member } = await memberOfTwo(UserRole.CUSTOMER);
+        const sa = await newSuperAdmin();
+
+        const inB = await request(server)
+          .get(`/users/${member.id}`)
+          .set('Authorization', `Bearer ${sa.accessToken}`)
+          .set('X-Tenant-Id', b.tenant.id)
+          .expect(200);
+        expect(inB.body.role).toBe(UserRole.CUSTOMER);
+        expect(inB.body.tenantId).toBe(b.tenant.id);
+
+        const inA = await request(server)
+          .get(`/users/${member.id}`)
+          .set('Authorization', `Bearer ${sa.accessToken}`)
+          .set('X-Tenant-Id', a.tenant.id)
+          .expect(200);
+        expect(inA.body.role).toBe(UserRole.EMPLOYEE);
+        expect(inA.body.tenantId).toBe(a.tenant.id);
+      });
+
+      it('a SUPER_ADMIN role change lands in the acting club only', async () => {
+        const { a, b, member } = await memberOfTwo(UserRole.EMPLOYEE);
+        const sa = await newSuperAdmin();
+
+        const res = await request(server)
+          .patch(`/users/${member.id}`)
+          .set('Authorization', `Bearer ${sa.accessToken}`)
+          .set('X-Tenant-Id', b.tenant.id)
+          .send({ role: UserRole.ADMIN })
+          .expect(200);
+        expect(res.body.role).toBe(UserRole.ADMIN);
+        expect(res.body.tenantId).toBe(b.tenant.id);
+
+        const memberships = await prisma.membership.findMany({
+          where: { userId: member.id },
+          select: { tenantId: true, role: true },
+        });
+        const byTenant = new Map(memberships.map((m) => [m.tenantId, m.role]));
+        expect(byTenant.get(b.tenant.id)).toBe(UserRole.ADMIN);
+        // Club A is untouched — the change used to land here instead.
+        expect(byTenant.get(a.tenant.id)).toBe(UserRole.EMPLOYEE);
+      });
+    });
+
     // An admin setting a password is what you do when an account is compromised, so it has to
     // end the sessions that are already running. completePasswordReset (self-service) revokes
     // the user's refresh tokens; this path did not, so the intruder kept refreshing for
@@ -1183,9 +1274,15 @@ describe('UsersController (e2e-ish)', () => {
     // through to GET /users/:id and 404s because no user has id "super-admins".
     it('is gone (404 even for SUPER_ADMIN)', async () => {
       const sa = await newSuperAdmin();
+      // TKT-0123 made X-Tenant-Id required on GET /users/:id, and the missing-header 400 is
+      // raised before the handler runs. The header is supplied so the assertion still measures
+      // what it was written to measure: no user has the id "super-admins", so the fall-through
+      // answers 404.
+      const { tenant } = await newTenantWithLocation();
       await request(server)
         .get('/users/super-admins')
         .set('Authorization', `Bearer ${sa.accessToken}`)
+        .set('X-Tenant-Id', tenant.id)
         .expect(404);
     });
   });

@@ -27,7 +27,13 @@ const runtimeSession = {
 
 const runtimeDetail = {
   ...runtimeSession,
-  class: { id: 'c1', name: 'Tennis', billingMode: BillingMode.PER_SESSION },
+  class: {
+    id: 'c1',
+    name: 'Tennis',
+    billingMode: BillingMode.PER_SESSION,
+    capacity: null,
+    waitlistMode: 'NONE',
+  },
   location: { id: 'l1', name: 'Main' },
   trainers: [{ id: 'u1', firstName: 'Ivan', lastName: null, email: 'ivan@test.local' }],
 };
@@ -76,7 +82,15 @@ describe('SessionDetailSchema', () => {
       location: { ...runtimeDetail.location, address: 'leaked', isActive: true },
       trainers: [{ ...runtimeDetail.trainers[0], passwordHash: 'leaked' }],
     });
-    expect(Object.keys(parsed.class).sort()).toEqual(['billingMode', 'id', 'name']);
+    // TKT-0103 (approved TCR #3): `capacity` joined the select deliberately — the pin stays exact.
+    // TKT-0112 (named in the approved plan): `waitlistMode` joined it too.
+    expect(Object.keys(parsed.class).sort()).toEqual([
+      'billingMode',
+      'capacity',
+      'id',
+      'name',
+      'waitlistMode',
+    ]);
     expect(Object.keys(parsed.location).sort()).toEqual(['id', 'name']);
     expect(Object.keys(parsed.trainers[0]!).sort()).toEqual([
       'email',

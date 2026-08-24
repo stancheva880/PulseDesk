@@ -25,6 +25,15 @@ enum UserRole {
 enum BillingMode {
   PER_MONTH
   PER_SESSION
+  // TKT-0109: time-bounded course sold at one price for the whole run.
+  PER_COURSE
+}
+
+// TKT-0112: what happens to a freed spot on a full session of this class.
+enum WaitlistMode {
+  NONE
+  FIFO_AUTO
+  CLAIM
 }
 
 enum ContactRelationship {
@@ -74,14 +83,10 @@ enum FeeStatus {
 
 // === MODELS ===
 
-model Language {
-  id        String   @id @default(cuid())
-  code      String   @unique // BCP-47 short code, e.g. "en", "bg"
-  name      String
-  isDefault Boolean  @default(false)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
+// TKT-0123 removed `model Language`. It was written for a database-driven locale list and never
+// read: i18n is client-only (frontend/lib/i18n.ts hardcodes `bg` and lazy-loads `en`), the
+// catalogues are JSON files under frontend/locales/, and the only code that ever touched the table
+// was the seed writing two rows nobody selected. Reinstate it only alongside a reader.
 
 model Tenant {
   id        String   @id @default(cuid())
@@ -101,6 +106,11 @@ model Tenant {
   classSchedules ClassSchedule[]
   fees           Fee[]
   payments       Payment[]
+  refunds        Refund[]
+  cards          Card[]
+  cardConsumptions CardConsumption[]
+  waitlistEntries WaitlistEntry[]
+  waitlistClaimTokens WaitlistClaimToken[]
 }
 
 model User {
@@ -141,6 +151,9 @@ model User {
 
   // Audit trail — payments this user recorded.
   paymentsRecorded Payment[] @relation("PaymentRecordedBy")
+
+  // Audit trail — refunds this user recorded.
+  refundsRecorded Refund[] @relation("RefundRecordedBy")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -231,6 +244,20 @@ model Class {
   monthlyAmount Decimal?
   // Set when billingMode = PER_SESSION.
   sessionPrice  Decimal?
+  // Set when billingMode = PER_COURSE (TKT-0109): the run's bounds and its one price.
+  courseStart   DateTime?
+  courseEnd     DateTime?
+  coursePrice   Decimal?
+  // TKT-0103: max trainees per session of this class; null = unlimited. Manual adds are
+  // hard-gated on it; roster backfill may overflow it by design (PRD-0014 decision).
+  capacity      Int?
+  // TKT-0112: per-session queues exist only when this is not NONE.
+  waitlistMode  WaitlistMode @default(NONE)
+  // TKT-0117: customers may book/cancel/queue themselves only when this is on.
+  allowSelfBooking Boolean @default(false)
+  // TKT-0117: minutes before startsAt when self-service closes; null = open until start.
+  // Only meaningful while allowSelfBooking is on — turning the flag off clears it.
+  bookingCutoffMin Int?
   isActive      Boolean     @default(true)
   createdAt     DateTime    @default(now())
   updatedAt     DateTime    @updatedAt
@@ -241,6 +268,7 @@ model Class {
   sessions  Session[]
   schedules ClassSchedule[]
   fees      Fee[]
+  cards     Card[]
 
   @@unique([tenantId, name])
   @@index([tenantId])
@@ -272,6 +300,8 @@ model Trainee {
   contacts    ContactPerson[]
   attendances Attendance[]
   fees        Fee[]
+  cards       Card[]
+  waitlistEntries WaitlistEntry[]
 
   @@index([tenantId])
   @@index([tenantId, lastName])
@@ -317,11 +347,48 @@ model Session {
 
   attendances Attendance[]
   fees        Fee[]
+  waitlistEntries WaitlistEntry[]
+  waitlistClaimTokens WaitlistClaimToken[]
 
   @@index([tenantId])
   @@index([tenantId, startsAt])
   @@index([classId])
   @@index([locationId])
+}
+
+// TKT-0112: per-session queue. Cascade from Session = deleting a session drops its queue.
+model WaitlistEntry {
+  id        String   @id @default(cuid())
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  sessionId String
+  session   Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  traineeId String
+  trainee   Trainee  @relation(fields: [traineeId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  claimTokens WaitlistClaimToken[]
+
+  @@unique([sessionId, traineeId])
+  @@index([tenantId])
+}
+
+// TKT-0114: one-time claim links for CLAIM-mode openings. Only the sha256 of the token is
+// stored (refresh-token discipline); the entry cascade voids tokens when the entry goes,
+// and a new opening voids the session's previous tokens by sessionId.
+model WaitlistClaimToken {
+  id        String        @id @default(cuid())
+  tenantId  String
+  tenant    Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  sessionId String
+  session   Session       @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  entryId   String
+  entry     WaitlistEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  tokenHash String        @unique
+  createdAt DateTime      @default(now())
+
+  @@index([tenantId])
+  @@index([sessionId])
 }
 
 model Attendance {
@@ -354,6 +421,9 @@ model Attendance {
 
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+
+  // TKT-0106/0107: the card visit this booking consumed, if any.
+  cardConsumption CardConsumption?
 
   // One attendance row per (session, trainee).
   @@unique([sessionId, traineeId])
@@ -400,8 +470,10 @@ model Fee {
   tenantId  String
   tenant    Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
-  classId   String
-  class     Class     @relation(fields: [classId], references: [id], onDelete: Cascade)
+  // Optional since TKT-0104 — a tenant-wide card purchase fee (TKT-0106) has no class.
+  // Every other creation path still requires and validates a concrete class.
+  classId   String?
+  class     Class?    @relation(fields: [classId], references: [id], onDelete: Cascade)
 
   traineeId String
   trainee   Trainee   @relation(fields: [traineeId], references: [id], onDelete: Cascade)
@@ -419,6 +491,10 @@ model Fee {
   notes     String?
 
   payments  Payment[]
+  // TKT-0105: money returned against this fee. Status derives from net paid (payments − refunds).
+  refunds   Refund[]
+  // TKT-0106: set when this fee is a card purchase; deleting the fee cascades the card (sale undone).
+  card      Card?
 
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
@@ -457,4 +533,86 @@ model Payment {
   @@index([tenantId])
   @@index([feeId])
   @@index([tenantId, paidAt])
+}
+
+// TKT-0105: money returned against a fee. Not a negative payment and not a fee-amount
+// reduction — a second ledger, so the overpay guards stay intact and status derives from
+// net paid = payments − refunds. Mirrors Payment's audit shape.
+model Refund {
+  id        String   @id @default(cuid())
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  feeId     String
+  fee       Fee      @relation(fields: [feeId], references: [id], onDelete: Cascade)
+
+  amount     Decimal
+  refundedAt DateTime
+  method     String?
+  notes      String?
+
+  // Audit pointer + denormalized snapshot — same pattern as Payment.recordedBy.
+  recordedById            String?
+  recordedBy              User?   @relation("RefundRecordedBy", fields: [recordedById], references: [id], onDelete: SetNull)
+  recordedByEmailSnapshot String?
+  recordedByNameSnapshot  String?
+
+  createdAt DateTime @default(now())
+
+  @@index([tenantId])
+  @@index([feeId])
+  @@index([tenantId, refundedAt])
+}
+
+// TKT-0106: prepaid visit card — a trainee pays a fixed price for N session visits,
+// consumed one per booking (TKT-0107). classId null = any class in the tenant.
+// The purchase is billed through a Fee (classId null for tenant-wide cards); deleting
+// that fee cascades here — "undo the sale". PRD-0015 supersedes the old "no credit
+// balance" rule.
+model Card {
+  id          String    @id @default(cuid())
+  tenantId    String
+  tenant      Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  traineeId   String
+  trainee     Trainee   @relation(fields: [traineeId], references: [id], onDelete: Cascade)
+  // Scope: null = tenant-wide, set = visits usable only for this class.
+  classId     String?
+  class       Class?    @relation(fields: [classId], references: [id], onDelete: Cascade)
+  // The purchase fee (amount = price). One fee per card.
+  feeId       String    @unique
+  fee         Fee       @relation(fields: [feeId], references: [id], onDelete: Cascade)
+
+  totalVisits Int
+  price       Decimal
+  // null = never expires. An expired card is unusable but stays listed.
+  expiresAt   DateTime?
+  // Set by cancel (TKT-0115). A cancelled card is unusable; consumptions stay.
+  cancelledAt DateTime?
+
+  consumptions CardConsumption[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([tenantId])
+  @@index([traineeId])
+  @@index([classId])
+}
+
+// One consumed visit: links a booking (attendance row) to the card it drew from.
+// Created/deleted by the attendance write paths (TKT-0107); deleting the attendance
+// returns the visit by cascading this row away.
+model CardConsumption {
+  id           String     @id @default(cuid())
+  tenantId     String
+  tenant       Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  cardId       String
+  card         Card       @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  attendanceId String     @unique
+  attendance   Attendance @relation(fields: [attendanceId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@index([tenantId])
+  @@index([cardId])
 }

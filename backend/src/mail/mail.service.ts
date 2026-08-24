@@ -3,6 +3,9 @@ import type {
   SendInviteOptions,
   SendMailOptions,
   SendPasswordResetOptions,
+  SendWaitlistClaimOfferOptions,
+  SendWaitlistPromotionOptions,
+  SendWaitlistSpotFilledOptions,
 } from './mail.types';
 
 // Abstract MailService — concrete implementations are bound by MailModule based on
@@ -58,6 +61,48 @@ export abstract class MailService {
       `Sign in with your usual password and pick the club from the club selector.`,
       ``,
       `Your password has not changed. If you were not expecting this, contact the club.`,
+    ].join('\n');
+    return this.send({ to: options.to, subject, text });
+  }
+
+  // TKT-0113: informational only — the spot is already booked when this is sent.
+  async sendWaitlistPromotion(options: SendWaitlistPromotionOptions): Promise<void> {
+    const subject = `A spot opened up — ${options.traineeName} is booked`;
+    const text = [
+      `Hello,`,
+      ``,
+      `A spot freed up in ${options.className} on ${options.startsAt.toISOString()}.`,
+      `${options.traineeName} was first in the waitlist and is now booked on the session.`,
+      ``,
+      `If the booking is not wanted, contact the club to release the spot.`,
+    ].join('\n');
+    return this.send({ to: options.to, subject, text });
+  }
+
+  // TKT-0114: the link is the authorization — one click books, first click wins.
+  async sendWaitlistClaimOffer(options: SendWaitlistClaimOfferOptions): Promise<void> {
+    const subject = `A spot opened up in ${options.className}`;
+    const text = [
+      `Hello,`,
+      ``,
+      `A spot freed up in ${options.className} on ${options.startsAt.toISOString()}, and ${options.traineeName} is on the waitlist.`,
+      ``,
+      `First to claim gets the spot:`,
+      options.claimUrl,
+      ``,
+      `The link works once and stops working when the spot is taken or the session starts.`,
+    ].join('\n');
+    return this.send({ to: options.to, subject, text });
+  }
+
+  // TKT-0114: consolation — the trainee keeps their place in the queue.
+  async sendWaitlistSpotFilled(options: SendWaitlistSpotFilledOptions): Promise<void> {
+    const subject = `The spot in ${options.className} was taken`;
+    const text = [
+      `Hello,`,
+      ``,
+      `The freed spot in ${options.className} on ${options.startsAt.toISOString()} was claimed by someone else.`,
+      `${options.traineeName} stays on the waitlist and you will get a new link at the next opening.`,
     ].join('\n');
     return this.send({ to: options.to, subject, text });
   }

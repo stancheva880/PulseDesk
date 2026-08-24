@@ -17,17 +17,63 @@ const HTTP_METHODS = ['get', 'post', 'put', 'patch', 'delete'];
 // Approved TEST CHANGE REQUEST, 2026-08-20: 64 → 65 for GET /fees/unbilled — the enrolled
 // trainees a month has no fee for. Same terms: still exact, and the route carries its own
 // @ResponseSchema (UnbilledFeeList).
-const ROUTE_COUNT = 65;
-const ENUM_COUNT = 8;
-const ENUM_MEMBER_COUNT = 31;
+// Approved TEST CHANGE REQUEST, 2026-08-22: 65 → 67 for POST /cards and GET /cards
+// (TKT-0106, visit cards). Same terms: still exact, and both routes carry their own
+// @ResponseSchema (CardRow, PaginatedCardRow).
+// Approved TEST CHANGE REQUEST, 2026-08-22: 67 → 70 for GET/POST /fees/:feeId/refunds and
+// DELETE /fees/:feeId/refunds/:id (TKT-0105, refund ledger — named in the approved tech
+// plan). Same terms: still exact, and all three routes carry their own @ResponseSchema
+// (RefundList, Refund, RefundNoContent).
+// Approved TEST CHANGE REQUEST, 2026-08-22: 70 → 71 for POST /cards/:id/cancel (TKT-0115,
+// card cancel — named in the approved tech plan). Same terms: still exact, and the route
+// reuses the CardRow @ResponseSchema.
+// Approved TEST CHANGE REQUEST, 2026-08-22: 71 → 72 for POST /fees/generate-course
+// (TKT-0110, course fees — named in the approved tech plan). Same terms: still exact,
+// and the route reuses the GenerateResult @ResponseSchema.
+// Approved TEST CHANGE REQUEST, 2026-08-23: 72 → 75 for GET/POST /sessions/:sessionId/waitlist
+// and DELETE /sessions/:sessionId/waitlist/:id (TKT-0112, waitlist — named in the approved
+// tech plan). Same terms: still exact, each route carries its own @ResponseSchema
+// (WaitlistEntryList, WaitlistEntry, WaitlistNoContent).
+// Approved TEST CHANGE REQUEST, 2026-08-23: 75 → 76 for DELETE /sessions/:sessionId/
+// attendances/:id (TKT-0113, the unbooking door — named in the approved tech plan). Same
+// terms: still exact, the route carries its own @ResponseSchema (AttendanceNoContent).
+// Approved TEST CHANGE REQUEST, 2026-08-23: 76 → 77 for POST /waitlist/claim (TKT-0114,
+// claim-mode promotion — named in the approved tech plan). Same terms: still exact, the
+// route carries its own @ResponseSchema (ClaimResult).
+// Approved TEST CHANGE REQUEST, 2026-08-23: 77 → 78 for GET /me/cards (TKT-0116, portal
+// cards — named in the approved tech plan). Same terms: still exact, the route carries
+// its own @ResponseSchema (CustomerCardEntryList).
+// Approved TEST CHANGE REQUEST, 2026-08-23: 78 → 79 for POST /me/sessions/:sessionId/bookings
+// (TKT-0118, customer self-booking — named in the approved tech plan). Same terms: still
+// exact, the route carries its own @ResponseSchema (Attendance).
+// Approved TEST CHANGE REQUEST, 2026-08-23: 79 → 80 for DELETE
+// /me/sessions/:sessionId/bookings/:traineeId (TKT-0119, customer cancel — named in the
+// approved tech plan). Same terms: still exact, the route carries @ResponseSchema
+// (AttendanceNoContent).
+// TKT-0121: 80 → 82, the customer waitlist pair (POST/DELETE me/sessions/:id/waitlist).
+// Approved TEST CHANGE REQUEST, 2026-08-24: 82 → 83 for POST /api/waitlists/sweep (TKT-0122,
+// the SUPER_ADMIN stale-waitlist sweep — named in the approved plan). Same terms: still exact,
+// the route carries its own @ResponseSchema (WaitlistSweepResult).
+const ROUTE_COUNT = 83;
+// Approved TEST CHANGE REQUEST, 2026-08-23: 8 → 9 for the WaitlistMode enum (TKT-0112 —
+// named in the approved tech plan). Same terms: still exact.
+const ENUM_COUNT = 9;
+// Approved TEST CHANGE REQUEST, 2026-08-22: 31 → 32 for BillingMode.PER_COURSE (TKT-0109,
+// course pricing — named in the approved tech plan). Same terms: still exact.
+// Approved TEST CHANGE REQUEST, 2026-08-23: 32 → 35 for WaitlistMode.{NONE,FIFO_AUTO,CLAIM}
+// (TKT-0112, waitlist — named in the approved tech plan). Same terms: still exact.
+const ENUM_MEMBER_COUNT = 35;
 
 interface OpenApiSpec {
   paths: Record<string, Record<string, Operation>>;
   components: { schemas: Record<string, unknown> };
+  tags?: Array<{ name: string; description?: string }>;
 }
 
 interface Operation {
   operationId?: string;
+  summary?: string;
+  tags?: string[];
   responses?: Record<string, { content?: Record<string, { schema?: { $ref?: string } }> }>;
 }
 
@@ -79,6 +125,40 @@ describe('generate-openapi', () => {
       Object.keys(methods).filter((method) => HTTP_METHODS.includes(method)),
     );
     expect(operations).toHaveLength(ROUTE_COUNT);
+  });
+
+  // The two tests below are the staleness guard for the human-readable half of the document:
+  // a new route or a new controller reaches Swagger UI with a sentence and a described group,
+  // or it goes red here. Both read the committed artifact, like every other test in this file.
+  it('describes every tag group it uses', () => {
+    const spec = loadSpec();
+    const used = new Set(
+      Object.values(spec.paths).flatMap((methods) =>
+        Object.entries(methods)
+          .filter(([method]) => HTTP_METHODS.includes(method))
+          .flatMap(([, operation]) => operation.tags ?? []),
+      ),
+    );
+    const described = new Set(
+      (spec.tags ?? [])
+        .filter((tag) => (tag.description ?? '').trim().length > 0)
+        .map((tag) => tag.name),
+    );
+    const missing = [...used].filter((tag) => !described.has(tag));
+    expect(missing, `tag group(s) with no description: ${missing.join(', ')}`).toEqual([]);
+  });
+
+  it(`carries a summary on every one of the ${ROUTE_COUNT} routes`, () => {
+    const unsummarised = Object.entries(loadSpec().paths).flatMap(([route, methods]) =>
+      Object.entries(methods)
+        .filter(([method]) => HTTP_METHODS.includes(method))
+        .filter(([, operation]) => (operation.summary ?? '').trim() === '')
+        .map(([method]) => `${method.toUpperCase()} ${route}`),
+    );
+    expect(
+      unsummarised,
+      `route(s) with no @ApiOperation summary: ${unsummarised.join(', ')}`,
+    ).toEqual([]);
   });
 
   it('contains every Prisma enum with exactly its schema.prisma members', () => {
@@ -303,10 +383,16 @@ describe('generate-openapi', () => {
     expect(schemas.Session?.properties?.endsAt?.type).toBe('string');
     // Each relation publishes exactly the columns its select names.
     const detail = schemas.SessionDetail?.properties ?? {};
+    // Approved TEST CHANGE REQUEST, 2026-08-22: + 'capacity' — TKT-0103's approved TCR #3
+    // added it to the session's class select and updated the sessions specs, but missed
+    // this pin; the stale committed openapi.json masked it until the TKT-0106 regen.
+    // TKT-0112 (named in the approved plan): 'waitlistMode' joined the class select.
     expect(Object.keys(detail.class?.properties ?? {}).sort()).toEqual([
       'billingMode',
+      'capacity',
       'id',
       'name',
+      'waitlistMode',
     ]);
     expect(Object.keys(detail.location?.properties ?? {}).sort()).toEqual(['id', 'name']);
   });

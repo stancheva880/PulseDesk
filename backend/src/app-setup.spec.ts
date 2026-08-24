@@ -184,6 +184,10 @@ describe('assertProductionSecrets', () => {
       'noreply@pulsedesk.test',
       'noreply@pulsedesk.example',
       'REPLACE_WITH_MAIL_FROM',
+      // A stray space in the .env still names the same undeliverable host. The value is not
+      // trimmed anywhere on the way here, so the guard has to tolerate the whitespace itself.
+      'noreply@pulsedesk.local ',
+      'PulseDesk <noreply@pulsedesk.local> ',
     ])('throws in production when MAIL_FROM is %s', (mailFrom) => {
       expect(() =>
         call({
@@ -197,7 +201,15 @@ describe('assertProductionSecrets', () => {
     });
 
     it('accepts a deliverable MAIL_FROM, bare or with a display name', () => {
-      for (const mailFrom of ['noreply@pulsedesk.com', 'PulseDesk <noreply@pulsedesk.bg>']) {
+      for (const mailFrom of [
+        'noreply@pulsedesk.com',
+        'PulseDesk <noreply@pulsedesk.bg>',
+        // The reserved names are whole labels, not substrings: a real host may end in any of
+        // them without the dot that makes it a TLD.
+        'noreply@club.contest',
+        'noreply@mylocal',
+        'noreply@a.example.com',
+      ]) {
         expect(() =>
           call({
             NODE_ENV: 'production',
@@ -224,6 +236,47 @@ describe('assertProductionSecrets', () => {
       expect(() =>
         call({ NODE_ENV: 'development', MAIL_TRANSPORT: 'smtp' }),
       ).not.toThrow();
+    });
+  });
+
+  // TKT-0097 — Sentry.init swallows a malformed DSN silently, so a typo in the Vercel env
+  // would deploy healthy with error tracking off. Set-but-unusable fails the boot instead,
+  // same contract as TRUST_PROXY_HOPS. Unset/empty stays a valid off-switch.
+  describe('sentry dsn', () => {
+    const GOOD_SECRET = 'p8a7s9d8a7sd987asd9Qk3vB6nX1zL4tR7wY0mC2jH5f';
+
+    it.each([
+      'foo',
+      'https://o12345.ingest.sentry.io/67890',
+      'https://abc123@o12345.ingest.sentry.io/',
+      'ftp://abc123@o12345.ingest.sentry.io/67890',
+    ])('throws in production when SENTRY_DSN is the unusable "%s"', (dsn) => {
+      expect(() =>
+        call({ NODE_ENV: 'production', JWT_ACCESS_SECRET: GOOD_SECRET, SENTRY_DSN: dsn }),
+      ).toThrow(/SENTRY_DSN/);
+    });
+
+    it('accepts a valid DSN in production', () => {
+      expect(() =>
+        call({
+          NODE_ENV: 'production',
+          JWT_ACCESS_SECRET: GOOD_SECRET,
+          SENTRY_DSN: 'https://abc123@o12345.ingest.de.sentry.io/67890',
+        }),
+      ).not.toThrow();
+    });
+
+    it('accepts an unset or empty SENTRY_DSN in production — the off-switch', () => {
+      expect(() =>
+        call({ NODE_ENV: 'production', JWT_ACCESS_SECRET: GOOD_SECRET }),
+      ).not.toThrow();
+      expect(() =>
+        call({ NODE_ENV: 'production', JWT_ACCESS_SECRET: GOOD_SECRET, SENTRY_DSN: '' }),
+      ).not.toThrow();
+    });
+
+    it('does not enforce the DSN rule outside production', () => {
+      expect(() => call({ NODE_ENV: 'development', SENTRY_DSN: 'foo' })).not.toThrow();
     });
   });
 });

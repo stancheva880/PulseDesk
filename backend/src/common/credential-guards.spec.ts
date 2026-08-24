@@ -11,7 +11,7 @@ describe('looksLikePlaceholder', () => {
   });
 
   it('rejects the exact placeholder shipped in .env.example', () => {
-    // backend/.env.example:29 — SUPERADMIN_PASSWORD=REPLACE_BEFORE_DEPLOY
+    // backend/.env.example — SUPERADMIN_PASSWORD=REPLACE_BEFORE_DEPLOY
     expect(looksLikePlaceholder('REPLACE_BEFORE_DEPLOY')).toBe(true);
     // and the JWT one it was already catching
     expect(looksLikePlaceholder('REPLACE_WITH_OPENSSL_RAND_BASE64_32')).toBe(true);

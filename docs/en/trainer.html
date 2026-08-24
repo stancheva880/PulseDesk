@@ -13,6 +13,7 @@
       <a href="super-admin.html">Super Administrator</a>
       <a href="admin.html">Administrator</a>
       <a href="customer.html">Customer</a>
+      <a href="examples.html">Examples</a>
       <span class="spacer"></span>
       <a class="lang" href="../bg/trener.html">BG</a>
     </nav>
@@ -49,12 +50,24 @@
         </tr>
         <tr>
           <td>Classes</td>
-          <td>What each class is, its price and its trainers.</td>
+          <td>
+            What each class is, its price, its trainers, and whether customers may book themselves
+            into it.
+          </td>
           <td>read only</td>
         </tr>
         <tr>
           <td>Sessions</td>
-          <td>The individual occurrences. Attendance is reached from here.</td>
+          <td>
+            The individual occurrences, each with a <span class="ui">Status</span> of
+            <span class="ui">Scheduled</span>, <span class="ui">Completed</span> or
+            <span class="ui">Cancelled</span>. Attendance is reached from here. Above the list,
+            <span class="ui">From</span>, <span class="ui">Before</span>,
+            <span class="ui">Class</span>, <span class="ui">Trainer</span> and
+            <span class="ui">Location</span> narrow it — useful for finding one session in a busy
+            week. A <span class="ui">Calendar</span> button switches the list to a month, week or
+            day calendar, and <span class="ui">Table</span> switches back.
+          </td>
           <td>read + attendance</td>
         </tr>
         <tr>
@@ -67,6 +80,11 @@
           <td>Reference for who owes what.</td>
           <td>read only</td>
         </tr>
+        <tr>
+          <td>Cards</td>
+          <td>Prepaid visit cards — reference for how many visits a trainee has left.</td>
+          <td>read only</td>
+        </tr>
       </tbody>
     </table>
 
@@ -74,6 +92,7 @@
     <ul>
       <li>Mark attendance for a session and save every row at once.</li>
       <li>Add a trainee to a session when they turn up without being on the list.</li>
+      <li>Remove a trainee from a session, and manage the waitlist when the session is full.</li>
       <li>Open a trainee's record and read their phone, email and guardian contacts.</li>
       <li>Check the status of a fee when a parent asks you.</li>
     </ul>
@@ -143,6 +162,18 @@
         to add. The list holds the trainees of your own locations, so somebody from another hall does
         not appear — nor does somebody who has not been created yet. Ask the administrator either way.
       </p>
+      <div class="note">
+        <strong>Cards and capacity.</strong>
+        A trainee whose visit card has no visits left is marked
+        <span class="ui">no visits left</span>; adding them still works — a warning suggests a new
+        card or a fee, and the money side is the administrator's. Adding a trainee spends one visit
+        from their card by itself; <span class="ui">Remove from session</span> gives it back. When
+        the session is full you see <span class="ui">No spots left</span> — if the class has a
+        waitlist, put the trainee on it with <span class="ui">Add to waitlist</span>, and the system
+        books or emails the queue by itself when a spot frees up — unless the class's booking
+        deadline has passed or the session has started, in which case the freed place waits for you
+        to fill it by hand.
+      </div>
     </div>
 
     <div class="story">
@@ -160,6 +191,13 @@
         The customer states an intention; the real attendance is what you mark. Pass reschedule
         requests to the administrator — only they move sessions.
       </div>
+      <div class="note">
+        <strong>Rows can appear and disappear without you.</strong>
+        On a class the administrator opened for customer self-booking, families put their own
+        trainees on the session and take them off again, up to the class's deadline. Such a row
+        arrives already <span class="ui">Confirmed</span>. Re-open the attendance screen before you
+        start marking, so you work from the current list.
+      </div>
     </div>
 
     <div class="story">
@@ -167,8 +205,9 @@
       <ol>
         <li>Open <span class="ui">Fees</span>.</li>
         <li>
-          Type a trainee or class name in
-          <span class="ui">Search trainee or class…</span>
+          Type the trainee's name or email address in
+          <span class="ui">Search by trainee name or email…</span> — the class name is not
+          searched here.
         </li>
         <li>
           Optionally narrow the list: <span class="ui">Class</span>,

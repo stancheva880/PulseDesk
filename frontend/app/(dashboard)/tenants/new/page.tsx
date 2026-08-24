@@ -8,9 +8,11 @@ import { useTranslation } from 'react-i18next';
 import { z } from 'zod';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { FieldError, SubmitError } from '@/components/ui/field-error';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { apiErrorMessage } from '@/lib/api';
+import { stashToast } from '@/components/toast';
 import { Tenants } from '@/lib/api-resources';
 import { hardNavigate, writeTenantContext } from '@/lib/tenant-context';
 
@@ -20,14 +22,24 @@ import { hardNavigate, writeTenantContext } from '@/lib/tenant-context';
 // Same shape as the backend's CreateTenantDto, and linear for the same reason.
 const SLUG_PATTERN = /^[a-z0-9][a-z0-9-]*[a-z0-9]$/;
 
+// TKT-0090: zod messages carry i18n keys; FieldError translates them.
 const schema = z.object({
-  name: z.string().trim().min(2).max(120),
-  slug: z.string().trim().min(2).max(60).regex(SLUG_PATTERN, 'slugFormat'),
-  locationName: z.string().trim().min(2).max(120),
-  locationAddress: z.string().trim().max(200).optional(),
-  adminEmail: z.string().email(),
-  adminFirstName: z.string().trim().max(120).optional(),
-  adminLastName: z.string().trim().max(120).optional(),
+  name: z.string().trim().min(2, 'common.errors.required').max(120, 'common.errors.tooLong'),
+  slug: z
+    .string()
+    .trim()
+    .min(2, 'common.errors.required')
+    .max(60, 'common.errors.tooLong')
+    .regex(SLUG_PATTERN, 'tenants.errors.slugFormat'),
+  locationName: z
+    .string()
+    .trim()
+    .min(2, 'common.errors.required')
+    .max(120, 'common.errors.tooLong'),
+  locationAddress: z.string().trim().max(200, 'common.errors.tooLong').optional(),
+  adminEmail: z.string().email('login.errors.email'),
+  adminFirstName: z.string().trim().max(120, 'common.errors.tooLong').optional(),
+  adminLastName: z.string().trim().max(120, 'common.errors.tooLong').optional(),
 });
 type FormValues = z.infer<typeof schema>;
 
@@ -37,9 +49,11 @@ export default function NewTenantPage() {
   const [submitError, setSubmitError] = useState<string | null>(null);
   // Set only when the club was created and its administrator's invite did not go out. The
   // club exists, so this is a warning with a recovery, never an error.
-  const [undeliveredInvite, setUndeliveredInvite] = useState<{ id: string; email: string } | null>(
-    null,
-  );
+  const [undeliveredInvite, setUndeliveredInvite] = useState<{
+    id: string;
+    email: string;
+    name: string;
+  } | null>(null);
 
   const {
     register,
@@ -62,10 +76,10 @@ export default function NewTenantPage() {
       if (!created.notificationSent) {
         // Navigating away would take the only notice of the failure with it, and the
         // administrator cannot sign in until someone re-sends the invite.
-        setUndeliveredInvite({ id: created.id, email: values.adminEmail });
+        setUndeliveredInvite({ id: created.id, email: values.adminEmail, name: created.name });
         return;
       }
-      enterClub(created.id);
+      enterClub(created.id, created.name);
     } catch (e) {
       setSubmitError(apiErrorMessage(e));
     }
@@ -73,7 +87,10 @@ export default function NewTenantPage() {
 
   // A full reload refetches the selector, so the new club is both listed and active without a
   // re-login.
-  function enterClub(id: string) {
+  function enterClub(id: string, name: string) {
+    // TKT-0092: hardNavigate discards the JS context, so the confirmation rides sessionStorage
+    // and the next document's ToastViewport drains it on mount.
+    stashToast({ text: t('tenants.createdToast', { name }), variant: 'success' });
     writeTenantContext(id);
     hardNavigate('/dashboard');
   }
@@ -90,7 +107,10 @@ export default function NewTenantPage() {
             <p className="text-sm text-muted-foreground">
               {t('tenants.inviteFailed.body', { email: undeliveredInvite.email })}
             </p>
-            <Button type="button" onClick={() => enterClub(undeliveredInvite.id)}>
+            <Button
+              type="button"
+              onClick={() => enterClub(undeliveredInvite.id, undeliveredInvite.name)}
+            >
               {t('tenants.inviteFailed.continue')}
             </Button>
           </CardContent>
@@ -111,53 +131,84 @@ export default function NewTenantPage() {
           <form className="space-y-4" onSubmit={handleSubmit(onSubmit)} noValidate>
             <div className="space-y-1.5">
               <Label htmlFor="name">{t('tenants.fields.name')}</Label>
-              <Input id="name" {...register('name')} />
-              {errors.name ? (
-                <p className="text-sm text-destructive">{t('common.errors.required')}</p>
-              ) : null}
+              <Input
+                id="name"
+                aria-invalid={errors.name ? true : undefined}
+                aria-describedby={errors.name ? 'name-error' : undefined}
+                {...register('name')}
+              />
+              <FieldError id="name-error" messageKey={errors.name?.message} />
             </div>
 
             <div className="space-y-1.5">
               <Label htmlFor="slug">{t('tenants.fields.slug')}</Label>
-              <Input id="slug" {...register('slug')} />
+              <Input
+                id="slug"
+                aria-invalid={errors.slug ? true : undefined}
+                aria-describedby={errors.slug ? 'slug-error' : undefined}
+                {...register('slug')}
+              />
               <p className="text-xs text-muted-foreground">{t('tenants.fields.slugHint')}</p>
-              {errors.slug ? (
-                <p className="text-sm text-destructive">{t('tenants.errors.slugFormat')}</p>
-              ) : null}
+              <FieldError id="slug-error" messageKey={errors.slug?.message} />
             </div>
 
             <div className="space-y-1.5">
               <Label htmlFor="locationName">{t('tenants.fields.locationName')}</Label>
-              <Input id="locationName" {...register('locationName')} />
-              {errors.locationName ? (
-                <p className="text-sm text-destructive">{t('common.errors.required')}</p>
-              ) : null}
+              <Input
+                id="locationName"
+                aria-invalid={errors.locationName ? true : undefined}
+                aria-describedby={errors.locationName ? 'locationName-error' : undefined}
+                {...register('locationName')}
+              />
+              <FieldError id="locationName-error" messageKey={errors.locationName?.message} />
             </div>
 
             <div className="space-y-1.5">
               <Label htmlFor="locationAddress">{t('tenants.fields.locationAddress')}</Label>
-              <Input id="locationAddress" {...register('locationAddress')} />
+              <Input
+                id="locationAddress"
+                aria-invalid={errors.locationAddress ? true : undefined}
+                aria-describedby={errors.locationAddress ? 'locationAddress-error' : undefined}
+                {...register('locationAddress')}
+              />
+              <FieldError id="locationAddress-error" messageKey={errors.locationAddress?.message} />
             </div>
 
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-1.5">
                 <Label htmlFor="adminEmail">{t('tenants.fields.adminEmail')}</Label>
-                <Input id="adminEmail" type="email" {...register('adminEmail')} />
-                {errors.adminEmail ? (
-                  <p className="text-sm text-destructive">{t('login.errors.email')}</p>
-                ) : null}
+                <Input
+                  id="adminEmail"
+                  type="email"
+                  aria-invalid={errors.adminEmail ? true : undefined}
+                  aria-describedby={errors.adminEmail ? 'adminEmail-error' : undefined}
+                  {...register('adminEmail')}
+                />
+                <FieldError id="adminEmail-error" messageKey={errors.adminEmail?.message} />
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="adminFirstName">{t('tenants.fields.adminFirstName')}</Label>
-                <Input id="adminFirstName" {...register('adminFirstName')} />
+                <Input
+                  id="adminFirstName"
+                  aria-invalid={errors.adminFirstName ? true : undefined}
+                  aria-describedby={errors.adminFirstName ? 'adminFirstName-error' : undefined}
+                  {...register('adminFirstName')}
+                />
+                <FieldError id="adminFirstName-error" messageKey={errors.adminFirstName?.message} />
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="adminLastName">{t('tenants.fields.adminLastName')}</Label>
-                <Input id="adminLastName" {...register('adminLastName')} />
+                <Input
+                  id="adminLastName"
+                  aria-invalid={errors.adminLastName ? true : undefined}
+                  aria-describedby={errors.adminLastName ? 'adminLastName-error' : undefined}
+                  {...register('adminLastName')}
+                />
+                <FieldError id="adminLastName-error" messageKey={errors.adminLastName?.message} />
               </div>
             </div>
 
-            {submitError ? <p className="text-sm text-destructive">{submitError}</p> : null}
+            <SubmitError message={submitError} />
 
             <div className="flex gap-2">
               <Button type="submit" disabled={isSubmitting}>

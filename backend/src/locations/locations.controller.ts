@@ -10,7 +10,7 @@ import {
   Post,
   Query,
 } from '@nestjs/common';
-import { ApiBearerAuth } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { UserRole, type Location } from '@prisma/client';
 import { CurrentUser } from '@/auth/decorators/current-user.decorator';
 import { Roles } from '@/auth/decorators/roles.decorator';
@@ -34,6 +34,7 @@ import { LocationsService } from './locations.service';
 export class LocationsController {
   constructor(private readonly locations: LocationsService) {}
 
+  @ApiOperation({ summary: 'List the locations you can reach in this club. Paginated.' })
   @Get()
   @ResponseSchema('PaginatedLocation', PaginatedLocationSchema)
   list(
@@ -44,6 +45,7 @@ export class LocationsController {
     return this.locations.list(tenantId, user, query);
   }
 
+  @ApiOperation({ summary: 'Read one location.' })
   @Get(':id')
   @ResponseSchema('Location', LocationSchema)
   findOne(
@@ -54,6 +56,7 @@ export class LocationsController {
     return this.locations.findById(tenantId, id, user);
   }
 
+  @ApiOperation({ summary: 'Create a location. SUPER_ADMIN only.' })
   @Post()
   @Roles(UserRole.SUPER_ADMIN)
   @ResponseSchema('Location', LocationSchema)
@@ -61,6 +64,7 @@ export class LocationsController {
     return this.locations.create(tenantId, dto);
   }
 
+  @ApiOperation({ summary: 'Change a location. Deactivating it also stops its weekly slots.' })
   @Patch(':id')
   @Roles(UserRole.SUPER_ADMIN)
   @ResponseSchema('Location', LocationSchema)
@@ -72,6 +76,7 @@ export class LocationsController {
     return this.locations.update(tenantId, id, dto);
   }
 
+  @ApiOperation({ summary: 'Delete a location. Refused when it has sessions or weekly slots.' })
   @Delete(':id')
   @Roles(UserRole.SUPER_ADMIN)
   @HttpCode(HttpStatus.NO_CONTENT)

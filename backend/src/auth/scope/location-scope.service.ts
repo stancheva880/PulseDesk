@@ -58,6 +58,56 @@ export class LocationScopeService {
   }
 
   /**
+   * TKT-0123: the other half of `assertLocationsAllowed`.
+   *
+   * Relation writes go through `set`, which replaces the whole list — so validating the ids that
+   * ARRIVE says nothing about the ones that LEAVE. A class is visible to an ADMIN when any single
+   * one of its locations is theirs, which was enough to strip a shared class of the other hall.
+   * No-op for SUPER_ADMIN and CUSTOMER, and for a request that removes nothing.
+   */
+  async assertLocationRemovalsAllowed(
+    user: AuthenticatedUser,
+    tenantId: string,
+    before: readonly string[],
+    after: readonly string[],
+  ): Promise<void> {
+    const kept = new Set(after);
+    const removed = before.filter((id) => !kept.has(id));
+    if (removed.length === 0) return;
+    await this.assertLocationsAllowed(user, tenantId, removed);
+  }
+
+  /**
+   * TKT-0123: the same rule for rows that hang off locations rather than being one — a class's
+   * trainee roster, its trainer roster, a trainee's class list.
+   *
+   * The bar is deliberately "positively somewhere else", not "not visible to me". A row with no
+   * location at all is unscoped, and `assertTraineeIds` lets any admin of the club attach one, so
+   * refusing to detach it would leave a relation an admin can add to and never remove from. What
+   * this stops is the real escape: detaching a row anchored to a hall the actor does not hold.
+   *
+   * `countBlocked` answers "how many of these belong to another hall", asked through the caller's
+   * own Prisma delegate; anything above zero fails the whole write.
+   */
+  async assertRemovalsAllowed(
+    user: AuthenticatedUser,
+    tenantId: string,
+    before: readonly string[],
+    after: readonly string[],
+    countBlocked: (removed: string[], allowed: string[]) => Promise<number>,
+    label: string,
+  ): Promise<void> {
+    const allowed = await this.getAccessibleLocationIds(user, tenantId);
+    if (allowed === null) return;
+    const kept = new Set(after);
+    const removed = before.filter((id) => !kept.has(id));
+    if (removed.length === 0) return;
+    if ((await countBlocked(removed, allowed)) > 0) {
+      throw new ForbiddenException(`Not allowed to detach ${label} outside your locations`);
+    }
+  }
+
+  /**
    * Where fragment restricting a query to the user's accessible locations.
    * Spread into a Prisma `where`; empty object when the user is unrestricted.
    * `field` is the column holding the location id — 'locationId' on most models,

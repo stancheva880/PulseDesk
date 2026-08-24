@@ -5,6 +5,7 @@ import userEvent from '@testing-library/user-event';
 import UsersListPage from '@/app/(dashboard)/users/page';
 import { AuthProvider } from '@/components/auth-provider';
 import { I18nProvider } from '@/components/i18n-provider';
+import { ToastViewport } from '@/components/toast';
 
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ replace: vi.fn(), push: vi.fn(), back: vi.fn() }),
@@ -69,6 +70,7 @@ function rowFor(email: string): HTMLElement {
 function renderPage() {
   return render(
     <I18nProvider>
+      <ToastViewport />
       <AuthProvider>
         <UsersListPage />
       </AuthProvider>

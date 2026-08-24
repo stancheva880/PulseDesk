@@ -16,6 +16,16 @@
     "welcome": "Welcome to PulseDesk",
     "signIn": "Sign in"
   },
+  "maintenance": {
+    "title": "Maintenance",
+    "subtitle": "Platform housekeeping. These actions affect every club.",
+    "waitlistSweep": {
+      "title": "Stale waiting lists",
+      "description": "Removes waiting-list entries for sessions that started more than 48 hours ago. Such an entry can never turn into a booking, and customers already stop seeing it the moment the session starts. Claim links go with it. Attendance history is untouched.",
+      "run": "Run sweep",
+      "done": "Removed {{deleted}} stale waiting-list entries."
+    }
+  },
   "nav": {
     "aria": "Primary navigation",
     "dashboard": "Dashboard",
@@ -25,10 +35,16 @@
     "sessions": "Sessions",
     "trainees": "Trainees",
     "fees": "Fees",
+    "cards": "Cards",
     "users": "Users",
-    "logout": "Sign out"
+    "maintenance": "Maintenance",
+    "logout": "Sign out",
+    "openMenu": "Open menu",
+    "menuTitle": "Menu",
+    "close": "Close"
   },
   "common": {
+    "dismiss": "Dismiss message",
     "search": {
       "person": "Search by name or email…",
       "byName": "Search by name…",
@@ -42,10 +58,12 @@
     "delete": "Delete",
     "remove": "Remove",
     "loading": "Loading…",
+    "clear": "Clear",
     "active": "Active",
     "inactive": "Inactive",
     "errors": {
       "required": "This field is required.",
+      "tooLong": "This value is too long.",
       "generic": "Something went wrong. Please try again.",
       "amount": "Amount must be a positive number with at most 2 decimal places, up to 1,000,000."
     },
@@ -53,11 +71,17 @@
       "summary": "Page {{page}} of {{totalPages}} ({{total}} total)",
       "previous": "Previous",
       "next": "Next"
-    }
+    },
+    "savedToast": "Saved",
+    "deletedToast": "Removed: {{name}}"
   },
   "errors": {
     "FEE_PAYMENT_EXCEEDS_BALANCE": "Payment of {{amount}} exceeds the outstanding balance of {{balance}} on this fee.",
     "FEE_AMOUNT_BELOW_PAID": "Amount {{amount}} is below the {{paid}} already recorded against this fee.",
+    "REFUND_EXCEEDS_NET_PAID": "Refund of {{amount}} exceeds the net paid {{netPaid}} on this fee.",
+    "PAYMENT_DELETE_BELOW_REFUNDED": "This payment cannot be deleted: refunds would exceed what was paid by {{shortfall}}.",
+    "REFUND_DELETE_EXCEEDS_AMOUNT": "This refund cannot be deleted: net paid {{netPaid}} would exceed the fee amount {{feeAmount}}.",
+    "CARD_ALREADY_CANCELLED": "This card is already cancelled.",
     "FEE_PERIOD_ORDER": "The period end must be on or after the period start.",
     "FEE_PERIOD_FILTER_ORDER": "The filter end date must be on or after the start date.",
     "TRAINEE_MINOR_NEEDS_CONTACT": "At least one contact person is required for trainees under 18.",
@@ -70,6 +94,14 @@
     "CLASS_SESSION_PRICE_FORBIDDEN": "Do not set a session price when billing is per month.",
     "CLASS_SESSION_PRICE_REQUIRED": "A session price is required when billing is per session.",
     "CLASS_MONTHLY_FORBIDDEN": "Do not set a monthly amount when billing is per session.",
+    "CLASS_COURSE_FIELDS_REQUIRED": "Course start, end and price are all required for course billing.",
+    "CLASS_COURSE_FIELDS_FORBIDDEN": "Course fields may only be set with course billing.",
+    "CLASS_COURSE_ONLY_PER_COURSE": "Course fields may only be set on course-billed classes.",
+    "CLASS_COURSE_PERIOD_ORDER": "Course end must be after its start.",
+    "CLASS_HAS_PAYMENTS": "This class has fees with recorded payments or refunds. Deactivate it instead, or remove the payments first.",
+    "TRAINEE_HAS_PAYMENTS": "This trainee has fees with recorded payments or refunds. Deactivate them instead, or remove the payments first.",
+    "LOCATION_IN_USE": "This location has {{sessions}} session(s) and {{schedules}} schedule(s). Deactivate it instead, or move them to another location first.",
+    "LOCATION_INACTIVE": "That location is deactivated. Reactivate it, or choose another location.",
     "LOCATION_NAME_TAKEN": "Location “{{name}}” already exists.",
     "LOCATION_NAME_IN_USE": "Location name already in use.",
     "USER_NEEDS_LOCATION": "This role needs at least one location.",
@@ -82,7 +114,9 @@
     "TENANT_ADMIN_DEACTIVATED": "That account is deactivated. Reactivate it before making it a club administrator.",
     "TENANT_SLUG_TAKEN": "A club with the identifier “{{slug}}” already exists.",
     "ATTENDANCE_TRAINEE_ALREADY_ON_SESSION": "That trainee is already on this session.",
+    "ATTENDANCE_SESSION_FULL": "This session is full ({{count}}/{{capacity}}).",
     "SCHEDULE_END_BEFORE_START": "The end time must be after the start time.",
+    "SCHEDULE_RANGE_TOO_LARGE": "That date range is too long. Generate at most {{maxDays}} days at a time.",
     "SESSION_END_BEFORE_START": "The session end must be after its start.",
     "AUTH_RESET_LINK_INVALID": "Invalid or expired reset link."
   },
@@ -123,6 +157,7 @@
   "users": {
     "title": "Users",
     "subtitle": "Manage members of the current club.",
+    "search": "Search by name or email…",
     "new": "New user",
     "empty": "No users yet.",
     "edit": "Edit user",
@@ -137,7 +172,6 @@
     "fields": {
       "email": "Email",
       "name": "Name",
-      "password": "Password",
       "passwordOptional": "New password (leave blank to keep)",
       "firstName": "First name",
       "lastName": "Last name",
@@ -229,35 +263,59 @@
     "formTitle": "Class details",
     "empty": "No classes yet.",
     "deleteConfirm": "Delete class \"{{name}}\"?",
+    "search": "Search by name…",
+    "filters": {
+      "activeOnly": "Active classes only"
+    },
     "noLocations": "No locations available — create one first.",
     "noTrainees": "No trainees available — create one first.",
     "noTrainers": "No employees available — create one first.",
-    "billingImmutable": "(immutable after creation)",
     "fields": {
       "name": "Name",
       "description": "Description",
       "billingMode": "Billing mode",
       "price": "Price",
       "monthlyAmount": "Monthly amount per trainee",
+      "capacity": "Capacity (spots)",
+      "waitlistMode": "Waitlist",
       "sessionPrice": "Price per session",
+      "coursePrice": "Course price",
+      "courseStart": "Course start",
+      "courseEnd": "Course end",
       "locations": "Locations",
       "trainees": "Trainees",
       "trainers": "Trainers",
       "trainersHint": "Default trainers for new sessions of this class.",
       "status": "Status",
-      "active": "Active"
+      "active": "Active",
+      "selfBooking": "Customer self-booking",
+      "bookingCutoffMin": "Booking closes (minutes before start)"
     },
     "billing": {
       "PER_MONTH": "Per month",
-      "PER_SESSION": "Per session"
+      "PER_SESSION": "Per session",
+      "PER_COURSE": "Course"
+    },
+    "waitlist": {
+      "NONE": "None",
+      "FIFO_AUTO": "Automatic (first come)",
+      "CLAIM": "Email claim"
     },
     "priceUnit": {
       "month": "month",
-      "session": "session"
+      "session": "session",
+      "course": "course"
     },
+    "capacityStatus": "Enrolled {{enrolled}} / capacity {{capacity}}",
+    "waitlistAutoHint": "Auto-promotion books the first waiting trainee onto the freed spot and may consume a card visit without staff action.",
+    "capacityWarning": "Enrollment exceeds capacity — new sessions will be generated over-full.",
     "errors": {
-      "duplicate": "A class with this name already exists."
-    }
+      "duplicate": "A class with this name already exists.",
+      "capacity": "Capacity must be a whole number of at least 1.",
+      "coursePeriod": "Course end must be after its start.",
+      "cutoff": "The cutoff must be a whole number, at least 0."
+    },
+    "cutoffHint": "Empty = bookable until the session starts."
   },
   "sessions": {
     "title": "Sessions",
@@ -286,6 +344,26 @@
     },
     "errors": {
       "endsBeforeStarts": "End time must be after start time."
+    },
+    "filters": {
+      "from": "From",
+      "before": "Before",
+      "order": "The upper bound must be after the start date.",
+      "class": "Class",
+      "trainer": "Trainer",
+      "location": "Location",
+      "all": "All"
+    },
+    "calendar": {
+      "view": "Calendar",
+      "tableView": "Table",
+      "month": "Month",
+      "week": "Week",
+      "day": "Day",
+      "today": "Today",
+      "prev": "Previous period",
+      "next": "Next period",
+      "more": "+{{n}} more"
     }
   },
   "schedules": {
@@ -332,7 +410,10 @@
     "empty": "No trainees enrolled in this session yet.",
     "addTrainee": "Add a trainee…",
     "addTraineeCta": "Add",
+    "removeRow": "Remove from session",
     "allEnrolled": "Every active trainee is already on this session.",
+    "occupied": "Occupied {{n}} of {{max}}",
+    "full": "No spots left.",
     "fields": {
       "trainee": "Trainee",
       "status": "Status",
@@ -351,6 +432,21 @@
       "RESCHEDULE_REQUESTED": "Wants to reschedule"
     },
     "truncated": "The list is incomplete. The server sends at most 100 rows for one session, and this session has more. Save marks only the rows you see — mark the others after you divide the session."
+  },
+  "waitlist": {
+    "title": "Waitlist",
+    "add": "Add to waitlist",
+    "cta": "Add to waitlist",
+    "empty": "Nobody is waiting.",
+    "remove": "Remove"
+  },
+  "claim": {
+    "checking": "Checking the link…",
+    "claimed": "The spot is yours!",
+    "claimedDetail": "{{className}} — {{startsAt}}",
+    "taken": "The spot has already been taken.",
+    "takenDetail": "You stay on the waitlist and will get a new link at the next opening.",
+    "expired": "This link is invalid or has expired."
   },
   "chart": {
     "billingTitle": "Collected vs Pending fees",
@@ -374,7 +470,8 @@
       "rangeTooLarge": "The range cannot be longer than {{months}} months."
     },
     "showingPeriod": "Showing: {{from}} – {{to}}",
-    "showingMonth": "Showing: {{month}}"
+    "showingMonth": "Showing: {{month}}",
+    "viewFees": "View in fees list"
   },
   "fees": {
     "title": "Fees",
@@ -384,7 +481,7 @@
     "formTitle": "Fee details",
     "empty": "No fees yet — generate or create one above.",
     "deleteConfirm": "Delete this fee? Payments will also be removed.",
-    "search": "Search trainee or class…",
+    "search": "Search by trainee name or email…",
     "currency": "EUR",
     "filters": {
       "title": "Filters",
@@ -407,7 +504,8 @@
       "periodEnd": "Period end",
       "status": "Status",
       "notes": "Notes",
-      "outstanding": "Outstanding"
+      "outstanding": "Outstanding",
+      "netPaid": "Net paid"
     },
     "status": {
       "UNPAID": "Unpaid",
@@ -424,9 +522,52 @@
       "description": "Create one fee per (trainee, session) for PER_SESSION classes in a date range.",
       "submit": "Generate"
     },
+    "generateCourse": {
+      "title": "Generate course fees",
+      "description": "Create one fee per enrolled trainee for each course-billed class — period and price come from the class.",
+      "submit": "Generate"
+    },
     "generated": "Created {{created}} fee(s); skipped {{skipped}} duplicate(s).",
     "errors": {
       "endsBeforeStarts": "Period end must be on or after period start."
+    }
+  },
+  "cards": {
+    "title": "Cards",
+    "subtitle": "Prepaid visit cards",
+    "new": "New card",
+    "formTitle": "Sell a card",
+    "empty": "No cards.",
+    "wholeClub": "Whole club",
+    "neverExpires": "Never expires",
+    "expiryHint": "Leave empty for a card with no expiry.",
+    "fields": {
+      "trainee": "Trainee",
+      "scope": "Scope",
+      "visits": "Visits",
+      "remaining": "Remaining",
+      "totalVisits": "Number of visits",
+      "price": "Price",
+      "expiresAt": "Valid until",
+      "state": "State"
+    },
+    "state": {
+      "active": "Active",
+      "cancelled": "Cancelled",
+      "expired": "Expired",
+      "exhausted": "Used up"
+    },
+    "errors": {
+      "visits": "Enter a whole number, at least 1."
+    },
+    "noVisitsSuffix": "no visits left",
+    "noVisitsWarning": "This trainee has no card visits left. Adding is allowed — consider a new card or a fee.",
+    "cancel": {
+      "action": "Cancel card",
+      "title": "Cancel card",
+      "amountLabel": "Refund amount",
+      "hint": "Suggestion: price ÷ total visits × remaining. Editable — may be 0.",
+      "toast": "Card cancelled"
     }
   },
   "payments": {
@@ -441,11 +582,39 @@
       "recordedBy": "Recorded by"
     },
     "addTitle": "Record a payment",
-    "payRest": "Pay the rest"
+    "payRest": "Pay the rest",
+    "recordedToast": "Payment recorded"
+  },
+  "refunds": {
+    "ledger": "Refund ledger",
+    "empty": "No refunds yet.",
+    "deleteConfirm": "Remove this refund? The fee status will be recomputed.",
+    "fields": {
+      "amount": "Amount",
+      "refundedAt": "Refunded at",
+      "method": "Method",
+      "notes": "Notes",
+      "recordedBy": "Recorded by"
+    },
+    "addTitle": "Record a refund",
+    "recordedToast": "Refund recorded"
   },
   "portal": {
     "navSchedule": "Schedule",
     "navFees": "Fees",
+    "navCards": "Cards",
+    "cards": {
+      "title": "My cards",
+      "subtitle": "Visit cards for you and your trainees.",
+      "empty": "No cards yet.",
+      "wholeClub": "Whole club",
+      "visits": "Visits remaining",
+      "expires": "Valid until {{date}}",
+      "noExpiry": "Never expires",
+      "cancelled": "Cancelled",
+      "expired": "Expired",
+      "exhausted": "Used up"
+    },
     "feesTitle": "My fees",
     "feesSubtitle": "Charges and payments for you and your trainees.",
     "feesEmpty": "No fees yet.",
@@ -454,6 +623,7 @@
     "noPayments": "No payments recorded yet.",
     "scheduleTitle": "My schedule",
     "scheduleSubtitle": "Upcoming sessions for you and your trainees.",
+    "listView": "List",
     "empty": "No upcoming sessions yet.",
     "rsvpSaved": "RSVP saved.",
     "rsvpFailed": "Could not update RSVP.",
@@ -462,11 +632,31 @@
       "CONFIRMED": "Confirmed",
       "DECLINED": "Decline",
       "RESCHEDULE_REQUESTED": "Reschedule"
-    }
+    },
+    "book": "Book",
+    "bookSaved": "Booked",
+    "bookFailed": "Booking failed — the list has been refreshed",
+    "noVisitsNote": "No card visits left — arrange a new card or a fee with the club. Booking is still allowed.",
+    "cancelBooking": "Cancel booking",
+    "cancelSaved": "Booking cancelled",
+    "cancelFailed": "Cancellation failed — the list has been refreshed",
+    "pastCutoffHint": "The self-service window has closed — contact the club to change this.",
+    "joinWaitlist": "Join waitlist",
+    "joinWaitlistSaved": "Added to the waitlist",
+    "joinWaitlistFailed": "Joining the waitlist failed — the list has been refreshed",
+    "leaveWaitlist": "Leave waitlist",
+    "leaveWaitlistSaved": "Removed from the waitlist",
+    "leaveWaitlistFailed": "Leaving the waitlist failed — the list has been refreshed",
+    "queuedBadge": "On the waitlist",
+    "noSpots": "No spots left."
   },
   "trainees": {
     "title": "Trainees",
     "subtitle": "Members of your club.",
+    "search": "Search by name or email…",
+    "errors": {
+      "dobFuture": "The date of birth cannot be in the future."
+    },
     "new": "New trainee",
     "edit": "Edit trainee",
     "formTitle": "Trainee details",
@@ -547,6 +737,7 @@
       "title": "The club is created, but the email did not go out",
       "body": "The invite to {{email}} did not go out. The administrator has no password until they open the invite. Send the invite again from the Users page.",
       "continue": "Go to the club"
-    }
+    },
+    "createdToast": "Club “{{name}}” created"
   }
 }

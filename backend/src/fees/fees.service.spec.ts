@@ -609,7 +609,7 @@ describe('FeesService', () => {
       const ids = new Set(result.map((f) => f.traineeId));
       expect(ids).toEqual(new Set([self.id, child.id]));
       const selfRow = result.find((f) => f.traineeId === self.id)!;
-      expect(selfRow.class.name).toBe(cls.name);
+      expect(selfRow.class?.name).toBe(cls.name);
       expect(selfRow.trainee.firstName).toBe('Self');
       expect(selfRow.payments).toHaveLength(1);
       expect(Number(selfRow.payments[0]!.amount)).toBe(30);

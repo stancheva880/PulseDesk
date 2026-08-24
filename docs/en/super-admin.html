@@ -13,6 +13,7 @@
       <a href="admin.html">Administrator</a>
       <a href="trainer.html">Employee</a>
       <a href="customer.html">Customer</a>
+      <a href="examples.html">Examples</a>
       <span class="spacer"></span>
       <a class="lang" href="../bg/super-admin.html">BG</a>
     </nav>
@@ -46,9 +47,12 @@
       You see every menu: <span class="ui">Dashboard</span>,
       <span class="ui">Locations</span>, <span class="ui">Classes</span>,
       <span class="ui">Schedules</span>, <span class="ui">Sessions</span>,
-      <span class="ui">Trainees</span>, <span class="ui">Fees</span> and
-      <span class="ui">Users</span> — with full rights in each of them, for the club you selected.
-      Location restrictions do not apply to you.
+      <span class="ui">Trainees</span>, <span class="ui">Fees</span>,
+      <span class="ui">Cards</span>,
+      <span class="ui">Users</span> and <span class="ui">Maintenance</span> — with full rights in
+      each of them, for the club you selected. Location restrictions do not apply to you.
+      <span class="ui">Maintenance</span> is the one screen that is not about a single club — see
+      story 7.
     </p>
 
     <h2>What you can do that an administrator cannot</h2>
@@ -92,6 +96,13 @@
         <tr>
           <td>Work in any club</td>
           <td>An administrator sees only the clubs they belong to.</td>
+        </tr>
+        <tr>
+          <td>Run platform maintenance</td>
+          <td>
+            The action on that screen crosses every club at once, so it is not an administrator's
+            to press.
+          </td>
         </tr>
       </tbody>
     </table>
@@ -187,9 +198,25 @@
       </p>
       <p>
         For a hall that closes: open <span class="ui">Edit</span> and clear
-        <span class="ui">Active</span>. History is kept, and the location drops out of the choices
-        for new classes and sessions.
+        <span class="ui">Active</span>. History is kept, and three things follow at once. The hall
+        leaves the list of choices for a new session and for a new weekly schedule. Every weekly
+        schedule at that hall is switched off, so nothing more is generated from it. And a session
+        or a schedule that still names the hall is refused with
+        <span class="ui">That location is deactivated. Reactivate it, or choose another
+        location.</span>
       </p>
+      <p>
+        A class or a trainee can still be attached to a closed hall. That creates no session and no
+        fee, so it is allowed — it only records where they belong.
+      </p>
+      <div class="stop">
+        <strong>Delete works only on a hall that was never used.</strong>
+        <span class="ui">Delete</span> on a hall that holds sessions or weekly schedules is refused
+        with <span class="ui">This location has 12 session(s) and 4 schedule(s). Deactivate it
+        instead, or move them to another location first.</span> The refusal is deliberate: deleting
+        the hall would take every session held there with it, and the attendance and the paid card
+        visits on those sessions with them. Clear <span class="ui">Active</span> instead.
+      </div>
     </div>
 
     <div class="story">
@@ -263,12 +290,42 @@
       </div>
     </div>
 
+    <div class="story">
+      <h3>7. As a super administrator I want to clear stale waiting lists</h3>
+      <ol>
+        <li>Open <span class="ui">Maintenance</span>, the last item in the menu.</li>
+        <li>Read the card <span class="ui">Stale waiting lists</span>.</li>
+        <li>Press <span class="ui">Run sweep</span>.</li>
+        <li>
+          The message says how many entries went, for example
+          <span class="ui">Removed 8 stale waiting-list entries.</span>
+        </li>
+      </ol>
+      <p>
+        The sweep removes waiting-list entries for sessions that started more than 48 hours ago,
+        and the claim links that belong to them. Such an entry can never become a booking, and the
+        customer stops seeing it the moment the session starts — so what goes is dead records, not
+        somebody's place in a queue.
+      </p>
+      <p>
+        Attendance, sessions and the queues on sessions still to come are not touched. There is no
+        confirmation question, and running it again is safe. Nothing runs it for you on a timer.
+      </p>
+      <div class="note">
+        <strong>This one action is not about one club.</strong>
+        It works across every club in the system at the same time, whichever club you have
+        selected in the top bar.
+      </div>
+    </div>
+
     <h2>Day-to-day work</h2>
     <p>
-      Trainees, classes, schedules, sessions, attendance, fees and payments work for you exactly as
-      they do for an administrator. The steps are in the
-      <a href="admin.html">administrator guide</a> — including the rule for trainees under 18 and
-      the way a fee status is worked out from its payments.
+      Trainees, classes, schedules, sessions, attendance, fees, payments, refunds, visit cards,
+      waitlists and customer self-booking work for you exactly as they do for an administrator. The steps are in the
+      <a href="admin.html">administrator guide</a> — including the rule for trainees under 18, the
+      way a fee status is worked out from its payments and refunds, and setting a password for
+      somebody who cannot receive their invitation. That last one you may do for any account you can
+      see, another super administrator included.
     </p>
 
     <footer>

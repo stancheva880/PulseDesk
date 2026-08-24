@@ -46,9 +46,15 @@ const SESSION_DETAIL = {
   trainers: [{ id: 'emp-1', firstName: 'Tina', lastName: 'Trainer', email: 'tina@x' }],
 };
 
-const LOCATIONS = [
-  { id: 'loc-1', tenantId: 't', name: 'Studio A', address: null, isActive: true, createdAt: '', updatedAt: '' },
-];
+const loc = (id: string, name: string, isActive = true) => ({
+  id, tenantId: 't', name, address: null, isActive, createdAt: '', updatedAt: '',
+});
+
+// loc-1 is the session's own hall (SESSION_DETAIL.locationId). TKT-0127 tests reassign
+// `locationRows` before rendering to vary which halls are retired.
+const LOCATIONS = [loc('loc-1', 'Studio A'), loc('loc-2', 'Retired Hall', false), loc('loc-3', 'Studio C')];
+
+let locationRows: ReturnType<typeof loc>[] = LOCATIONS;
 
 const USERS = [
   {
@@ -85,6 +91,7 @@ let usersUrl: string | null = null;
     replace.mockClear();
     patchBody = null;
     usersUrl = null;
+    locationRows = LOCATIONS;
     vi.spyOn(globalThis, 'fetch').mockImplementation((input, init) => {
       const url = typeof input === 'string' ? input : (input as Request).url;
       const method = init?.method ?? 'GET';
@@ -93,7 +100,7 @@ let usersUrl: string | null = null;
         return Promise.resolve(jsonResponse(200, SESSION_DETAIL));
       }
       if (url.includes('/sessions/session-1')) return Promise.resolve(jsonResponse(200, SESSION_DETAIL));
-      if (url.includes('/locations')) return Promise.resolve(jsonResponse(200, paged(LOCATIONS)));
+      if (url.includes('/locations')) return Promise.resolve(jsonResponse(200, paged(locationRows)));
       if (url.includes('/users')) {
         usersUrl = url;
         const role = new URL(url, 'http://test.local').searchParams.get('role');
@@ -167,6 +174,78 @@ let usersUrl: string | null = null;
       expect(new Date(patchBody!.endsAt as string).getTime()).toBe(
         new Date('2026-06-01T21:30').getTime(),
       );
+    });
+  });
+
+  // TKT-0090: a failed field says what is wrong in words, wired for assistive tech. The
+  // inverted-range refine carries its own message on the end field.
+  it('says what is wrong and wires the a11y attributes on an inverted range', async () => {
+    const { container } = renderPage();
+    await waitFor(() => {
+      const el = container.querySelector<HTMLInputElement>('#endsAt');
+      if (!el || !el.value) throw new Error('not prefilled yet');
+    });
+
+    fireEvent.change(container.querySelector('#endsAt')!, {
+      target: { value: '2026-06-01T17:00' },
+    });
+    fireEvent.click(container.querySelector('button[type="submit"]')!);
+
+    const message = await screen.findByText(/Краят трябва да е след началото|End time must be after/);
+    expect(message).toHaveAttribute('role', 'alert');
+    expect(message).toHaveAttribute('id', 'endsAt-error');
+    const endsAt = container.querySelector('#endsAt')!;
+    expect(endsAt).toHaveAttribute('aria-invalid', 'true');
+    expect(endsAt).toHaveAttribute('aria-describedby', 'endsAt-error');
+    expect(patchBody).toBeNull();
+  });
+
+  // TKT-0127: a retired hall is no longer offered, but the row's own hall must keep its
+  // <option>. A select with no matching option renders the first one, so dropping it would
+  // display a hall this session is not at. The saved value survives either way —
+  // react-hook-form holds `locationId` in its own state — which is why the save assertion
+  // below is a guard on that invariant, not a reproduction of a corruption bug.
+  describe('deactivated locations (TKT-0127)', () => {
+    const optionIds = (container: HTMLElement) =>
+      [...container.querySelectorAll<HTMLOptionElement>('#locationId option')]
+        .map((o) => o.value)
+        .filter(Boolean);
+
+    async function renderLoaded() {
+      const { container } = renderPage();
+      await waitFor(() => {
+        const el = container.querySelector<HTMLInputElement>('#endsAt');
+        if (!el || !el.value) throw new Error('not prefilled yet');
+      });
+      return container;
+    }
+
+    it('omits a deactivated hall but keeps the active ones', async () => {
+      const container = await renderLoaded();
+      expect(optionIds(container)).toEqual(['loc-1', 'loc-3']);
+    });
+
+    it('keeps the row own hall in the list once it is deactivated', async () => {
+      locationRows = [loc('loc-1', 'Studio A', false), loc('loc-3', 'Studio C')];
+      const container = await renderLoaded();
+      expect(optionIds(container)).toContain('loc-1');
+    });
+
+    // Pins that editing a session at a retired hall keeps its location, rather than the form
+    // quietly re-pointing it at whatever the select happens to show.
+    it('saves the same location when the session hall is deactivated', async () => {
+      locationRows = [loc('loc-1', 'Studio A', false), loc('loc-3', 'Studio C')];
+      const container = await renderLoaded();
+
+      fireEvent.change(container.querySelector('#endsAt')!, {
+        target: { value: '2026-06-01T21:30' },
+      });
+      fireEvent.click(container.querySelector('button[type="submit"]')!);
+
+      await waitFor(() => {
+        expect(patchBody).not.toBeNull();
+        expect(patchBody!.locationId).toBe('loc-1');
+      });
     });
   });
 });

@@ -1,0 +1,1074 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Example setups — PulseDesk</title>
+    <link rel="stylesheet" href="../assets/docs.css" />
+  </head>
+  <body>
+    <nav class="topnav">
+      <a class="home" href="../index.html">PulseDesk</a>
+      <a href="basics.html">Getting started</a>
+      <a href="super-admin.html">Super Administrator</a>
+      <a href="admin.html">Administrator</a>
+      <a href="trainer.html">Employee</a>
+      <a href="customer.html">Customer</a>
+      <span class="spacer"></span>
+      <a class="lang" href="../bg/primeri.html">BG</a>
+    </nav>
+
+    <h1>Example setups</h1>
+    <p class="lead">
+      Five kinds of business, and how each one is built in PulseDesk — the classes, the prices, the
+      cards, and what each of the four roles does day to day. Find the one closest to yours and
+      copy it.
+    </p>
+    <p class="crumbs">
+      Read <a href="basics.html">Getting started</a> first, and keep the
+      <a href="admin.html">administrator guide</a> open — the stories below name the screens but do
+      not repeat every field.
+    </p>
+
+    <ul>
+      <li><a href="#pilates">A reformer pilates studio</a> — packs of trainings, no fixed places.</li>
+      <li><a href="#dance">A dance school with halls in two towns</a> — fixed groups paid monthly.</li>
+      <li><a href="#salon">A hair and beauty salon</a> — one client at a time, by appointment.</li>
+      <li><a href="#hiit">A HIIT gym</a> — self-booking and the waiting list, as designed.</li>
+      <li><a href="#camp">A children's summer camp</a> — one price for the whole week.</li>
+    </ul>
+
+    <h2>First, the one thing that shapes every setup</h2>
+    <p>
+      A class in PulseDesk is a <strong>group with a roster</strong>, not an entry in a catalogue.
+      The trainees you put in the <span class="ui">Trainees</span> field of a class are that roster,
+      and the roster is what the rest of the app works from.
+    </p>
+    <p>
+      Two consequences decide how you set up a business. When a session of the class is created —
+      by hand or by <span class="ui">Generate sessions</span> — <strong>everybody on the roster is
+      put on it</strong>. And every one of those bookings takes one visit from that trainee's
+      prepaid card, if they have a usable one.
+    </p>
+    <p>So there are two honest ways to run bookings, and each setup below picks one:</p>
+    <table>
+      <thead>
+        <tr>
+          <th>Way</th>
+          <th>How it works</th>
+          <th>Right for</th>
+          <th>Self-booking</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Roster — booked by default</td>
+          <td>
+            You fill the class's <span class="ui">Trainees</span>. Everyone is put on every session
+            as it is generated. A customer takes themselves off what they will not attend, and the
+            card visit comes back.
+          </td>
+          <td>Fixed groups: a children's ballet group, a gym membership, a camp group.</td>
+          <td class="yes">works</td>
+        </tr>
+        <tr>
+          <td>Staff-booked</td>
+          <td>
+            You leave <span class="ui">Trainees</span> empty. Staff put each client on the session
+            they actually come to, with <span class="ui">Add a trainee…</span> on the attendance
+            screen. That booking takes the card visit.
+          </td>
+          <td>
+            Drop-in: a studio where clients choose their own times, a salon working by appointment.
+          </td>
+          <td class="no">not available</td>
+        </tr>
+      </tbody>
+    </table>
+    <div class="note">
+      <strong>Self-booking is not a shop window.</strong>
+      The <span class="ui">Book</span> button appears only on classes the club opened for
+      self-booking, and only for trainees <em>already on that class's roster</em>. A customer can
+      never enrol themselves into something new — they can put a trainee back on a session they had
+      cancelled, and join the queue for a full one. That is why a pure drop-in business is run
+      staff-booked.
+    </div>
+    <div class="note">
+      <strong>All amounts are shown in EUR.</strong>
+      The currency is fixed for the whole system — there is no setting for it, and no second
+      currency. Every price below is a plain number of euro.
+    </div>
+
+    <h2 id="pilates">1. A reformer pilates studio</h2>
+    <p>
+      Eight reformers in one room. Clients buy a pack of trainings and come when it suits them; some
+      pay for a single training instead. Nobody holds a fixed weekly place, and a pack is not tied
+      to a month — it is spent when it is spent.
+    </p>
+    <table>
+      <thead>
+        <tr>
+          <th>Screen</th>
+          <th>What to set up</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Locations</td>
+          <td>One — the studio. It is created together with the club.</td>
+        </tr>
+        <tr>
+          <td>Classes</td>
+          <td>
+            One class, for example <span class="ui">Reformer pilates</span>.
+            <span class="ui">Billing mode</span> = <span class="ui">Per session</span> with
+            <span class="ui">Price per session</span> set to the single-training price.
+            <span class="ui">Capacity (spots)</span> = 8. <span class="ui">Waitlist</span> =
+            <span class="ui">None</span>. <span class="ui">Customer self-booking</span> off.
+            <span class="ui">Trainees</span> left <strong>empty</strong> — this is the roster, and a
+            drop-in studio does not use one.
+          </td>
+        </tr>
+        <tr>
+          <td>Schedules</td>
+          <td>
+            One schedule per time slot you open in the week, then
+            <span class="ui">Generate sessions</span> for the month ahead. Empty sessions are fine —
+            they are the slots clients book into.
+          </td>
+        </tr>
+        <tr>
+          <td>Cards</td>
+          <td>
+            The packs. 10 visits for 250 and 20 visits for 450, each with
+            <span class="ui">Scope</span> = the pilates class and <span class="ui">Valid until</span>
+            left empty so they never expire. A single paid training is a card of 1 visit at the
+            single price.
+          </td>
+        </tr>
+        <tr>
+          <td>Fees</td>
+          <td>
+            Nothing to generate. Every card sale writes its own fee for the price of the pack, and
+            you record the payment there.
+          </td>
+        </tr>
+      </tbody>
+    </table>
+    <div class="warn">
+      <strong>Watch out.</strong>
+      <span class="ui">Generate per-session fees</span> charges every trainee <em>on the roster</em>
+      for every session in the range, whether they came or not — with an empty roster it creates
+      nothing, which is exactly what you want here, so never reach for it. A pack always has a
+      number of visits: “unlimited for 30 days” cannot be expressed, and the nearest thing is a high
+      visit count with <span class="ui">Valid until</span> set. And a visit is taken when the client
+      is <em>put on</em> a session, not when they turn up — if they do not come and nobody removes
+      them from the session, that visit is spent.
+    </div>
+
+    <div class="story">
+      <h3>1.1 Super Administrator — open the studio</h3>
+      <ol>
+        <li>
+          Press <span class="ui">+</span> next to the club list and fill in the
+          <span class="ui">Club name</span>, the <span class="ui">Identifier</span> (for example
+          <span class="ui">mika-pilates</span>), the <span class="ui">First location</span> — the
+          studio itself — and the <span class="ui">Administrator email</span> of the owner.
+        </li>
+        <li>Press <span class="ui">Save</span>. The owner receives an invitation by email.</li>
+        <li>
+          If the studio later opens a second room, add it in <span class="ui">Locations</span> with
+          <span class="ui">New location</span>. Only you can do that — see the
+          <a href="super-admin.html">super administrator guide</a>.
+        </li>
+      </ol>
+    </div>
+
+    <div class="story">
+      <h3>1.2 Administrator — one class, two packs</h3>
+      <ol>
+        <li>
+          Open <span class="ui">Classes</span>, press <span class="ui">New class</span> and enter the
+          class exactly as the table above describes. Leave <span class="ui">Trainees</span> empty.
+        </li>
+        <li>
+          Open <span class="ui">Schedules</span> and add one schedule per slot you teach — the
+          <span class="ui">Day of week</span> with <span class="ui">Start time (HH:MM)</span> and
+          <span class="ui">End time (HH:MM)</span>.
+        </li>
+        <li>
+          In <span class="ui">Generate sessions</span> set <span class="ui">From</span> and
+          <span class="ui">To</span> for the month ahead and press it. The slots now exist and are
+          empty.
+        </li>
+        <li>
+          Add each client once in <span class="ui">Trainees</span> with
+          <span class="ui">New trainee</span>. Do <strong>not</strong> put anything in the
+          <span class="ui">Classes</span> field of the trainee — that is the roster again.
+        </li>
+        <li>
+          Sell a pack in <span class="ui">Cards</span> with <span class="ui">New card</span>:
+          the <span class="ui">Trainee</span>, <span class="ui">Scope</span> = the pilates class,
+          <span class="ui">Number of visits</span> 10 or 20, and the
+          <span class="ui">Price</span> 250 or 450.
+        </li>
+        <li>
+          Open the fee the sale created and record the payment in
+          <span class="ui">Record a payment</span>. The pack is now paid for and the visits are
+          waiting.
+        </li>
+        <li>
+          For a client paying for one training, sell a card of 1 visit at the single price. The money
+          then lands in the same place as the packs.
+        </li>
+      </ol>
+      <div class="note">
+        <strong>A whole-club pack.</strong>
+        If the studio later teaches something else as well and a pack should work for both, choose
+        <span class="ui">Whole club</span> as the <span class="ui">Scope</span>. A client with both
+        kinds of card spends the class-scoped one first.
+      </div>
+    </div>
+
+    <div class="story">
+      <h3>1.3 Employee (the trainer) — fill tonight's session</h3>
+      <ol>
+        <li>Open <span class="ui">Sessions</span> and find tonight's slot.</li>
+        <li>Press <span class="ui">Mark attendance</span> on its row.</li>
+        <li>
+          For every client who booked by phone or message, pick them in
+          <span class="ui">Add a trainee…</span> and press <span class="ui">Add</span>. Each add
+          takes one visit from their pack.
+        </li>
+        <li>
+          A client whose pack is finished shows <span class="ui">no visits left</span>. The add still
+          works and a warning suggests a new card — nobody is turned away at the door. Tell the
+          administrator to sell the next pack.
+        </li>
+        <li>
+          After the class set each row to <span class="ui">Present</span> or
+          <span class="ui">Absent</span> and press <span class="ui">Save all</span>.
+        </li>
+        <li>
+          Somebody who cancelled: press <span class="ui">Remove from session</span> on their row.
+          Their visit goes back to the pack by itself.
+        </li>
+      </ol>
+      <div class="note">
+        <strong>Counting the room.</strong>
+        The screen shows <span class="ui">Occupied 6 of 8</span>, and at eight the add control is
+        replaced by <span class="ui">No spots left</span>. With
+        <span class="ui">Waitlist</span> = <span class="ui">None</span> there is nothing else to
+        offer — the client picks another slot.
+      </div>
+    </div>
+
+    <div class="story">
+      <h3>1.4 Customer (the client) — the pack in the portal</h3>
+      <ol>
+        <li>
+          Sign in and open <span class="ui">Cards</span>. <span class="ui">My cards</span> shows the
+          pack with <span class="ui">Visits remaining</span>, and
+          <span class="ui">Never expires</span> under it — the honest answer to “how many do I have
+          left?”.
+        </li>
+        <li>
+          Open <span class="ui">Schedule</span>. <span class="ui">My schedule</span> lists the
+          sessions the studio has put them on, with the date, the time and the room.
+        </li>
+        <li>
+          Answer with <span class="ui">Confirmed</span> or <span class="ui">Decline</span> so the
+          trainer knows.
+        </li>
+        <li>
+          Open <span class="ui">Fees</span> to see what the pack cost and that it is
+          <span class="ui">Paid</span>.
+        </li>
+      </ol>
+      <div class="note">
+        <strong>No <span class="ui">Book</span> and no <span class="ui">Cancel booking</span> button
+        here — that is deliberate.</strong>
+        Self-booking is off for this class, so the studio owns the booking. A client who cannot come
+        tells the studio, and the studio removes them from the session, which returns the visit.
+        <span class="ui">Decline</span> is an answer, not a cancellation: it does not free the spot
+        and does not give the visit back.
+      </div>
+    </div>
+
+    <h2 id="dance">2. A dance school with halls in two towns</h2>
+    <p>
+      One school, two halls in two towns. Children's ballet runs as fixed groups by age, twice a
+      week, paid by the month. The adult evening classes are drop-in and paid from an eight-visit
+      pass. Each town has its own staff, and neither should see the other's paperwork.
+    </p>
+    <table>
+      <thead>
+        <tr>
+          <th>Screen</th>
+          <th>What to set up</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Locations</td>
+          <td>
+            Two — one hall per town. The first comes with the club; the second is added by the super
+            administrator.
+          </td>
+        </tr>
+        <tr>
+          <td>Users</td>
+          <td>
+            One administrator per town, each with only their own hall in
+            <span class="ui">Locations</span>. Teachers the same. That single field is what keeps the
+            two towns apart.
+          </td>
+        </tr>
+        <tr>
+          <td>Classes — children</td>
+          <td>
+            One per age group <strong>and</strong> town: <span class="ui">Ballet 4–6 (Burgas)</span>,
+            <span class="ui">Ballet 6–9 (Burgas)</span>, <span class="ui">Ballet 4–6 (Sofia)</span>…
+            <span class="ui">Billing mode</span> = <span class="ui">Per month</span> with
+            <span class="ui">Monthly amount per trainee</span>. <span class="ui">Trainees</span> =
+            the group. This is the roster way.
+          </td>
+        </tr>
+        <tr>
+          <td>Classes — adults</td>
+          <td>
+            One per style and town, <span class="ui">Billing mode</span> =
+            <span class="ui">Per session</span> with <span class="ui">Price per session</span> as the
+            single-visit price, <span class="ui">Trainees</span> empty. This is the staff-booked way.
+          </td>
+        </tr>
+        <tr>
+          <td>Schedules</td>
+          <td>One per day and hall, then <span class="ui">Generate sessions</span> per term.</td>
+        </tr>
+        <tr>
+          <td>Fees</td>
+          <td>
+            <span class="ui">Generate monthly fees</span> once a month for the children's classes.
+          </td>
+        </tr>
+        <tr>
+          <td>Cards</td>
+          <td>
+            8 visits for the adult classes, <span class="ui">Valid until</span> about 30 days ahead —
+            a pass that expires, as passes do.
+          </td>
+        </tr>
+      </tbody>
+    </table>
+    <p>
+      <strong>Why one class per town, and not one class in both halls.</strong> A class may carry
+      several <span class="ui">Locations</span>, but a session belongs to exactly one hall, and the
+      capacity, the price, the teacher and the roster are all different in Burgas and in Sofia. Two
+      classes keep the two groups, their two rosters and their two fee lines honestly apart.
+    </p>
+    <div class="warn">
+      <strong>Watch out.</strong>
+      Sibling and family discounts are not a feature — <span class="ui">Generate monthly fees</span>
+      writes the full <span class="ui">Monthly amount per trainee</span> for every child, every
+      month, so you edit the second child's <span class="ui">Amount</span> by hand each time (or keep
+      a separate class at the reduced price and enrol second children there). A monthly fee is also
+      not eight visits: <span class="ui">Per month</span> charges the month whatever the attendance,
+      so if unused visits must carry over, use a card instead. And an administrator holding one hall
+      cannot see the other town's classes, trainees or class fees — whoever runs both towns needs
+      both halls in <span class="ui">Locations</span>. The one exception is a card sold with
+      <span class="ui">Scope</span> = <span class="ui">Whole club</span>: its fee belongs to no
+      class, so every administrator of the school sees it.
+    </div>
+
+    <div class="story">
+      <h3>2.1 Super Administrator — the second town</h3>
+      <ol>
+        <li>Select the school in the club list in the top bar.</li>
+        <li>
+          Open <span class="ui">Locations</span>, press <span class="ui">New location</span>, fill in
+          <span class="ui">Name</span> and <span class="ui">Address</span>, leave
+          <span class="ui">Active</span> ticked and press <span class="ui">Save</span>.
+        </li>
+        <li>
+          Open <span class="ui">Users</span> and press <span class="ui">New user</span> for the new
+          town's administrator: the <span class="ui">Email</span>,
+          <span class="ui">Role</span> = <span class="ui">Administrator</span>, and in
+          <span class="ui">Locations</span> the new hall <strong>only</strong>.
+        </li>
+        <li>
+          Check the first town's administrator too. If they should not see the new hall, leave their
+          <span class="ui">Locations</span> as it is.
+        </li>
+      </ol>
+      <div class="warn">
+        <strong>An administrator with no location sees nothing.</strong>
+        At least one hall is required, and the form will not save without one. If a colleague reports
+        empty lists everywhere, this is almost always why.
+      </div>
+    </div>
+
+    <div class="story">
+      <h3>2.2 Administrator — the age groups and the monthly money</h3>
+      <ol>
+        <li>
+          Create one class per age group in your hall, as the table above describes, with
+          <span class="ui">Capacity (spots)</span> set to what the hall holds.
+        </li>
+        <li>
+          Add each child in <span class="ui">Trainees</span> with
+          <span class="ui">New trainee</span>: names, <span class="ui">Date of birth</span>, the
+          hall in <span class="ui">Locations</span>, and the group in
+          <span class="ui">Classes</span>. A child under 18 needs at least one contact: the
+          <span class="ui">Guardian contacts</span> section opens by itself, and
+          <span class="ui">+ Add contact</span> fills it in before you save.
+        </li>
+        <li>
+          Add the two weekly schedules for the group and press
+          <span class="ui">Generate sessions</span> for the term. Every child on the roster is now on
+          every session of it.
+        </li>
+        <li>
+          At the start of the month open <span class="ui">Fees</span>, use
+          <span class="ui">Generate monthly fees</span> for the period, and press
+          <span class="ui">Generate</span>. One fee per child per monthly class.
+        </li>
+        <li>
+          For a second child from the same family, press <span class="ui">Edit</span> on their fee
+          and set the reduced <span class="ui">Amount</span>. Do it again next month — the generator
+          has no memory of the discount.
+        </li>
+        <li>
+          Record each payment on the fee with <span class="ui">Record a payment</span>. The
+          <span class="ui">Status</span> works itself out.
+        </li>
+        <li>
+          For the adult drop-in classes, sell an 8-visit card with a
+          <span class="ui">Valid until</span> date and let the teacher add people to sessions as they
+          come.
+        </li>
+      </ol>
+      <div class="note">
+        <strong>A free first visit.</strong>
+        Sell a card of 1 visit with <span class="ui">Price</span> 0. The sale still writes its fee —
+        for 0 — so the trial visit is tracked like any other and the money story stays complete.
+      </div>
+    </div>
+
+    <div class="story">
+      <h3>2.3 Employee — the Sofia teacher's evening</h3>
+      <ol>
+        <li>
+          Sign in and open <span class="ui">Sessions</span>. Only Sofia appears, and only the classes
+          where you are a trainer.
+        </li>
+        <li>Press <span class="ui">Mark attendance</span> on the ballet group's session.</li>
+        <li>
+          The whole group is already listed — they are on the roster. Set each child to
+          <span class="ui">Present</span>, <span class="ui">Absent</span> or
+          <span class="ui">Excused</span> and press <span class="ui">Save all</span>.
+        </li>
+        <li>
+          For an adult drop-in class the list starts empty: add each dancer who turns up with
+          <span class="ui">Add a trainee…</span>, which spends a visit from their pass.
+        </li>
+        <li>
+          A parent asks about the fee: open <span class="ui">Fees</span> and read the status. You
+          cannot change it — the administrator takes the money.
+        </li>
+      </ol>
+    </div>
+
+    <div class="story">
+      <h3>2.4 Customer — a parent with a child in each town</h3>
+      <ol>
+        <li>
+          Sign in once. <span class="ui">My schedule</span> shows both children under their own
+          names, each session with its own hall underneath.
+        </li>
+        <li>
+          Answer per child and per session with <span class="ui">Confirmed</span>,
+          <span class="ui">Decline</span> or <span class="ui">Reschedule</span>.
+        </li>
+        <li>
+          Open <span class="ui">Fees</span>: one monthly fee per child per group, with
+          <span class="ui">Amount</span>, <span class="ui">Paid</span> and
+          <span class="ui">Outstanding</span>.
+        </li>
+        <li>
+          Open <span class="ui">Cards</span> if the family also bought an adult pass —
+          <span class="ui">Visits remaining</span> and the date it is valid until are both there.
+        </li>
+      </ol>
+      <div class="note">
+        <strong>One account, one school, both towns.</strong>
+        The parent has a single customer account in the school and sees every child linked to it,
+        whichever hall the child dances in. Locations restrict staff, never families.
+      </div>
+    </div>
+
+    <h2 id="salon">3. A hair and beauty salon</h2>
+    <p>
+      Two stylists, one client at a time, by appointment, and the price depends on the service. This
+      is the biggest stretch of the five setups: PulseDesk is built for groups, and a salon is a
+      queue of appointments for one. It works, and the box below says exactly where it strains.
+    </p>
+    <table>
+      <thead>
+        <tr>
+          <th>Screen</th>
+          <th>What to set up</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Locations</td>
+          <td>One — the salon.</td>
+        </tr>
+        <tr>
+          <td>Users</td>
+          <td>
+            One <span class="ui">Employee</span> account per stylist, with the salon in
+            <span class="ui">Locations</span>.
+          </td>
+        </tr>
+        <tr>
+          <td>Classes</td>
+          <td>
+            One per service — <span class="ui">Haircut</span>, <span class="ui">Colour</span>,
+            <span class="ui">Manicure</span>. <span class="ui">Billing mode</span> =
+            <span class="ui">Per session</span> with <span class="ui">Price per session</span> = the
+            price of the service. <span class="ui">Capacity (spots)</span> = 1.
+            <span class="ui">Trainers</span> = the stylists who do it.
+            <span class="ui">Trainees</span> empty, <span class="ui">Waitlist</span> =
+            <span class="ui">None</span>, self-booking off.
+          </td>
+        </tr>
+        <tr>
+          <td>Trainees</td>
+          <td>
+            The clients, one record each. <span class="ui">Date of birth</span> is required, even for
+            an adult.
+          </td>
+        </tr>
+        <tr>
+          <td>Sessions</td>
+          <td>
+            One session per appointment, created with <span class="ui">New session</span>: the
+            service as the <span class="ui">Class</span>, the date and time, and the stylist as the
+            trainer. No weekly schedule, unless a client has a standing weekly slot.
+          </td>
+        </tr>
+        <tr>
+          <td>Fees / Cards</td>
+          <td>
+            <span class="ui">New fee</span> per appointment, or a card of 5 visits for a course of
+            cosmetic treatments paid up front.
+          </td>
+        </tr>
+      </tbody>
+    </table>
+    <div class="warn">
+      <strong>Watch out.</strong>
+      Clients cannot book their own slot: self-booking works only for trainees on a class's roster,
+      and putting a client on the roster of <span class="ui">Haircut</span> would book them into
+      every haircut appointment in the diary. Bookings are made by the salon, from the phone or the
+      front desk. There is also no till — no products, no retail, no tips — so anything that is not a
+      service appointment has to be entered as a fee by hand. And nothing checks the diary for you:
+      two stylists working at the same time are simply two sessions at the same time, and no warning
+      appears if you double-book one of them.
+    </div>
+
+    <div class="story">
+      <h3>3.1 Super Administrator — open the salon</h3>
+      <ol>
+        <li>
+          Press <span class="ui">+</span> next to the club list, fill in the
+          <span class="ui">Club name</span>, the <span class="ui">Identifier</span>, the
+          <span class="ui">First location</span> — the salon — and the owner's
+          <span class="ui">Administrator email</span>.
+        </li>
+        <li>Press <span class="ui">Save</span>.</li>
+        <li>A second salon later is a second <span class="ui">Location</span>, added the same way.</li>
+      </ol>
+    </div>
+
+    <div class="story">
+      <h3>3.2 Administrator — a class per service, then the diary</h3>
+      <ol>
+        <li>
+          Create the stylists in <span class="ui">Users</span> with
+          <span class="ui">Role</span> = <span class="ui">Employee</span> and the salon in
+          <span class="ui">Locations</span>.
+        </li>
+        <li>
+          Create one class per service, with <span class="ui">Capacity (spots)</span> 1 and the
+          service price in <span class="ui">Price per session</span>. Tick the stylists who do it in
+          <span class="ui">Trainers</span>.
+        </li>
+        <li>
+          Add the client in <span class="ui">Trainees</span> the first time they call:
+          names, <span class="ui">Date of birth</span>, <span class="ui">Phone</span>, and the salon
+          in <span class="ui">Locations</span>. Leave <span class="ui">Classes</span> empty.
+        </li>
+        <li>
+          Book the appointment: <span class="ui">Sessions</span>,
+          <span class="ui">New session</span>, the service as the
+          <span class="ui">Class</span>, the salon as the <span class="ui">Location</span>, the date
+          and the time, and the stylist in <span class="ui">Trainers</span>.
+        </li>
+        <li>
+          Put the client on it: <span class="ui">Mark attendance</span> on the session, then
+          <span class="ui">Add a trainee…</span> and <span class="ui">Add</span>.
+        </li>
+        <li>
+          Charge it: <span class="ui">Fees</span>, <span class="ui">New fee</span>, the client, the
+          service class, the <span class="ui">Amount</span> and the day as the period. Record the
+          payment when they pay.
+        </li>
+        <li>
+          For a course of treatments paid up front, sell a card of 5 visits instead. Each appointment
+          you add the client to then spends one visit, and the sale's own fee holds the money.
+        </li>
+      </ol>
+      <div class="note">
+        <strong>A standing weekly appointment.</strong>
+        A client who comes every Thursday at 10:00 is the one case where a
+        <span class="ui">Schedule</span> pays off: add it for that service and hall and generate the
+        sessions. Keep the roster empty and add the client per appointment, as above.
+      </div>
+    </div>
+
+    <div class="story">
+      <h3>3.3 Employee (the stylist) — the day at the chair</h3>
+      <ol>
+        <li>
+          Open <span class="ui">Sessions</span>. Only your own appointments appear — the sessions
+          where you are the trainer.
+        </li>
+        <li>
+          Press <span class="ui">Calendar</span> to see the day as a day rather than a list. It is
+          the closest thing to a diary.
+        </li>
+        <li>
+          Open <span class="ui">Mark attendance</span> on an appointment and set the client to
+          <span class="ui">Present</span> when they arrive, or <span class="ui">Absent</span> when
+          they do not.
+        </li>
+        <li>
+          A walk-in: pick them in <span class="ui">Add a trainee…</span> on a free appointment. A
+          second client on an appointment that already has one is refused with
+          <span class="ui">No spots left</span> — the chair is taken.
+        </li>
+        <li>Press <span class="ui">Save all</span> at the end of the day.</li>
+      </ol>
+    </div>
+
+    <div class="story">
+      <h3>3.4 Customer (the client) — their own record</h3>
+      <ol>
+        <li>
+          A client who wants to follow their own appointments needs a
+          <span class="ui">Customer</span> account, linked to their trainee record in
+          <span class="ui">Linked customer account</span>. Most salons will not bother; it is worth it
+          for a treatment course.
+        </li>
+        <li>
+          <span class="ui">My schedule</span> then lists their appointments with the date, the time
+          and the salon.
+        </li>
+        <li>
+          <span class="ui">My fees</span> shows what each visit cost and what is still
+          <span class="ui">Outstanding</span>; <span class="ui">My cards</span> shows the
+          <span class="ui">Visits remaining</span> on the treatment course.
+        </li>
+        <li>
+          They can answer <span class="ui">Confirmed</span> or <span class="ui">Decline</span> — a
+          useful signal the day before — but they cannot move or cancel the appointment. That is a
+          phone call.
+        </li>
+      </ol>
+    </div>
+
+    <h2 id="hiit">4. A HIIT gym</h2>
+    <p>
+      Twelve spots a session, three sessions a day, members who train when they can. This is the one
+      setup where every self-service feature is switched on and doing what it was built for: members
+      book and cancel themselves, and a freed spot fills itself from the queue.
+    </p>
+    <table>
+      <thead>
+        <tr>
+          <th>Screen</th>
+          <th>What to set up</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Classes</td>
+          <td>
+            One class, <span class="ui">HIIT</span>. <span class="ui">Billing mode</span> =
+            <span class="ui">Per session</span> with <span class="ui">Price per session</span> as the
+            drop-in price. <span class="ui">Capacity (spots)</span> = 12.
+            <span class="ui">Customer self-booking</span> ticked, with
+            <span class="ui">Booking closes (minutes before start)</span> = 60.
+            <span class="ui">Waitlist</span> = <span class="ui">Automatic (first come)</span>.
+            <span class="ui">Trainees</span> = the members. This is the roster way.
+          </td>
+        </tr>
+        <tr>
+          <td>Schedules</td>
+          <td>One per daily slot, generated a month at a time.</td>
+        </tr>
+        <tr>
+          <td>Cards</td>
+          <td>
+            10 visits, <span class="ui">Scope</span> = the HIIT class. Set
+            <span class="ui">Valid until</span> to the end of the period the card is meant to
+            cover — see the box below for why that matters here.
+          </td>
+        </tr>
+        <tr>
+          <td>Fees</td>
+          <td>Card sales only. No generator is run.</td>
+        </tr>
+      </tbody>
+    </table>
+    <p>
+      <strong>How a week works.</strong> Members are on the roster, so generating the sessions books
+      them all — twelve names on every session before anyone touches a phone. A member who will not
+      come presses <span class="ui">Cancel booking</span> and their visit returns to their card. That
+      frees a spot, and the first member in the queue is booked at once and told by email. A member
+      who changes their mind presses <span class="ui">Book</span> again, up to an hour before the
+      start.
+    </p>
+    <div class="warn">
+      <strong>Watch out.</strong>
+      Automatic promotion books somebody and spends a card visit with nobody clicking anything — the
+      class form warns about it, and it is the price of a queue that fills itself. A visit returned by
+      a cancellation is <em>not</em> moved to a later booking that got none: bookings take visits
+      earliest session first, so a 10-visit card put against a month of sessions covers the first ten
+      and the rest are booked with no visit at all. Sell the card for the period it should actually
+      cover. Queueing needs <span class="ui">Capacity (spots)</span> — a class with no capacity can
+      never be full, so nobody can ever wait. And after the deadline in
+      <span class="ui">Booking closes (minutes before start)</span> nothing self-serves: no booking,
+      no cancelling, and a spot freed then promotes nobody, so fill it yourself with
+      <span class="ui">Add a trainee…</span>.
+    </div>
+
+    <div class="story">
+      <h3>4.1 Super Administrator — open the gym</h3>
+      <ol>
+        <li>
+          Create the club with <span class="ui">+</span>: the <span class="ui">Club name</span>, the
+          <span class="ui">Identifier</span>, the training floor as the
+          <span class="ui">First location</span>, and the owner's
+          <span class="ui">Administrator email</span>.
+        </li>
+        <li>
+          The owner also coaches? They need a second account with
+          <span class="ui">Role</span> = <span class="ui">Employee</span> on a different email
+          address — only an employee can be a trainer on a class or a session.
+        </li>
+      </ol>
+    </div>
+
+    <div class="story">
+      <h3>4.2 Administrator — one class, self-service on</h3>
+      <ol>
+        <li>
+          Create the class as the table above describes. When you tick
+          <span class="ui">Customer self-booking</span>, the
+          <span class="ui">Booking closes (minutes before start)</span> field appears — put 60 in it.
+        </li>
+        <li>
+          Choose <span class="ui">Automatic (first come)</span> in
+          <span class="ui">Waitlist</span> so a freed spot fills itself.
+        </li>
+        <li>
+          Add the members in <span class="ui">Trainees</span> and put the HIIT class in their
+          <span class="ui">Classes</span> field. Each member also needs a
+          <span class="ui">Customer</span> account, and their trainee record must name it in
+          <span class="ui">Linked customer account</span> — without that link there is nobody to
+          book from the portal.
+        </li>
+        <li>
+          Add one schedule per daily slot and press <span class="ui">Generate sessions</span> for the
+          month.
+        </li>
+        <li>
+          Sell each member a 10-visit card with a <span class="ui">Valid until</span> date, and
+          record the payment on the fee the sale created.
+        </li>
+        <li>
+          Watch the class form's <span class="ui">Enrolled 12 / capacity 10</span> line. More members
+          than spots means new sessions are generated over-full — the app warns and still saves,
+          because the number is yours to manage.
+        </li>
+      </ol>
+      <div class="warn">
+        <strong>Enrolling everybody books everybody.</strong>
+        Adding a member to the class puts them on every future session at once, and takes a card
+        visit for each. On a gym with more members than spots, this is not what you want: keep the
+        roster to the members who really do attend every slot, and let the rest be added per session.
+      </div>
+    </div>
+
+    <div class="story">
+      <h3>4.3 Employee (the coach) — the door</h3>
+      <ol>
+        <li>Open <span class="ui">Sessions</span> and press <span class="ui">Mark attendance</span>.</li>
+        <li>
+          The header reads <span class="ui">Occupied 12 of 12</span> on a full session. The add
+          control is replaced by <span class="ui">No spots left</span> and an
+          <span class="ui">Add to waitlist</span> control with the queue under it.
+        </li>
+        <li>
+          Somebody does not turn up: press <span class="ui">Remove from session</span>. The first
+          member in the queue is booked immediately and their customer gets an email.
+        </li>
+        <li>Set <span class="ui">Present</span> for everyone who trained and <span class="ui">Save all</span>.</li>
+        <li>
+          A walk-in after the deadline: <span class="ui">Add a trainee…</span> still works for you.
+          The deadline stops customers, not staff.
+        </li>
+      </ol>
+    </div>
+
+    <div class="story">
+      <h3>4.4 Customer (the member) — a week in the portal</h3>
+      <ol>
+        <li>
+          Sign in. <span class="ui">My schedule</span> lists this week's sessions, each already
+          booked, because membership means a place.
+        </li>
+        <li>
+          Travelling on Thursday: press <span class="ui">Cancel booking</span> on that session. The
+          spot is freed and the visit returns to the card.
+        </li>
+        <li>
+          Back after all: press <span class="ui">Book</span> — as long as the session is not full and
+          the hour before the start has not begun.
+        </li>
+        <li>
+          A full session shows <span class="ui">Join waitlist</span>. Press it, and the session then
+          shows <span class="ui">On the waitlist</span>. When somebody cancels, the booking is made
+          for you and an email says so.
+        </li>
+        <li>
+          Changed your mind while waiting: press <span class="ui">Leave waitlist</span>. That always
+          works, deadline or not — nobody stays stuck in a queue.
+        </li>
+        <li>
+          Open <span class="ui">Cards</span> to see the
+          <span class="ui">Visits remaining</span> before buying the next card.
+        </li>
+      </ol>
+      <div class="note">
+        <strong>After the deadline the buttons are gone.</strong>
+        Within the last hour the card says to contact the club. The coach can still add or remove
+        anybody at the door.
+      </div>
+    </div>
+
+    <h2 id="camp">5. A children's summer camp</h2>
+    <p>
+      A day camp: children arrive in the morning, spend the day with their group and its teachers,
+      and go home in the afternoon while their parents are at work. Parents pay once for the whole
+      week. This is what <span class="ui">Course</span> billing is for.
+    </p>
+    <table>
+      <thead>
+        <tr>
+          <th>Screen</th>
+          <th>What to set up</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Locations</td>
+          <td>The camp site.</td>
+        </tr>
+        <tr>
+          <td>Classes</td>
+          <td>
+            One per group: <span class="ui">Group A (7–9)</span>,
+            <span class="ui">Group B (10–12)</span>. <span class="ui">Billing mode</span> =
+            <span class="ui">Course</span>, with <span class="ui">Course start</span> and
+            <span class="ui">Course end</span> on the first and last day and
+            <span class="ui">Course price</span> for the whole week.
+            <span class="ui">Capacity (spots)</span> = the group size your staffing allows.
+            <span class="ui">Trainers</span> = the group's teachers.
+            <span class="ui">Trainees</span> = the children. Self-booking off,
+            <span class="ui">Waitlist</span> = <span class="ui">None</span>.
+          </td>
+        </tr>
+        <tr>
+          <td>Schedules</td>
+          <td>
+            Monday to Friday, one slot per day — for example 08:00 to 17:00 — then
+            <span class="ui">Generate sessions</span> from the first to the last day of the camp. One
+            session is one camp day.
+          </td>
+        </tr>
+        <tr>
+          <td>Trainees</td>
+          <td>
+            One record per child. Every child is under 18, so the
+            <span class="ui">Guardian contacts</span> section opens on each one and at least one
+            contact is required — the form will not save without it.
+          </td>
+        </tr>
+        <tr>
+          <td>Users</td>
+          <td>
+            A <span class="ui">Customer</span> account per parent, named in the child's
+            <span class="ui">Guardians</span> field. Both parents may be listed.
+          </td>
+        </tr>
+        <tr>
+          <td>Fees</td>
+          <td>
+            Nothing to generate for the enrolled children: putting a child in a course class creates
+            the course fee by itself.
+          </td>
+        </tr>
+      </tbody>
+    </table>
+    <div class="warn">
+      <strong>Watch out.</strong>
+      The day's activities are not in the app — a camp day is one session, and the plan goes in the
+      class <span class="ui">Description</span> or the session <span class="ui">Notes</span>. There is
+      no rotation or activity planner, and a half day is a second session rather than a shorter one.
+      Moving a child to another group after the parents have paid leaves the first group's fee
+      behind: the automatic tidy-up only happens before <span class="ui">Course start</span> and only
+      while nothing has been paid or refunded, so move the child and then settle the two fees by
+      hand. And <span class="ui">Course price</span> is one amount for one run — a second camp week
+      is a second class, with its own dates and its own fee.
+    </div>
+
+    <div class="story">
+      <h3>5.1 Super Administrator — open the camp</h3>
+      <ol>
+        <li>
+          Create the club with <span class="ui">+</span>: the <span class="ui">Club name</span>, an
+          <span class="ui">Identifier</span> such as <span class="ui">summer-camp</span>, the site as
+          the <span class="ui">First location</span>, and the organiser's
+          <span class="ui">Administrator email</span>.
+        </li>
+        <li>
+          A camp on two sites is two <span class="ui">Locations</span>, and each group's sessions
+          belong to one of them.
+        </li>
+      </ol>
+    </div>
+
+    <div class="story">
+      <h3>5.2 Administrator — a group, its week, and the fee that appears by itself</h3>
+      <ol>
+        <li>
+          Create the teachers in <span class="ui">Users</span> as
+          <span class="ui">Employee</span>, and the parents as
+          <span class="ui">Customer</span>.
+        </li>
+        <li>
+          Create the group in <span class="ui">Classes</span> with
+          <span class="ui">Billing mode</span> = <span class="ui">Course</span>, the camp's first and
+          last day in <span class="ui">Course start</span> and
+          <span class="ui">Course end</span>, and the week's price in
+          <span class="ui">Course price</span>. The end must be after the start.
+        </li>
+        <li>
+          Add each child in <span class="ui">Trainees</span>: names,
+          <span class="ui">Date of birth</span>, the site in
+          <span class="ui">Locations</span>, the group in <span class="ui">Classes</span>, at least
+          one <span class="ui">Guardian contacts</span> entry, and the parent's account in
+          <span class="ui">Guardians</span>.
+        </li>
+        <li>
+          Check <span class="ui">Fees</span>. The course fee for that child already exists, with the
+          camp week as its period and the course price as its <span class="ui">Amount</span> — you
+          did not generate it.
+        </li>
+        <li>
+          Add the daily schedule and press <span class="ui">Generate sessions</span> for the camp
+          dates. Every child in the group is now on every camp day.
+        </li>
+        <li>
+          Record each payment on the course fee. A parent paying in two parts leaves it
+          <span class="ui">Partial</span> until the rest arrives.
+        </li>
+        <li>
+          A late sign-up is the same three steps: add the child to the group, and their course fee
+          appears with them.
+        </li>
+      </ol>
+      <div class="note">
+        <strong>The day plan.</strong>
+        Put the week's rhythm in the class <span class="ui">Description</span> — it is read by
+        everyone who opens the group. Anything special about one day goes in that session's
+        <span class="ui">Notes</span>.
+      </div>
+    </div>
+
+    <div class="story">
+      <h3>5.3 Employee (the teacher) — the morning register</h3>
+      <ol>
+        <li>
+          Open <span class="ui">Sessions</span>. Today's camp day is there, with your group's whole
+          list already on it.
+        </li>
+        <li>Press <span class="ui">Mark attendance</span>.</li>
+        <li>
+          As the children arrive set <span class="ui">Present</span>. A child who was expected and
+          did not come is <span class="ui">Absent</span>, or
+          <span class="ui">Excused</span> when the parent told you.
+        </li>
+        <li>
+          Check the <span class="ui">Customer RSVP</span> column before the day starts — a parent who
+          pressed <span class="ui">Decline</span> is telling you the child stays home.
+        </li>
+        <li>Press <span class="ui">Save all</span>.</li>
+        <li>
+          Need a parent's number in a hurry: open the child in
+          <span class="ui">Trainees</span> and read the contacts. That is what they are for.
+        </li>
+      </ol>
+    </div>
+
+    <div class="story">
+      <h3>5.4 Customer (the parent) — the week from home</h3>
+      <ol>
+        <li>
+          Sign in with the invitation the camp sent, choose a password, and land on
+          <span class="ui">My schedule</span>.
+        </li>
+        <li>
+          Every camp day the child is expected on is listed, with the date, the hours and the site.
+        </li>
+        <li>
+          The child will miss Wednesday: press <span class="ui">Decline</span> on that day so the
+          teacher knows. The place is kept and the fee does not change — one price covers the week.
+        </li>
+        <li>
+          Open <span class="ui">Fees</span>: one fee for the camp week, with the
+          <span class="ui">Amount</span>, what has been <span class="ui">Paid</span> and what is
+          <span class="ui">Outstanding</span>.
+        </li>
+        <li>
+          Two children in two groups: both appear under their own names, each with their own fee.
+        </li>
+      </ol>
+      <div class="note">
+        <strong>Nothing is paid in the portal.</strong>
+        PulseDesk takes no bank card. Parents pay the camp the way they agreed, and the camp records
+        it — the portal is where they check that it was recorded.
+      </div>
+    </div>
+
+    <footer>
+      All names, clubs and email addresses in the examples are invented. ·
+      <a href="../index.html">Back to the start</a>
+    </footer>
+  </body>
+</html>

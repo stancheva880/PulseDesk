@@ -1,9 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import NewLocationPage from '@/app/(dashboard)/locations/new/page';
 import EditLocationPage from '@/app/(dashboard)/locations/[id]/edit/page';
 import { AuthProvider } from '@/components/auth-provider';
 import { I18nProvider } from '@/components/i18n-provider';
+import { ToastViewport } from '@/components/toast';
 import { setAccessToken } from '@/lib/auth-storage';
 
 const replace = vi.fn();
@@ -39,6 +40,7 @@ const LOCATION = {
 function renderWithProviders(ui: React.ReactElement) {
   return render(
     <I18nProvider>
+      <ToastViewport />
       <AuthProvider>{ui}</AuthProvider>
     </I18nProvider>,
   );
@@ -74,7 +76,9 @@ describe('location form pages', () => {
     vi.restoreAllMocks();
   });
 
-  it('new: submits name and omits empty address', async () => {
+  // TKT-0092 (approved TEST CHANGE REQUEST): create stays on the form, confirms with a toast,
+  // and resets ready for the next record.
+  it('new: submits name, omits empty address, stays put and resets', async () => {
     const { container } = renderWithProviders(<NewLocationPage />);
 
     fireEvent.change(container.querySelector('#name')!, { target: { value: 'Hall B' } });
@@ -84,7 +88,11 @@ describe('location form pages', () => {
       expect(postBody).not.toBeNull();
       expect(postBody!.name).toBe('Hall B');
       expect('address' in postBody!).toBe(false);
-      expect(replace).toHaveBeenCalledWith('/locations');
+    });
+    expect(await screen.findByText(/Запазено|^Saved$/)).toBeInTheDocument();
+    expect(replace).not.toHaveBeenCalled();
+    await waitFor(() => {
+      expect(container.querySelector<HTMLInputElement>('#name')!.value).toBe('');
     });
   });
 
@@ -107,7 +115,45 @@ describe('location form pages', () => {
       expect(patchBody!.name).toBe('Renamed Hall');
       expect(patchBody!.address).toBe('Center 1');
       expect(patchBody!.isActive).toBe(false);
-      expect(replace).toHaveBeenCalledWith('/locations');
     });
+    // TKT-0092 (approved TEST CHANGE REQUEST): edit stays put, confirms with a toast, and the
+    // form keeps showing the saved values.
+    expect(await screen.findByText(/Запазено|^Saved$/)).toBeInTheDocument();
+    expect(replace).not.toHaveBeenCalled();
+    expect(container.querySelector<HTMLInputElement>('#name')!.value).toBe('Renamed Hall');
+  });
+
+  // TKT-0090: a failed field says what is wrong in words, wired for assistive tech.
+  it('says what is wrong and wires the a11y attributes when submitted empty', async () => {
+    const { container } = renderWithProviders(<NewLocationPage />);
+
+    fireEvent.click(container.querySelector('button[type="submit"]')!);
+
+    const message = await screen.findByText('Това поле е задължително.');
+    expect(message).toHaveAttribute('role', 'alert');
+    expect(message).toHaveAttribute('id', 'name-error');
+    const name = container.querySelector('#name')!;
+    expect(name).toHaveAttribute('aria-invalid', 'true');
+    expect(name).toHaveAttribute('aria-describedby', 'name-error');
+  });
+
+  // TKT-0090: a submit-level failure is announced and brought into view, not left as a bare
+  // paragraph above the buttons.
+  it('focuses the submit-level error when the save fails', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation((input, init) => {
+      const url = typeof input === 'string' ? input : (input as Request).url;
+      if (url.includes('/locations') && (init?.method ?? 'GET') === 'POST') {
+        return Promise.resolve(jsonResponse(500, { message: 'boom' }));
+      }
+      return Promise.resolve(jsonResponse(200, {}));
+    });
+    const { container } = renderWithProviders(<NewLocationPage />);
+
+    fireEvent.change(container.querySelector('#name')!, { target: { value: 'Hall B' } });
+    fireEvent.click(container.querySelector('button[type="submit"]')!);
+
+    const alert = await screen.findByText('boom');
+    expect(alert).toHaveAttribute('role', 'alert');
+    expect(document.activeElement).toBe(alert);
   });
 });

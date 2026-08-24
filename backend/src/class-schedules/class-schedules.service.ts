@@ -15,11 +15,19 @@ import {
 import { PrismaService } from '@/prisma/prisma.service';
 import { endOfDayLocal, startOfDayLocal } from '@/common/dates';
 import type { GenerateResult } from '@/common/generate-result';
-import { assertClassInTenant, assertLocationInTenant } from '@/common/tenant-guards';
+import {
+  assertClassInTenant,
+  assertLocationActive,
+  assertLocationInTenant,
+} from '@/common/tenant-guards';
 import { SessionsService } from '@/sessions/sessions.service';
 import type { CreateClassScheduleDto } from './dto/create-class-schedule.dto';
 import type { GenerateSessionsDto } from './dto/generate-sessions.dto';
 import type { UpdateClassScheduleDto } from './dto/update-class-schedule.dto';
+
+// A leap year plus a day of slack, so "the whole of next season" always fits and a mistyped
+// year never does.
+const MAX_GENERATE_DAYS = 367;
 
 // Standard JS Date.getDay(): Sunday=0 ... Saturday=6.
 const JS_DAY_TO_ENUM: DayOfWeek[] = [
@@ -86,6 +94,7 @@ export class ClassSchedulesService {
     assertTimeOrder(dto.startTime, dto.endTime);
     await assertClassInTenant(this.prisma, tenantId, dto.classId);
     await assertLocationInTenant(this.prisma, tenantId, dto.locationId);
+    await assertLocationActive(this.prisma, tenantId, dto.locationId);
     await this.scope.assertLocationsAllowed(user, tenantId, [dto.locationId]);
 
     return this.prisma.classSchedule.create({
@@ -114,6 +123,10 @@ export class ClassSchedulesService {
 
     if (dto.locationId !== undefined) {
       await assertLocationInTenant(this.prisma, tenantId, dto.locationId);
+      // Only when the location actually changes — see the same note in SessionsService.update.
+      if (dto.locationId !== existing.locationId) {
+        await assertLocationActive(this.prisma, tenantId, dto.locationId);
+      }
       await this.scope.assertLocationsAllowed(user, tenantId, [dto.locationId]);
     }
 
@@ -145,6 +158,18 @@ export class ClassSchedulesService {
     }
     if (fromDate.getTime() > toDate.getTime()) {
       throw new BadRequestException('from must be ≤ to');
+    }
+    // TKT-0123: bound the work. Candidates are schedules × days, and every one is created inside
+    // the single transaction below, each writing an attendance row per enrolled trainee plus its
+    // card consumption — so an unbounded range is an outage, not a slow request. A club plans a
+    // season or a year ahead; anything past that is a typo. Same shape as DashboardService's
+    // MAX_MONTHS, and for the same reason.
+    if (daysInclusive(fromDate, toDate) > MAX_GENERATE_DAYS) {
+      throw new BadRequestException({
+        message: `Range too large: generate at most ${MAX_GENERATE_DAYS} days at a time`,
+        code: 'SCHEDULE_RANGE_TOO_LARGE',
+        params: { maxDays: MAX_GENERATE_DAYS },
+      });
     }
 
     const schedules = await this.prisma.classSchedule.findMany({
@@ -188,6 +213,19 @@ export class ClassSchedulesService {
       }
     }
 
+    // TKT-0123: the class's trainer roster, resolved once per class instead of once per session.
+    // Passing it explicitly is what stops createInTransaction re-reading the same class row for
+    // every day it generates — the roster cannot change inside this call anyway.
+    const classIds = [...new Set(schedules.map((s) => s.classId))];
+    const trainersByClass = new Map(
+      (
+        await this.prisma.class.findMany({
+          where: { id: { in: classIds } },
+          select: { id: true, trainers: { select: { id: true } } },
+        })
+      ).map((c) => [c.id, c.trainers.map((t) => t.id)]),
+    );
+
     let created = 0;
     let skipped = 0;
     await this.prisma.$transaction(async (tx) => {
@@ -203,7 +241,8 @@ export class ClassSchedulesService {
           locationId: c.schedule.locationId,
           startsAt: c.startsAt,
           endsAt: c.endsAt,
-          // trainerIds undefined → defaults to class.trainers (per memory decision).
+          // The class's own trainers, same default as before — now read once, not per session.
+          trainerIds: trainersByClass.get(c.schedule.classId) ?? [],
         });
         existingKeys.add(key); // prevent duplicates within this batch
         created++;
@@ -240,6 +279,12 @@ function parseDateOnly(s: string): Date {
   // Treat as local date midnight to align with combineDateAndTime above.
   const d = new Date(`${s}T00:00:00`);
   return d;
+}
+
+// Whole days from `from` to `to`, both ends counted. Local-midnight inputs, so DST shifts within
+// the range cannot round this the wrong way.
+function daysInclusive(from: Date, to: Date): number {
+  return Math.floor((startOfDayLocal(to).getTime() - startOfDayLocal(from).getTime()) / 86_400_000) + 1;
 }
 
 function addDays(d: Date, n: number): Date {

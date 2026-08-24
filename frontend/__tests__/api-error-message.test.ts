@@ -25,6 +25,22 @@ describe('apiErrorMessage', () => {
     expect(message).toContain('5');
   });
 
+  // TKT-0124: reached only as `errors.${body.code}`, so i18n-keys.test.ts cannot see it — that
+  // suite skips template-built keys by design. This is the only guard that the key exists.
+  it('translates LOCATION_IN_USE and interpolates both counts', () => {
+    const message = apiErrorMessage(coded('LOCATION_IN_USE', { sessions: 214, schedules: 6 }));
+    expect(message).not.toContain('English fallback');
+    expect(message).toContain('214');
+    expect(message).toContain('6');
+  });
+
+  // TKT-0125: same reason as LOCATION_IN_USE above — template-built key, invisible to
+  // i18n-keys.test.ts.
+  it('translates LOCATION_INACTIVE', () => {
+    const message = apiErrorMessage(coded('LOCATION_INACTIVE'));
+    expect(message).not.toContain('English fallback');
+  });
+
   it('falls back to the server message for a code the bundle does not know', () => {
     expect(apiErrorMessage(coded('SOME_CODE_ADDED_LATER'))).toBe(
       'English fallback from the server',

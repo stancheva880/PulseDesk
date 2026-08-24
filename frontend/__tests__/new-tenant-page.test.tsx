@@ -139,6 +139,25 @@ describe('NewTenantPage', () => {
     expect(screen.queryByLabelText(/Начална парола|Starting password/)).toBeNull();
   });
 
+  // TKT-0092 AC — hardNavigate discards the JS context, so the confirmation is stashed in
+  // sessionStorage for the next document's ToastViewport to drain.
+  it('stashes the created-club toast before the hard navigation', async () => {
+    window.sessionStorage.clear();
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(jsonResponse(201, CREATED));
+    const user = userEvent.setup();
+    renderPage();
+
+    await fillForm(user);
+    await user.click(screen.getByRole('button', { name: /Запазване|Save/ }));
+
+    await vi.waitFor(() => expect(hardNavigate).toHaveBeenCalledWith('/dashboard'));
+    const raw = window.sessionStorage.getItem('pulsedesk.pendingToast');
+    expect(raw).not.toBeNull();
+    const stash = JSON.parse(raw!) as { text: string; variant: string };
+    expect(stash.variant).toBe('success');
+    expect(stash.text).toMatch(/Sofia Judo/);
+  });
+
   it('explains a duplicate identifier instead of showing a raw error', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(
       jsonResponse(409, { message: 'A club with slug "sofia-judo" already exists' }),
@@ -215,5 +234,24 @@ describe('NewTenantPage', () => {
     // Scoped to the error itself — the form always carries an 'Идентификатор' label.
     expect(shown.textContent).not.toMatch(/идентификатор/i);
     expect(hardNavigate).not.toHaveBeenCalled();
+  });
+
+  // TKT-0090: a failed field says what is wrong in words, wired for assistive tech.
+  it('says what is wrong and wires the a11y attributes when submitted empty', async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(screen.getByRole('button', { name: /Запазване|^Save$/ }));
+
+    const messages = await screen.findAllByText('Това поле е задължително.');
+    expect(messages.length).toBeGreaterThanOrEqual(2); // name, slug, locationName
+    const name = screen.getByLabelText(/Име на клуба|Club name/);
+    expect(name).toHaveAttribute('aria-invalid', 'true');
+    expect(name).toHaveAttribute('aria-describedby', 'name-error');
+    const nameError = messages.find((m) => m.id === 'name-error');
+    expect(nameError).toBeDefined();
+    expect(nameError).toHaveAttribute('role', 'alert');
+    // The email rule carries its own message.
+    expect(screen.getByText('Въведете валиден имейл адрес.')).toBeInTheDocument();
   });
 });

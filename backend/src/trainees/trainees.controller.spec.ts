@@ -6,7 +6,7 @@ import { Test, type TestingModule } from '@nestjs/testing';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { randomUUID } from 'node:crypto';
 import request from 'supertest';
-import { ContactRelationship, UserRole } from '@prisma/client';
+import { BillingMode, ContactRelationship, UserRole } from '@prisma/client';
 import { AuthModule } from '@/auth/auth.module';
 import { MailModule } from '@/mail/mail.module';
 import { AuthService } from '@/auth/auth.service';
@@ -498,6 +498,223 @@ describe('TraineesController (e2e-ish)', () => {
         .set('X-Tenant-Id', b.tenantId)
         .send({ firstName: 'Hijack' })
         .expect(404);
+    });
+  });
+
+  // TKT-0110: the trainee-side enrollment paths trigger the same course-fee rules the
+  // class-roster paths do — one fee per (trainee × course class × period).
+  describe('course fees on trainee classIds (TKT-0110)', () => {
+    async function courseClass(a: TestActor) {
+      return prisma.class.create({
+        data: {
+          tenantId: a.tenantId,
+          name: `CF-${randomUUID()}`,
+          billingMode: BillingMode.PER_COURSE,
+          courseStart: new Date('2026-12-01'),
+          courseEnd: new Date('2027-05-31'),
+          coursePrice: 300,
+          locations: { connect: [{ id: a.locationId }] },
+        },
+      });
+    }
+
+    it('POST /trainees with a course classId creates the fee', async () => {
+      const a = await setupActor(UserRole.ADMIN);
+      const cls = await courseClass(a);
+      const res = await request(server)
+        .post('/trainees')
+        .set('Authorization', `Bearer ${a.accessToken}`)
+        .set('X-Tenant-Id', a.tenantId)
+        .send({
+          firstName: 'Course',
+          lastName: 'Joiner',
+          dateOfBirth: adultDobIso,
+          classIds: [cls.id],
+        })
+        .expect(201);
+      const fee = await prisma.fee.findFirst({
+        where: { classId: cls.id, traineeId: res.body.id },
+      });
+      expect(Number(fee?.amount)).toBe(300);
+    });
+
+    it('PATCH /trainees removing the course class deletes the untouched fee', async () => {
+      const a = await setupActor(UserRole.ADMIN);
+      const cls = await courseClass(a);
+      const created = await request(server)
+        .post('/trainees')
+        .set('Authorization', `Bearer ${a.accessToken}`)
+        .set('X-Tenant-Id', a.tenantId)
+        .send({
+          firstName: 'Course',
+          lastName: 'Leaver',
+          dateOfBirth: adultDobIso,
+          classIds: [cls.id],
+          // The ADMIN is location-scoped; the trainee needs the location to stay editable.
+          locationIds: [a.locationId],
+        })
+        .expect(201);
+
+      await request(server)
+        .patch(`/trainees/${created.body.id}`)
+        .set('Authorization', `Bearer ${a.accessToken}`)
+        .set('X-Tenant-Id', a.tenantId)
+        .send({ classIds: [] })
+        .expect(200);
+      expect(
+        await prisma.fee.count({ where: { classId: cls.id, traineeId: created.body.id } }),
+      ).toBe(0);
+    });
+  });
+
+  // TKT-0123: same escape as on the class roster — `set` replaces the whole relation, so a
+  // single-hall admin could detach the trainee from the other hall's class (taking its unpaid
+  // course fee with it) or from the other hall itself.
+  describe('PATCH /trainees/:id — the other hall', () => {
+    async function sharedTrainee(a: TestActor) {
+      const other = await prisma.location.create({
+        data: { tenantId: a.tenantId, name: `Other-${randomUUID()}` },
+      });
+      const theirClass = await prisma.class.create({
+        data: {
+          tenantId: a.tenantId,
+          name: `Theirs-${randomUUID()}`,
+          billingMode: BillingMode.PER_SESSION,
+          sessionPrice: 10,
+          locations: { connect: [{ id: other.id }] },
+        },
+      });
+      const myClass = await prisma.class.create({
+        data: {
+          tenantId: a.tenantId,
+          name: `Mine-${randomUUID()}`,
+          billingMode: BillingMode.PER_SESSION,
+          sessionPrice: 10,
+          locations: { connect: [{ id: a.locationId }] },
+        },
+      });
+      const trainee = await prisma.trainee.create({
+        data: {
+          tenantId: a.tenantId,
+          firstName: 'Shared',
+          lastName: randomUUID().slice(0, 8),
+          dateOfBirth: new Date('2000-01-01'),
+          locations: { connect: [{ id: a.locationId }, { id: other.id }] },
+          classes: { connect: [{ id: theirClass.id }, { id: myClass.id }] },
+        },
+      });
+      return { trainee, other, theirClass, myClass };
+    }
+
+    it('refuses to detach a location the admin does not hold → 403', async () => {
+      const a = await setupActor(UserRole.ADMIN);
+      const { trainee, other } = await sharedTrainee(a);
+
+      await request(server)
+        .patch(`/trainees/${trainee.id}`)
+        .set('Authorization', `Bearer ${a.accessToken}`)
+        .set('X-Tenant-Id', a.tenantId)
+        .send({ locationIds: [a.locationId] })
+        .expect(403);
+
+      const after = await prisma.trainee.findUniqueOrThrow({
+        where: { id: trainee.id },
+        select: { locations: { select: { id: true } } },
+      });
+      expect(after.locations.map((l) => l.id).sort()).toEqual([a.locationId, other.id].sort());
+    });
+
+    it('refuses to unenrol from a class of another hall → 403', async () => {
+      const a = await setupActor(UserRole.ADMIN);
+      const { trainee, theirClass, myClass } = await sharedTrainee(a);
+
+      await request(server)
+        .patch(`/trainees/${trainee.id}`)
+        .set('Authorization', `Bearer ${a.accessToken}`)
+        .set('X-Tenant-Id', a.tenantId)
+        .send({ classIds: [myClass.id] })
+        .expect(403);
+
+      const after = await prisma.trainee.findUniqueOrThrow({
+        where: { id: trainee.id },
+        select: { classes: { select: { id: true } } },
+      });
+      expect(after.classes.map((c) => c.id).sort()).toEqual([myClass.id, theirClass.id].sort());
+    });
+
+    it('still lets the admin unenrol from their own hall’s class → 200', async () => {
+      const a = await setupActor(UserRole.ADMIN);
+      const { trainee, theirClass, myClass } = await sharedTrainee(a);
+
+      await request(server)
+        .patch(`/trainees/${trainee.id}`)
+        .set('Authorization', `Bearer ${a.accessToken}`)
+        .set('X-Tenant-Id', a.tenantId)
+        .send({ classIds: [theirClass.id] })
+        .expect(200);
+
+      const after = await prisma.trainee.findUniqueOrThrow({
+        where: { id: trainee.id },
+        select: { classes: { select: { id: true } } },
+      });
+      expect(after.classes.map((c) => c.id)).toEqual([theirClass.id]);
+      expect(after.classes.map((c) => c.id)).not.toContain(myClass.id);
+    });
+  });
+
+  // TKT-0123: Fee.trainee cascades, and Payment.fee / Refund.fee cascade from there, so this
+  // delete used to erase everything the club had ever collected from this person.
+  describe('DELETE /trainees/:id — the money guard', () => {
+    async function traineeWithFee(a: TestActor) {
+      const trainee = await prisma.trainee.create({
+        data: {
+          tenantId: a.tenantId,
+          firstName: 'L',
+          lastName: randomUUID().slice(0, 8),
+          dateOfBirth: new Date('2000-01-01'),
+          locations: { connect: [{ id: a.locationId }] },
+        },
+      });
+      const fee = await prisma.fee.create({
+        data: {
+          tenantId: a.tenantId,
+          traineeId: trainee.id,
+          periodStart: new Date('2026-05-01T00:00:00Z'),
+          periodEnd: new Date('2026-05-31T00:00:00Z'),
+          amount: 30,
+        },
+      });
+      return { trainee, fee };
+    }
+
+    it('refuses when a fee of the trainee carries a payment → 409', async () => {
+      const a = await setupActor(UserRole.ADMIN);
+      const { trainee, fee } = await traineeWithFee(a);
+      const payment = await prisma.payment.create({
+        data: { tenantId: a.tenantId, feeId: fee.id, amount: 30, paidAt: new Date() },
+      });
+
+      const res = await request(server)
+        .delete(`/trainees/${trainee.id}`)
+        .set('Authorization', `Bearer ${a.accessToken}`)
+        .set('X-Tenant-Id', a.tenantId)
+        .expect(409);
+      expect(res.body.code).toBe('TRAINEE_HAS_PAYMENTS');
+
+      expect(await prisma.trainee.count({ where: { id: trainee.id } })).toBe(1);
+      expect(await prisma.payment.count({ where: { id: payment.id } })).toBe(1);
+    });
+
+    it('still deletes a trainee whose fees are all unpaid → 204', async () => {
+      const a = await setupActor(UserRole.ADMIN);
+      const { trainee } = await traineeWithFee(a);
+
+      await request(server)
+        .delete(`/trainees/${trainee.id}`)
+        .set('Authorization', `Bearer ${a.accessToken}`)
+        .set('X-Tenant-Id', a.tenantId)
+        .expect(204);
+      expect(await prisma.trainee.count({ where: { id: trainee.id } })).toBe(0);
     });
   });
 });

@@ -1,3 +1,5 @@
+// Sentry must load before Nest — see instrument.ts. No-op when SENTRY_DSN is unset.
+import './instrument';
 import 'reflect-metadata';
 import { NestFactory } from '@nestjs/core';
 import { Logger } from '@nestjs/common';

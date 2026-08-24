@@ -11,6 +11,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /** Report that the service is alive. */
         get: operations["HealthController_check"];
         put?: never;
         post?: never;
@@ -29,6 +30,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /** Sign in with email and password. Sets the refresh cookie. */
         post: operations["AuthController_login"];
         delete?: never;
         options?: never;
@@ -45,6 +47,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /** Rotate the token pair. The presented refresh token is revoked. */
         post: operations["AuthController_refresh"];
         delete?: never;
         options?: never;
@@ -61,6 +64,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /** Revoke the refresh token and clear the cookie. Always 204. */
         post: operations["AuthController_logout"];
         delete?: never;
         options?: never;
@@ -77,6 +81,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /** Send a password-reset link. The answer never says if the account exists. */
         post: operations["AuthController_forgotPassword"];
         delete?: never;
         options?: never;
@@ -93,6 +98,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /** Set a new password with a reset token. */
         post: operations["AuthController_resetPassword"];
         delete?: never;
         options?: never;
@@ -107,6 +113,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /** List the clubs the signed-in user belongs to. */
         get: operations["MembershipsController_list"];
         put?: never;
         post?: never;
@@ -123,8 +130,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /** List the accounts of the acting club. Filtered and paginated. */
         get: operations["UsersController_list"];
         put?: never;
+        /** Create an account, or attach an existing email to this club. */
         post: operations["UsersController_create"];
         delete?: never;
         options?: never;
@@ -139,12 +148,15 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /** Read one account. Role and locations are those of the acting club. */
         get: operations["UsersController_findOne"];
         put?: never;
         post?: never;
+        /** Remove an account from the club. A SUPER_ADMIN deletes the account itself. */
         delete: operations["UsersController_remove"];
         options?: never;
         head?: never;
+        /** Change role and locations. The change lands in the acting club only. */
         patch: operations["UsersController_update"];
         trace?: never;
     };
@@ -157,6 +169,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /** Send the invite mail again to an account that has no password yet. */
         post: operations["UsersController_resendInvite"];
         delete?: never;
         options?: never;
@@ -171,8 +184,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /** List the locations you can reach in this club. Paginated. */
         get: operations["LocationsController_list"];
         put?: never;
+        /** Create a location. SUPER_ADMIN only. */
         post: operations["LocationsController_create"];
         delete?: never;
         options?: never;
@@ -187,12 +202,15 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /** Read one location. */
         get: operations["LocationsController_findOne"];
         put?: never;
         post?: never;
+        /** Delete a location. Refused when it has sessions or weekly slots. */
         delete: operations["LocationsController_remove"];
         options?: never;
         head?: never;
+        /** Change a location. Deactivating it also stops its weekly slots. */
         patch: operations["LocationsController_update"];
         trace?: never;
     };
@@ -203,8 +221,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /** List the classes of the club. Filtered and paginated. */
         get: operations["ClassesController_list"];
         put?: never;
+        /** Create a class: billing mode, price, capacity and waiting-list mode. */
         post: operations["ClassesController_create"];
         delete?: never;
         options?: never;
@@ -219,12 +239,15 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /** Read one class with its trainers, trainees and locations. */
         get: operations["ClassesController_findOne"];
         put?: never;
         post?: never;
+        /** Delete a class. Refused when its fees carry payments or refunds. */
         delete: operations["ClassesController_remove"];
         options?: never;
         head?: never;
+        /** Change a class. You cannot detach a location you do not hold. */
         patch: operations["ClassesController_update"];
         trace?: never;
     };
@@ -235,8 +258,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /** List the trainees of the club. Filtered and paginated. */
         get: operations["TraineesController_list"];
         put?: never;
+        /** Create a trainee. A trainee under 18 needs one contact at least. */
         post: operations["TraineesController_create"];
         delete?: never;
         options?: never;
@@ -251,12 +276,15 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /** Read one trainee with contacts, classes, locations and guardians. */
         get: operations["TraineesController_findOne"];
         put?: never;
         post?: never;
+        /** Delete a trainee. Refused when their fees carry payments or refunds. */
         delete: operations["TraineesController_remove"];
         options?: never;
         head?: never;
+        /** Change a trainee. You cannot detach a location you do not hold. */
         patch: operations["TraineesController_update"];
         trace?: never;
     };
@@ -267,8 +295,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /** List the contacts of one trainee. */
         get: operations["ContactsController_list"];
         put?: never;
+        /** Add a contact to one trainee. */
         post: operations["ContactsController_create"];
         delete?: never;
         options?: never;
@@ -286,9 +316,11 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
+        /** Delete one contact of one trainee. */
         delete: operations["ContactsController_remove"];
         options?: never;
         head?: never;
+        /** Change one contact of one trainee. */
         patch: operations["ContactsController_update"];
         trace?: never;
     };
@@ -299,8 +331,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /** List the dated sessions of the club. Filtered and paginated. */
         get: operations["SessionsController_list"];
         put?: never;
+        /** Create one dated session. Refused when the location is deactivated. */
         post: operations["SessionsController_create"];
         delete?: never;
         options?: never;
@@ -315,12 +349,15 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /** Read one session with its class, location and trainers. */
         get: operations["SessionsController_findOne"];
         put?: never;
         post?: never;
+        /** Delete one session. Its attendance rows go with it. */
         delete: operations["SessionsController_remove"];
         options?: never;
         head?: never;
+        /** Change one session, its time or its trainers. */
         patch: operations["SessionsController_update"];
         trace?: never;
     };
@@ -331,8 +368,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /** List the weekly slots of the club. Paginated. */
         get: operations["ClassSchedulesController_list"];
         put?: never;
+        /** Create a weekly slot. Refused when the location is deactivated. */
         post: operations["ClassSchedulesController_create"];
         delete?: never;
         options?: never;
@@ -347,12 +386,15 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /** Read one weekly slot. */
         get: operations["ClassSchedulesController_findOne"];
         put?: never;
         post?: never;
+        /** Delete a weekly slot. The sessions already made from it stay. */
         delete: operations["ClassSchedulesController_remove"];
         options?: never;
         head?: never;
+        /** Change a weekly slot. */
         patch: operations["ClassSchedulesController_update"];
         trace?: never;
     };
@@ -365,6 +407,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /** Make dated sessions from the active weekly slots, for a date range. */
         post: operations["ClassSchedulesController_generate"];
         delete?: never;
         options?: never;
@@ -379,6 +422,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /** List the trainees you can still add to this session, with the spots left. */
         get: operations["AttendancesController_candidates"];
         put?: never;
         post?: never;
@@ -395,10 +439,30 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /** List the attendance rows of one session. */
         get: operations["AttendancesController_list"];
+        /** Mark the attendance of a whole session in one request. */
         put: operations["AttendancesController_bulkMark"];
+        /** Add a trainee to a session. A prepaid visit is drawn if a card applies. */
         post: operations["AttendancesController_addTrainee"];
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sessions/{sessionId}/attendances/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Remove a booking. The visit returns and the queue head can get the spot. */
+        delete: operations["AttendancesController_remove"];
         options?: never;
         head?: never;
         patch?: never;
@@ -417,6 +481,7 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
+        /** Record the reply of a customer for one session. */
         patch: operations["AttendancesController_rsvp"];
         trace?: never;
     };
@@ -427,10 +492,45 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /** List the sessions of the family, with bookings and queue positions. */
         get: operations["AttendancesController_myUpcoming"];
         put?: never;
         post?: never;
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/sessions/{sessionId}/bookings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Book a spot as a customer. Needs self-booking on the class. */
+        post: operations["AttendancesController_bookForCustomer"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/sessions/{sessionId}/bookings/{traineeId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Cancel a booking as a customer. The visit returns. */
+        delete: operations["AttendancesController_cancelForCustomer"];
         options?: never;
         head?: never;
         patch?: never;
@@ -443,8 +543,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /** List the fees of the club. Filtered and paginated. */
         get: operations["FeesController_list"];
         put?: never;
+        /** Create one fee for one trainee. */
         post: operations["FeesController_create"];
         delete?: never;
         options?: never;
@@ -459,6 +561,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /** List the enrolled trainees that have no fee yet for a month. */
         get: operations["FeesController_unbilled"];
         put?: never;
         post?: never;
@@ -475,12 +578,15 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /** Read one fee with its payments and its refunds. */
         get: operations["FeesController_findOne"];
         put?: never;
         post?: never;
+        /** Delete one fee. Its payments and refunds go with it. */
         delete: operations["FeesController_remove"];
         options?: never;
         head?: never;
+        /** Change one fee. The amount cannot go below what is already paid. */
         patch: operations["FeesController_update"];
         trace?: never;
     };
@@ -493,6 +599,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /** Make the monthly fees of a class for one month, in one request. */
         post: operations["FeesController_generateMonthly"];
         delete?: never;
         options?: never;
@@ -509,7 +616,25 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /** Make the per-session fees for the sessions of a period. */
         post: operations["FeesController_generateSession"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/fees/generate-course": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Make one course fee for each enrolled trainee of a class. */
+        post: operations["FeesController_generateCourse"];
         delete?: never;
         options?: never;
         head?: never;
@@ -523,6 +648,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /** List the fees of the family, for the portal. */
         get: operations["CustomerFeesController_list"];
         put?: never;
         post?: never;
@@ -539,8 +665,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /** List the payments recorded on one fee. */
         get: operations["PaymentsController_list"];
         put?: never;
+        /** Record a payment. Refused above the balance that is due. */
         post: operations["PaymentsController_record"];
         delete?: never;
         options?: never;
@@ -558,7 +686,198 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
+        /** Delete a payment entered by mistake. The fee status is set again. */
         delete: operations["PaymentsController_remove"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/fees/{feeId}/refunds": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List the refunds recorded on one fee. */
+        get: operations["RefundsController_list"];
+        put?: never;
+        /** Record money given back. Refused above the net amount paid. */
+        post: operations["RefundsController_record"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/fees/{feeId}/refunds/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete a refund entered by mistake. The fee status is set again. */
+        delete: operations["RefundsController_remove"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sessions/{sessionId}/waitlist": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List the queue of one session, in order. */
+        get: operations["WaitlistsController_list"];
+        put?: never;
+        /** Put a trainee on the queue of one full session. */
+        post: operations["WaitlistsController_join"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sessions/{sessionId}/waitlist/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Take a trainee off the queue. */
+        delete: operations["WaitlistsController_remove"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/sessions/{sessionId}/waitlist": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Join the queue of a full session as a customer. */
+        post: operations["MeWaitlistController_join"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/sessions/{sessionId}/waitlist/{traineeId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Leave the queue. Allowed after the booking deadline too. */
+        delete: operations["MeWaitlistController_leave"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/waitlist/claim": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Take a free spot with the token from a waiting-list mail. Public. */
+        post: operations["WaitlistClaimController_claim"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/waitlists/sweep": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Delete queue entries for sessions that started over 48 hours ago. */
+        post: operations["WaitlistSweepController_sweep"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/cards": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List the visit cards of the club. Filtered and paginated. */
+        get: operations["CardsController_list"];
+        put?: never;
+        /** Sell a visit card. The fee for it is raised in the same transaction. */
+        post: operations["CardsController_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/cards/{id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Cancel a card. Give the money back on its fee with a refund. */
+        post: operations["CardsController_cancel"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/cards": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List the visit cards of the family, with the visits that are left. */
+        get: operations["CustomerCardsController_myCards"];
+        put?: never;
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -571,6 +890,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /** Sum the fees by status, for the charts. */
         get: operations["DashboardController_feesSummary"];
         put?: never;
         post?: never;
@@ -587,6 +907,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /** Sum the money in and out by month, for the charts. */
         get: operations["DashboardController_cashflowSummary"];
         put?: never;
         post?: never;
@@ -603,8 +924,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /** List every club, for the club picker. */
         get: operations["TenantsController_list"];
         put?: never;
+        /** Create a club with its first location and its first administrator. */
         post: operations["TenantsController_create"];
         delete?: never;
         options?: never;
@@ -665,19 +988,37 @@ export interface components {
             name: string;
             description?: string;
             /** @enum {string} */
-            billingMode: "PER_MONTH" | "PER_SESSION";
+            billingMode: "PER_MONTH" | "PER_SESSION" | "PER_COURSE";
             monthlyAmount?: number;
             sessionPrice?: number;
+            courseStart?: string;
+            courseEnd?: string;
+            coursePrice?: number;
+            capacity?: number;
+            /** @enum {string} */
+            waitlistMode?: "NONE" | "FIFO_AUTO" | "CLAIM";
+            allowSelfBooking?: boolean;
+            bookingCutoffMin?: number;
             locationIds?: string[];
             trainerIds?: string[];
             traineeIds?: string[];
         };
         UpdateClassDto: {
+            /** @enum {string} */
+            billingMode?: "PER_MONTH" | "PER_SESSION" | "PER_COURSE";
             name?: string;
             description?: string;
             monthlyAmount?: number;
             sessionPrice?: number;
+            courseStart?: string;
+            courseEnd?: string;
+            coursePrice?: number;
             isActive?: boolean;
+            capacity?: number | null;
+            /** @enum {string} */
+            waitlistMode?: "NONE" | "FIFO_AUTO" | "CLAIM";
+            allowSelfBooking?: boolean;
+            bookingCutoffMin?: number | null;
             locationIds?: string[];
             trainerIds?: string[];
             traineeIds?: string[];
@@ -810,11 +1151,33 @@ export interface components {
             to: string;
             classId?: string;
         };
+        GenerateCourseFeesDto: {
+            classId?: string;
+        };
         CreatePaymentDto: {
             amount: number;
             paidAt: string;
             method?: string;
             notes?: string;
+        };
+        CreateRefundDto: {
+            amount: number;
+            refundedAt: string;
+            method?: string;
+            notes?: string;
+        };
+        CreateWaitlistEntryDto: {
+            traineeId: string;
+        };
+        ClaimWaitlistDto: {
+            token: string;
+        };
+        CreateCardDto: {
+            traineeId: string;
+            classId?: string;
+            totalVisits: number;
+            price: number;
+            expiresAt?: string;
         };
         CreateTenantDto: {
             name: string;
@@ -955,9 +1318,17 @@ export interface components {
                 name: string;
                 description: string | null;
                 /** @enum {string} */
-                billingMode: "PER_MONTH" | "PER_SESSION";
+                billingMode: "PER_MONTH" | "PER_SESSION" | "PER_COURSE";
                 monthlyAmount: null | string;
                 sessionPrice: null | string;
+                courseStart: null | string;
+                courseEnd: null | string;
+                coursePrice: null | string;
+                capacity: number | null;
+                /** @enum {string} */
+                waitlistMode: "NONE" | "FIFO_AUTO" | "CLAIM";
+                allowSelfBooking: boolean;
+                bookingCutoffMin: number | null;
                 isActive: boolean;
                 createdAt: string;
                 updatedAt: string;
@@ -973,9 +1344,17 @@ export interface components {
             name: string;
             description: string | null;
             /** @enum {string} */
-            billingMode: "PER_MONTH" | "PER_SESSION";
+            billingMode: "PER_MONTH" | "PER_SESSION" | "PER_COURSE";
             monthlyAmount: null | string;
             sessionPrice: null | string;
+            courseStart: null | string;
+            courseEnd: null | string;
+            coursePrice: null | string;
+            capacity: number | null;
+            /** @enum {string} */
+            waitlistMode: "NONE" | "FIFO_AUTO" | "CLAIM";
+            allowSelfBooking: boolean;
+            bookingCutoffMin: number | null;
             isActive: boolean;
             createdAt: string;
             updatedAt: string;
@@ -986,9 +1365,17 @@ export interface components {
             name: string;
             description: string | null;
             /** @enum {string} */
-            billingMode: "PER_MONTH" | "PER_SESSION";
+            billingMode: "PER_MONTH" | "PER_SESSION" | "PER_COURSE";
             monthlyAmount: null | string;
             sessionPrice: null | string;
+            courseStart: null | string;
+            courseEnd: null | string;
+            coursePrice: null | string;
+            capacity: number | null;
+            /** @enum {string} */
+            waitlistMode: "NONE" | "FIFO_AUTO" | "CLAIM";
+            allowSelfBooking: boolean;
+            bookingCutoffMin: number | null;
             isActive: boolean;
             createdAt: string;
             updatedAt: string;
@@ -1084,9 +1471,17 @@ export interface components {
                 name: string;
                 description: string | null;
                 /** @enum {string} */
-                billingMode: "PER_MONTH" | "PER_SESSION";
+                billingMode: "PER_MONTH" | "PER_SESSION" | "PER_COURSE";
                 monthlyAmount: null | string;
                 sessionPrice: null | string;
+                courseStart: null | string;
+                courseEnd: null | string;
+                coursePrice: null | string;
+                capacity: number | null;
+                /** @enum {string} */
+                waitlistMode: "NONE" | "FIFO_AUTO" | "CLAIM";
+                allowSelfBooking: boolean;
+                bookingCutoffMin: number | null;
                 isActive: boolean;
                 createdAt: string;
                 updatedAt: string;
@@ -1143,6 +1538,9 @@ export interface components {
                 notes: string | null;
                 createdAt: string;
                 updatedAt: string;
+                _count?: {
+                    attendances: number;
+                };
             }[];
             page: number;
             pageSize: number;
@@ -1161,6 +1559,9 @@ export interface components {
             notes: string | null;
             createdAt: string;
             updatedAt: string;
+            _count?: {
+                attendances: number;
+            };
         };
         SessionDetail: {
             id: string;
@@ -1174,11 +1575,17 @@ export interface components {
             notes: string | null;
             createdAt: string;
             updatedAt: string;
+            _count?: {
+                attendances: number;
+            };
             class: {
                 id: string;
                 name: string;
                 /** @enum {string} */
-                billingMode: "PER_MONTH" | "PER_SESSION";
+                billingMode: "PER_MONTH" | "PER_SESSION" | "PER_COURSE";
+                capacity: number | null;
+                /** @enum {string} */
+                waitlistMode: "NONE" | "FIFO_AUTO" | "CLAIM";
             };
             location: {
                 id: string;
@@ -1226,6 +1633,34 @@ export interface components {
         GenerateResult: {
             created: number;
             skipped: number;
+        };
+        AttendanceCandidates: {
+            items: {
+                id: string;
+                tenantId: string;
+                firstName: string;
+                lastName: string;
+                dateOfBirth: string;
+                phone: string | null;
+                email: string | null;
+                notes: string | null;
+                isActive: boolean;
+                userId: string | null;
+                createdAt: string;
+                updatedAt: string;
+                card: {
+                    id: string;
+                    visitsRemaining: number;
+                    expiresAt: null | string;
+                    classScoped: boolean;
+                } | null;
+                hasCards: boolean;
+            }[];
+            page: number;
+            pageSize: number;
+            total: number;
+            totalPages: number;
+            spotsLeft: number | null;
         };
         AttendanceWithTraineeList: {
             id: string;
@@ -1279,9 +1714,16 @@ export interface components {
             notes: string | null;
             createdAt: string;
             updatedAt: string;
+            _count?: {
+                attendances: number;
+            };
             class: {
                 id: string;
                 name: string;
+                allowSelfBooking: boolean;
+                bookingCutoffMin: number | null;
+                /** @enum {string} */
+                waitlistMode: "NONE" | "FIFO_AUTO" | "CLAIM";
             };
             location: {
                 id: string;
@@ -1308,12 +1750,19 @@ export interface components {
                     lastName: string;
                 };
             }[];
+            spotsLeft: number | null;
+            myTrainees: {
+                id: string;
+                firstName: string;
+                lastName: string;
+            }[];
+            myWaitlist: string[];
         }[];
         PaginatedFeeRow: {
             items: {
                 id: string;
                 tenantId: string;
-                classId: string;
+                classId: string | null;
                 traineeId: string;
                 sessionId: string | null;
                 periodStart: string;
@@ -1334,7 +1783,7 @@ export interface components {
         Fee: {
             id: string;
             tenantId: string;
-            classId: string;
+            classId: string | null;
             traineeId: string;
             sessionId: string | null;
             periodStart: string;
@@ -1357,7 +1806,7 @@ export interface components {
         FeeDetail: {
             id: string;
             tenantId: string;
-            classId: string;
+            classId: string | null;
             traineeId: string;
             sessionId: string | null;
             periodStart: string;
@@ -1372,8 +1821,8 @@ export interface components {
                 id: string;
                 name: string;
                 /** @enum {string} */
-                billingMode: "PER_MONTH" | "PER_SESSION";
-            };
+                billingMode: "PER_MONTH" | "PER_SESSION" | "PER_COURSE";
+            } | null;
             trainee: {
                 id: string;
                 firstName: string;
@@ -1392,11 +1841,24 @@ export interface components {
                 recordedByNameSnapshot: string | null;
                 createdAt: string;
             }[];
+            refunds: {
+                id: string;
+                tenantId: string;
+                feeId: string;
+                amount: string;
+                refundedAt: string;
+                method: string | null;
+                notes: string | null;
+                recordedById: string | null;
+                recordedByEmailSnapshot: string | null;
+                recordedByNameSnapshot: string | null;
+                createdAt: string;
+            }[];
         };
         CustomerFeeEntryList: {
             id: string;
             tenantId: string;
-            classId: string;
+            classId: string | null;
             traineeId: string;
             sessionId: string | null;
             periodStart: string;
@@ -1410,7 +1872,7 @@ export interface components {
             class: {
                 id: string;
                 name: string;
-            };
+            } | null;
             trainee: {
                 id: string;
                 firstName: string;
@@ -1456,6 +1918,114 @@ export interface components {
             recordedByNameSnapshot: string | null;
             createdAt: string;
         };
+        RefundList: {
+            id: string;
+            tenantId: string;
+            feeId: string;
+            amount: string;
+            refundedAt: string;
+            method: string | null;
+            notes: string | null;
+            recordedById: string | null;
+            recordedByEmailSnapshot: string | null;
+            recordedByNameSnapshot: string | null;
+            createdAt: string;
+        }[];
+        Refund: {
+            id: string;
+            tenantId: string;
+            feeId: string;
+            amount: string;
+            refundedAt: string;
+            method: string | null;
+            notes: string | null;
+            recordedById: string | null;
+            recordedByEmailSnapshot: string | null;
+            recordedByNameSnapshot: string | null;
+            createdAt: string;
+        };
+        WaitlistEntryList: {
+            id: string;
+            tenantId: string;
+            sessionId: string;
+            traineeId: string;
+            createdAt: string;
+            trainee: {
+                id: string;
+                firstName: string;
+                lastName: string;
+            };
+        }[];
+        WaitlistEntry: {
+            id: string;
+            tenantId: string;
+            sessionId: string;
+            traineeId: string;
+            createdAt: string;
+        };
+        ClaimResult: {
+            /** @constant */
+            claimed: true;
+            className: string;
+            startsAt: string;
+        };
+        WaitlistSweepResult: {
+            deleted: number;
+        };
+        PaginatedCardRow: {
+            items: {
+                id: string;
+                tenantId: string;
+                traineeId: string;
+                classId: string | null;
+                feeId: string;
+                totalVisits: number;
+                price: string;
+                expiresAt: null | string;
+                cancelledAt: null | string;
+                visitsUsed: number;
+                visitsRemaining: number;
+                createdAt: string;
+                updatedAt: string;
+            }[];
+            page: number;
+            pageSize: number;
+            total: number;
+            totalPages: number;
+        };
+        CardRow: {
+            id: string;
+            tenantId: string;
+            traineeId: string;
+            classId: string | null;
+            feeId: string;
+            totalVisits: number;
+            price: string;
+            expiresAt: null | string;
+            cancelledAt: null | string;
+            visitsUsed: number;
+            visitsRemaining: number;
+            createdAt: string;
+            updatedAt: string;
+        };
+        CustomerCardEntryList: {
+            id: string;
+            traineeId: string;
+            totalVisits: number;
+            visitsUsed: number;
+            visitsRemaining: number;
+            expiresAt: null | string;
+            cancelledAt: null | string;
+            class: {
+                id: string;
+                name: string;
+            } | null;
+            trainee: {
+                id: string;
+                firstName: string;
+                lastName: string;
+            };
+        }[];
         FeesSummaryEntryList: {
             period: string;
             collected: number;
@@ -2298,6 +2868,9 @@ export interface operations {
                 pageSize?: number;
                 startsAtFrom?: string;
                 startsAtBefore?: string;
+                classId?: string;
+                trainerId?: string;
+                locationId?: string;
             };
             header?: {
                 /** @description Tenant the caller acts in. A tenant-bound user must name one of their own tenants (403 otherwise); a SUPER_ADMIN may name any active tenant (404 otherwise). */
@@ -2591,7 +3164,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["PaginatedTrainee"];
+                    "application/json": components["schemas"]["AttendanceCandidates"];
                 };
             };
         };
@@ -2676,6 +3249,29 @@ export interface operations {
             };
         };
     };
+    AttendancesController_remove: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Tenant the caller acts in. A tenant-bound user must name one of their own tenants (403 otherwise); a SUPER_ADMIN may name any active tenant (404 otherwise). */
+                "X-Tenant-Id"?: string;
+            };
+            path: {
+                sessionId: string;
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     AttendancesController_rsvp: {
         parameters: {
             query?: never;
@@ -2706,7 +3302,10 @@ export interface operations {
     };
     AttendancesController_myUpcoming: {
         parameters: {
-            query?: never;
+            query?: {
+                from?: string;
+                to?: string;
+            };
             header?: {
                 /** @description Tenant the caller acts in. A tenant-bound user must name one of their own tenants (403 otherwise); a SUPER_ADMIN may name any active tenant (404 otherwise). */
                 "X-Tenant-Id"?: string;
@@ -2726,6 +3325,57 @@ export interface operations {
             };
         };
     };
+    AttendancesController_bookForCustomer: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Tenant the caller acts in. A tenant-bound user must name one of their own tenants (403 otherwise); a SUPER_ADMIN may name any active tenant (404 otherwise). */
+                "X-Tenant-Id"?: string;
+            };
+            path: {
+                sessionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AddAttendanceDto"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Attendance"];
+                };
+            };
+        };
+    };
+    AttendancesController_cancelForCustomer: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Tenant the caller acts in. A tenant-bound user must name one of their own tenants (403 otherwise); a SUPER_ADMIN may name any active tenant (404 otherwise). */
+                "X-Tenant-Id"?: string;
+            };
+            path: {
+                sessionId: string;
+                traineeId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     FeesController_list: {
         parameters: {
             query?: {
@@ -2736,6 +3386,7 @@ export interface operations {
                 traineeId?: string;
                 periodStartFrom?: string;
                 periodStartTo?: string;
+                search?: string;
             };
             header?: {
                 /** @description Tenant the caller acts in. A tenant-bound user must name one of their own tenants (403 otherwise); a SUPER_ADMIN may name any active tenant (404 otherwise). */
@@ -2934,6 +3585,32 @@ export interface operations {
             };
         };
     };
+    FeesController_generateCourse: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Tenant the caller acts in. A tenant-bound user must name one of their own tenants (403 otherwise); a SUPER_ADMIN may name any active tenant (404 otherwise). */
+                "X-Tenant-Id"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GenerateCourseFeesDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GenerateResult"];
+                };
+            };
+        };
+    };
     CustomerFeesController_list: {
         parameters: {
             query?: never;
@@ -3028,6 +3705,353 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    RefundsController_list: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Tenant the caller acts in. A tenant-bound user must name one of their own tenants (403 otherwise); a SUPER_ADMIN may name any active tenant (404 otherwise). */
+                "X-Tenant-Id"?: string;
+            };
+            path: {
+                feeId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RefundList"];
+                };
+            };
+        };
+    };
+    RefundsController_record: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Tenant the caller acts in. A tenant-bound user must name one of their own tenants (403 otherwise); a SUPER_ADMIN may name any active tenant (404 otherwise). */
+                "X-Tenant-Id"?: string;
+            };
+            path: {
+                feeId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateRefundDto"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Refund"];
+                };
+            };
+        };
+    };
+    RefundsController_remove: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Tenant the caller acts in. A tenant-bound user must name one of their own tenants (403 otherwise); a SUPER_ADMIN may name any active tenant (404 otherwise). */
+                "X-Tenant-Id"?: string;
+            };
+            path: {
+                feeId: string;
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    WaitlistsController_list: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Tenant the caller acts in. A tenant-bound user must name one of their own tenants (403 otherwise); a SUPER_ADMIN may name any active tenant (404 otherwise). */
+                "X-Tenant-Id"?: string;
+            };
+            path: {
+                sessionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WaitlistEntryList"];
+                };
+            };
+        };
+    };
+    WaitlistsController_join: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Tenant the caller acts in. A tenant-bound user must name one of their own tenants (403 otherwise); a SUPER_ADMIN may name any active tenant (404 otherwise). */
+                "X-Tenant-Id"?: string;
+            };
+            path: {
+                sessionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateWaitlistEntryDto"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WaitlistEntry"];
+                };
+            };
+        };
+    };
+    WaitlistsController_remove: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Tenant the caller acts in. A tenant-bound user must name one of their own tenants (403 otherwise); a SUPER_ADMIN may name any active tenant (404 otherwise). */
+                "X-Tenant-Id"?: string;
+            };
+            path: {
+                sessionId: string;
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    MeWaitlistController_join: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Tenant the caller acts in. A tenant-bound user must name one of their own tenants (403 otherwise); a SUPER_ADMIN may name any active tenant (404 otherwise). */
+                "X-Tenant-Id"?: string;
+            };
+            path: {
+                sessionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateWaitlistEntryDto"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WaitlistEntry"];
+                };
+            };
+        };
+    };
+    MeWaitlistController_leave: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Tenant the caller acts in. A tenant-bound user must name one of their own tenants (403 otherwise); a SUPER_ADMIN may name any active tenant (404 otherwise). */
+                "X-Tenant-Id"?: string;
+            };
+            path: {
+                sessionId: string;
+                traineeId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    WaitlistClaimController_claim: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Tenant the caller acts in. A tenant-bound user must name one of their own tenants (403 otherwise); a SUPER_ADMIN may name any active tenant (404 otherwise). */
+                "X-Tenant-Id"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ClaimWaitlistDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClaimResult"];
+                };
+            };
+        };
+    };
+    WaitlistSweepController_sweep: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Tenant the caller acts in. A tenant-bound user must name one of their own tenants (403 otherwise); a SUPER_ADMIN may name any active tenant (404 otherwise). */
+                "X-Tenant-Id"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WaitlistSweepResult"];
+                };
+            };
+        };
+    };
+    CardsController_list: {
+        parameters: {
+            query?: {
+                page?: number;
+                pageSize?: number;
+                traineeId?: string;
+            };
+            header?: {
+                /** @description Tenant the caller acts in. A tenant-bound user must name one of their own tenants (403 otherwise); a SUPER_ADMIN may name any active tenant (404 otherwise). */
+                "X-Tenant-Id"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaginatedCardRow"];
+                };
+            };
+        };
+    };
+    CardsController_create: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Tenant the caller acts in. A tenant-bound user must name one of their own tenants (403 otherwise); a SUPER_ADMIN may name any active tenant (404 otherwise). */
+                "X-Tenant-Id"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateCardDto"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CardRow"];
+                };
+            };
+        };
+    };
+    CardsController_cancel: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Tenant the caller acts in. A tenant-bound user must name one of their own tenants (403 otherwise); a SUPER_ADMIN may name any active tenant (404 otherwise). */
+                "X-Tenant-Id"?: string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CardRow"];
+                };
+            };
+        };
+    };
+    CustomerCardsController_myCards: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Tenant the caller acts in. A tenant-bound user must name one of their own tenants (403 otherwise); a SUPER_ADMIN may name any active tenant (404 otherwise). */
+                "X-Tenant-Id"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CustomerCardEntryList"];
+                };
             };
         };
     };

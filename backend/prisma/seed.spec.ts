@@ -44,7 +44,6 @@ function prismaThatMustNotBeTouched(): PrismaClient {
 
 function recordingPrisma() {
   return {
-    language: { upsert: vi.fn().mockResolvedValue({}) },
     user: {
       findFirst: vi.fn().mockResolvedValue(null),
       create: vi.fn().mockResolvedValue({}),
@@ -117,8 +116,9 @@ describe('seed', () => {
 
       expect(prisma.tenant.upsert).not.toHaveBeenCalled();
       expect(prisma.user.upsert).not.toHaveBeenCalled();
-      // ...while the legitimate production seed still runs.
-      expect(prisma.language.upsert).toHaveBeenCalledTimes(2);
+      // ...while the legitimate production seed still runs. It used to also upsert two Language
+      // rows; TKT-0123 dropped that table (nothing ever read it), so the super admin is the whole
+      // of the production seed and the only thing left to assert here.
       expect(prisma.user.create).toHaveBeenCalledOnce();
     });
 

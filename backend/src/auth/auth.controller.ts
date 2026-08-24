@@ -8,6 +8,7 @@ import {
   Res,
   UnauthorizedException,
 } from '@nestjs/common';
+import { ApiOperation } from '@nestjs/swagger';
 import { ConfigService } from '@nestjs/config';
 import { Throttle } from '@nestjs/throttler';
 import type { Request, Response } from 'express';
@@ -58,6 +59,7 @@ export class AuthController {
   }
 
   @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  @ApiOperation({ summary: 'Sign in with email and password. Sets the refresh cookie.' })
   @Post('login')
   @HttpCode(HttpStatus.OK)
   @ResponseSchema('LoginResponse', LoginResponseSchema)
@@ -80,6 +82,7 @@ export class AuthController {
   }
 
   @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  @ApiOperation({ summary: 'Rotate the token pair. The presented refresh token is revoked.' })
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
   @ResponseSchema('RefreshResponse', RefreshResponseSchema)
@@ -104,6 +107,7 @@ export class AuthController {
   }
 
   @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  @ApiOperation({ summary: 'Revoke the refresh token and clear the cookie. Always 204.' })
   @Post('logout')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ResponseSchema('LogoutNoContent', NoContent)
@@ -120,6 +124,7 @@ export class AuthController {
   }
 
   @Throttle({ default: { limit: 3, ttl: 60_000 } })
+  @ApiOperation({ summary: 'Send a password-reset link. The answer never says if the account exists.' })
   @Post('forgot-password')
   @HttpCode(HttpStatus.OK)
   @ResponseSchema('ForgotPasswordResponse', ForgotPasswordResponseSchema)
@@ -131,6 +136,7 @@ export class AuthController {
   }
 
   @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  @ApiOperation({ summary: 'Set a new password with a reset token.' })
   @Post('reset-password')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ResponseSchema('ResetPasswordNoContent', NoContent)

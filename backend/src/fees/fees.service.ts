@@ -24,9 +24,11 @@ import {
   type PaginationInput,
 } from '@/common/dto/paginated-result';
 import { PrismaService } from '@/prisma/prisma.service';
+import { searchVariants } from '@/common/search-variants';
 import { assertDateOrder, endOfDayUtc, startOfDayUtc } from '@/common/dates';
 import { assertClassInTenant, assertTraineeInTenant } from '@/common/tenant-guards';
 import type { CreateFeeDto } from './dto/create-fee.dto';
+import type { GenerateCourseFeesDto } from './dto/generate-course-fees.dto';
 import type { UpdateFeeDto } from './dto/update-fee.dto';
 import type { GenerateMonthlyFeesDto } from './dto/generate-monthly-fees.dto';
 import { OUTSTANDING, type FeeStatusFilter } from './dto/list-fees-query.dto';
@@ -49,6 +51,8 @@ export interface FeeListFilters {
   // Inclusive window matched against Fee.periodStart.
   periodStartFrom?: string;
   periodStartTo?: string;
+  // Substring over the related trainee's email/first/last name (TKT-0095).
+  search?: string;
 }
 
 import type { GenerateResult } from '@/common/generate-result';
@@ -85,9 +89,37 @@ export class FeesService {
       }
       where.periodStart = range;
     }
+    // A fee row has no searchable text of its own — the match runs over the related trainee,
+    // same columns and casing fold as GET /trainees?search. The clause goes in AND, so it
+    // narrows the tenant and location scope; attached to where.OR it would widen the scope
+    // and leak fees across locations (the RES-0003 trap).
+    const search = searchVariants(filters.search ?? '');
+    if (search.length > 0) {
+      where.AND = [
+        {
+          trainee: {
+            OR: search.flatMap((v) => [
+              { email: { contains: v } },
+              { firstName: { contains: v } },
+              { lastName: { contains: v } },
+            ]),
+          },
+        },
+      ];
+    }
 
     const scoped = await this.scope.locationsWhere(user, tenantId);
-    if (scoped.locations) where.class = scoped;
+    if (scoped.locations) {
+      // TKT-0106: class-less (card purchase) fees are tenant-level money — the location
+      // scope narrows class fees but must not hide class-less ones. Goes in AND so it
+      // composes with the search clause instead of widening it.
+      const locationScope: Prisma.FeeWhereInput = {
+        OR: [{ classId: null }, { class: scoped }],
+      };
+      where.AND = where.AND
+        ? [...(where.AND as Prisma.FeeWhereInput[]), locationScope]
+        : [locationScope];
+    }
 
     const p = normalizePagination(pagination);
     const [fees, total] = await this.prisma.$transaction([
@@ -120,17 +152,34 @@ export class FeesService {
   async findById(tenantId: string, id: string, user: AuthenticatedUser) {
     const where: Prisma.FeeWhereInput = { id, tenantId };
     const scoped = await this.scope.locationsWhere(user, tenantId);
-    if (scoped.locations) where.class = scoped;
+    // TKT-0106: class-less fees stay visible to every admin of the tenant.
+    if (scoped.locations) where.OR = [{ classId: null }, { class: scoped }];
     const fee = await this.prisma.fee.findFirst({
       where,
       include: {
         class: { select: { id: true, name: true, billingMode: true } },
         trainee: { select: { id: true, firstName: true, lastName: true } },
         payments: { orderBy: { paidAt: 'desc' } },
+        refunds: { orderBy: { refundedAt: 'desc' } },
       },
     });
     if (!fee) throw new NotFoundException(`Fee ${id} not found`);
     return fee;
+  }
+
+  // Tenant-bound + ADMIN-location-scoped via the fee's class; SUPER_ADMIN passes through.
+  // Shared gate for the fee's sub-ledgers (payments, refunds — TKT-0105 moved it here).
+  // TKT-0106: class-less (card purchase) fees stay visible to every admin of the tenant.
+  async assertFeeAccessible(
+    tenantId: string,
+    feeId: string,
+    user: AuthenticatedUser,
+  ): Promise<void> {
+    const where: Prisma.FeeWhereInput = { id: feeId, tenantId };
+    const scoped = await this.scope.locationsWhere(user, tenantId);
+    if (scoped.locations) where.OR = [{ classId: null }, { class: scoped }];
+    const found = await this.prisma.fee.count({ where });
+    if (!found) throw new NotFoundException(`Fee ${feeId} not found`);
   }
 
   // Validates that an ADMIN can access fees for the given class. Used by create/update.
@@ -329,6 +378,71 @@ export class FeesService {
     return { created: gaps.length, skipped };
   }
 
+  // --- bulk generate (PER_COURSE, TKT-0110) ---
+  // Gap-healer: one fee per (enrolled trainee × course class × its current period). Same
+  // idempotent shape as generateMonthly; the class carries period and price, so the dto is
+  // only the optional class filter. Existing fees are never updated — ledger is history.
+  async generateCourse(
+    tenantId: string,
+    dto: GenerateCourseFeesDto,
+    user: AuthenticatedUser,
+  ): Promise<GenerateResult> {
+    if (dto.classId) await assertClassInTenant(this.prisma, tenantId, dto.classId);
+    if (dto.classId) await this.assertClassAccessible(user, tenantId, dto.classId);
+
+    const classes = await this.prisma.class.findMany({
+      where: {
+        tenantId,
+        billingMode: BillingMode.PER_COURSE,
+        ...(dto.classId ? { id: dto.classId } : {}),
+        courseStart: { not: null },
+        courseEnd: { not: null },
+        coursePrice: { not: null },
+        ...(await this.scope.locationsWhere(user, tenantId)),
+      },
+      include: { trainees: { select: { id: true } } },
+    });
+    if (classes.length === 0) return { created: 0, skipped: 0 };
+
+    const existing = await this.prisma.fee.findMany({
+      where: {
+        tenantId,
+        classId: { in: classes.map((c) => c.id) },
+        sessionId: null,
+      },
+      select: { classId: true, traineeId: true, periodStart: true, periodEnd: true },
+    });
+    const existingKeys = new Set(
+      existing.map(
+        (f) => `${f.classId}|${f.traineeId}|${f.periodStart.getTime()}|${f.periodEnd.getTime()}`,
+      ),
+    );
+
+    let skipped = 0;
+    const toCreate: Prisma.FeeCreateManyInput[] = [];
+    for (const cls of classes) {
+      if (cls.courseStart == null || cls.courseEnd == null || cls.coursePrice == null) continue;
+      for (const tr of cls.trainees) {
+        const key = `${cls.id}|${tr.id}|${cls.courseStart.getTime()}|${cls.courseEnd.getTime()}`;
+        if (existingKeys.has(key)) {
+          skipped += 1;
+          continue;
+        }
+        toCreate.push({
+          tenantId,
+          classId: cls.id,
+          traineeId: tr.id,
+          periodStart: cls.courseStart,
+          periodEnd: cls.courseEnd,
+          amount: cls.coursePrice,
+        });
+        existingKeys.add(key);
+      }
+    }
+    if (toCreate.length) await this.prisma.fee.createMany({ data: toCreate });
+    return { created: toCreate.length, skipped };
+  }
+
   // --- bulk generate (PER_SESSION) ---
   async generateSessionFees(
     tenantId: string,
@@ -446,18 +560,22 @@ export class FeesService {
   // --- helpers used by PaymentsService ---
 
   /**
-   * Sum of a fee's Payment rows, read inside the caller's transaction. One place answers "how much
-   * has been taken", so the overpayment guards and the status recompute cannot disagree.
+   * NET paid for a fee — payments minus refunds (TKT-0105) — read inside the caller's
+   * transaction. One place answers "how much does the club hold", so the overpayment guards,
+   * the refund guards and the status recompute cannot disagree. A caller wanting gross
+   * payments must aggregate the Payment table itself.
    */
   async paidTotalInTransaction(
     tx: Prisma.TransactionClient,
     feeId: string,
   ): Promise<Prisma.Decimal> {
-    const agg = await tx.payment.aggregate({
-      where: { feeId },
-      _sum: { amount: true },
-    });
-    return agg._sum.amount ?? new Prisma.Decimal(0);
+    // Sequential on purpose: concurrent queries on one interactive-transaction client
+    // are not supported by Prisma.
+    const paid = await tx.payment.aggregate({ where: { feeId }, _sum: { amount: true } });
+    const refunded = await tx.refund.aggregate({ where: { feeId }, _sum: { amount: true } });
+    return (paid._sum.amount ?? new Prisma.Decimal(0)).minus(
+      refunded._sum.amount ?? new Prisma.Decimal(0),
+    );
   }
 
   /**

@@ -4,7 +4,15 @@
 // change on every response. Kept as a pure function so the policy can be asserted in
 // tests without booting Next.
 
-export function buildCsp(nonce: string, isDev: boolean, apiUrl: string): string {
+export function buildCsp(
+  nonce: string,
+  isDev: boolean,
+  apiUrl: string,
+  // The Sentry ingest origin (lib/sentry.ts sentryIngestOrigin) — the only extra origin the
+  // browser SDK talks to (TKT-0098). Null/absent when no DSN is configured: the policy is
+  // then byte-identical to the pre-Sentry one.
+  sentryOrigin?: string | null,
+): string {
   // No 'unsafe-inline' here — that is the whole point. An injected inline <script>
   // cannot execute without the per-request nonce. Browsers ignore 'unsafe-inline' when
   // a nonce is present anyway, but omitting it keeps the policy honest about what it
@@ -19,9 +27,13 @@ export function buildCsp(nonce: string, isDev: boolean, apiUrl: string): string 
     .join(' ');
 
   // HMR opens a WebSocket back to the dev server.
-  const connectSrc = isDev
-    ? `connect-src 'self' ${apiUrl} ws: wss:`
-    : `connect-src 'self' ${apiUrl}`;
+  const connectSrc = [
+    `connect-src 'self' ${apiUrl}`,
+    isDev ? 'ws: wss:' : '',
+    sentryOrigin ?? '',
+  ]
+    .filter(Boolean)
+    .join(' ');
 
   return [
     "default-src 'self'",

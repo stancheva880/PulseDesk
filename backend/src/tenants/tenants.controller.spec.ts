@@ -109,8 +109,11 @@ describe('TenantsController (e2e-ish)', () => {
   }
 
   it('SUPER_ADMIN can list tenants', async () => {
+    // Approved TEST CHANGE REQUEST, 2026-08-22: fixture renamed to sort first — the route
+    // orders by name and takes DEFAULT_LIST_TAKE, and the parallel suites' 'Test' tenants
+    // on the shared DB could push 'Visible Tenant' past the cap. Assertion unchanged.
     const t = await prisma.tenant.create({
-      data: { slug: `t-${randomUUID()}`, name: 'Visible Tenant' },
+      data: { slug: `t-${randomUUID()}`, name: 'AAA Visible Tenant' },
     });
     tenantIds.push(t.id);
     const token = await newSuperAdmin();
@@ -158,7 +161,7 @@ describe('TenantsController (e2e-ish)', () => {
         .send(body)
         .expect(201);
 
-      tenantIds.push(res.body.id);
+      tenantIds.push(res.body.id);
       // Approved TEST CHANGE REQUEST, 2026-08-19: notificationSent added because POST /tenants
       // now reports whether the administrator's mail left. Still toEqual, so an unintended
       // field on this response is still a failure.

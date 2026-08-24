@@ -5,15 +5,17 @@ import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { apiErrorMessage } from '@/lib/api';
+import { showToast } from '@/components/toast';
+import { ApiError, apiErrorMessage } from '@/lib/api';
 import {
   Attendances,
   Sessions,
+  Waitlist,
   type AttendanceStatus,
   type AttendanceWithTrainee,
+  type CandidateTrainee,
   type SessionDetail,
-  type Trainee,
-  listAll,
+  type WaitlistEntry,
 } from '@/lib/api-resources';
 import { cn } from '@/lib/utils';
 
@@ -39,9 +41,16 @@ function seedDrafts(rows: AttendanceWithTrainee[]): Record<string, RowDraft> {
   return initial;
 }
 
-// Still paged: the candidate set is filtered, not necessarily short.
-const listCandidates = (sessionId: string) =>
-  listAll((p) => Attendances.listCandidates(sessionId, p));
+// Still paged: the candidate set is filtered, not necessarily short. Follows the remaining
+// pages like listAll, but keeps the envelope's spotsLeft (TKT-0103) from the first page.
+async function listCandidates(sessionId: string) {
+  const first = await Attendances.listCandidates(sessionId, { pageSize: 100 });
+  const items = [...first.items];
+  for (let page = 2; page <= first.totalPages; page += 1) {
+    items.push(...(await Attendances.listCandidates(sessionId, { page, pageSize: 100 })).items);
+  }
+  return { items, spotsLeft: first.spotsLeft };
+}
 
 export default function AttendancePage() {
   const { t } = useTranslation();
@@ -52,44 +61,61 @@ export default function AttendancePage() {
   const [session, setSession] = useState<SessionDetail | null>(null);
   const [rows, setRows] = useState<AttendanceWithTrainee[] | null>(null);
   // The server's answer to "who can still be added", not a club-wide list to filter.
-  const [candidates, setCandidates] = useState<Trainee[]>([]);
+  const [candidates, setCandidates] = useState<CandidateTrainee[]>([]);
+  // TKT-0103: null = the class has no capacity; 0 disables the add control.
+  const [spotsLeft, setSpotsLeft] = useState<number | null>(null);
   const [drafts, setDrafts] = useState<Record<string, RowDraft>>({});
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
-  const [savedCount, setSavedCount] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
   const [addId, setAddId] = useState('');
   const [addBusy, setAddBusy] = useState(false);
   const [addError, setAddError] = useState<string | null>(null);
+  // TKT-0112: the session's queue; joins are offered only when the session is full.
+  const [waitlist, setWaitlist] = useState<WaitlistEntry[]>([]);
+  const [waitId, setWaitId] = useState('');
+  const [waitBusy, setWaitBusy] = useState(false);
+  const [waitError, setWaitError] = useState<string | null>(null);
   // The API capped the response, so rows the trainer cannot see exist and Save All would not
   // cover them. Never silent: that silence is what TKT-0068 fixed.
   const [truncated, setTruncated] = useState(false);
 
   useEffect(() => {
+    // TKT-0123: four requests, and the id can change under them — moving between sessions used to
+    // let a slower earlier load paint its rows over the newer session's. The trainer would then be
+    // marking attendance against the wrong list. Same guard as auth-provider.tsx's bootstrap.
+    let cancelled = false;
     Promise.all([
       Sessions.get(sessionId),
       Attendances.listForSession(sessionId),
       listCandidates(sessionId),
+      Waitlist.list(sessionId),
     ])
-      .then(([s, a, cs]) => {
+      .then(([s, a, cs, w]) => {
+        if (cancelled) return;
         setSession(s);
         setRows(a.items);
         setTruncated(a.truncated);
-        setCandidates(cs);
+        setCandidates(cs.items);
+        setSpotsLeft(cs.spotsLeft);
+        setWaitlist(w);
         setDrafts(seedDrafts(a.items));
       })
-      .catch((e: unknown) => setLoadError(apiErrorMessage(e)));
+      .catch((e: unknown) => {
+        if (!cancelled) setLoadError(apiErrorMessage(e));
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [sessionId]);
 
   const setDraftStatus = (rowId: string, status: AttendanceStatus) => {
-    setSavedCount(null);
     setDrafts((prev) => {
       const existing = prev[rowId] ?? { status, notes: '', changed: false };
       return { ...prev, [rowId]: { ...existing, status, changed: true } };
     });
   };
   const setDraftNotes = (rowId: string, notes: string) => {
-    setSavedCount(null);
     setDrafts((prev) => {
       const existing = prev[rowId] ?? { status: 'PRESENT' as AttendanceStatus, notes, changed: false };
       return { ...prev, [rowId]: { ...existing, notes, changed: true } };
@@ -99,7 +125,6 @@ export default function AttendancePage() {
   const onAddTrainee = async () => {
     if (!addId) return;
     setAddError(null);
-    setSavedCount(null);
     setAddBusy(true);
     try {
       await Attendances.addTrainee(sessionId, addId);
@@ -110,20 +135,84 @@ export default function AttendancePage() {
       ]);
       setRows(fresh.items);
       setTruncated(fresh.truncated);
-      setCandidates(freshCandidates);
+      setCandidates(freshCandidates.items);
+      setSpotsLeft(freshCandidates.spotsLeft);
       setDrafts(seedDrafts(fresh.items));
       setAddId('');
     } catch (e) {
       setAddError(apiErrorMessage(e));
+      // TKT-0112: a racing add filled the session — refresh spotsLeft so the control
+      // flips to the waitlist offer.
+      if (
+        e instanceof ApiError &&
+        (e.body as { code?: string } | undefined)?.code === 'ATTENDANCE_SESSION_FULL'
+      ) {
+        listCandidates(sessionId)
+          .then((cs) => {
+            setCandidates(cs.items);
+            setSpotsLeft(cs.spotsLeft);
+          })
+          .catch(() => undefined);
+      }
     } finally {
       setAddBusy(false);
+    }
+  };
+
+  // TKT-0113: after an unbooking the server may have promoted someone — rows, candidates,
+  // spotsLeft and the queue can all have changed, so everything refetches together.
+  const refetchAll = async () => {
+    const [fresh, freshCandidates, w] = await Promise.all([
+      Attendances.listForSession(sessionId),
+      listCandidates(sessionId),
+      Waitlist.list(sessionId),
+    ]);
+    setRows(fresh.items);
+    setTruncated(fresh.truncated);
+    setCandidates(freshCandidates.items);
+    setSpotsLeft(freshCandidates.spotsLeft);
+    setWaitlist(w);
+    setDrafts(seedDrafts(fresh.items));
+  };
+
+  const onRemoveRow = async (attendanceId: string) => {
+    setSaveError(null);
+    try {
+      await Attendances.remove(sessionId, attendanceId);
+      await refetchAll();
+    } catch (e) {
+      setSaveError(apiErrorMessage(e));
+    }
+  };
+
+  const onJoinWaitlist = async () => {
+    if (!waitId) return;
+    setWaitError(null);
+    setWaitBusy(true);
+    try {
+      await Waitlist.join(sessionId, { traineeId: waitId });
+      setWaitlist(await Waitlist.list(sessionId));
+      setWaitId('');
+    } catch (e) {
+      setWaitError(apiErrorMessage(e));
+    } finally {
+      setWaitBusy(false);
+    }
+  };
+
+  const onRemoveWaitlist = async (entryId: string) => {
+    setWaitError(null);
+    try {
+      await Waitlist.remove(sessionId, entryId);
+      setWaitlist(await Waitlist.list(sessionId));
+    } catch (e) {
+      setWaitError(apiErrorMessage(e));
     }
   };
 
   const onSaveAll = async () => {
     if (!rows) return;
     setSaveError(null);
-    setSavedCount(null);
 
     // Send every row that has been touched. For untouched PENDING rows we still send the
     // default-PRESENT draft so the bulk PUT becomes a single transactional snapshot of
@@ -143,7 +232,7 @@ export default function AttendancePage() {
     setBusy(true);
     try {
       const result = await Attendances.bulkMark(sessionId, { items });
-      setSavedCount(result.updated);
+      showToast({ text: t('attendance.savedAt', { updated: result.updated }), variant: 'success' });
       // Refetch to pick up updated marker info.
       const fresh = await Attendances.listForSession(sessionId);
       setRows(fresh.items);
@@ -154,6 +243,13 @@ export default function AttendancePage() {
       setBusy(false);
     }
   };
+
+  // TKT-0112: the queue is offered only when the class opted in; queued trainees are
+  // not offered a second time.
+  const waitlistEnabled =
+    session?.class.waitlistMode === 'FIFO_AUTO' || session?.class.waitlistMode === 'CLAIM';
+  const queuedIds = new Set(waitlist.map((w) => w.traineeId));
+  const waitlistCandidates = candidates.filter((c) => !queuedIds.has(c.id));
 
   return (
     <div className="space-y-6">
@@ -178,10 +274,48 @@ export default function AttendancePage() {
                 {t('attendance.truncated')}
               </p>
             ) : null}
+            {rows !== null && session.class.capacity != null ? (
+              <p className="mb-2 text-sm text-muted-foreground">
+                {t('attendance.occupied', {
+                  n: session.class.capacity - (spotsLeft ?? 0),
+                  max: session.class.capacity,
+                })}
+              </p>
+            ) : null}
             {rows !== null ? (
               <div className="mb-4 flex flex-wrap items-center gap-2">
                 {candidates.length === 0 ? (
                   <p className="text-sm text-muted-foreground">{t('attendance.allEnrolled')}</p>
+                ) : spotsLeft === 0 ? (
+                  <>
+                    <p className="text-sm text-muted-foreground">{t('attendance.full')}</p>
+                    {waitlistEnabled ? (
+                      <>
+                        <select
+                          aria-label={t('waitlist.add')}
+                          value={waitId}
+                          onChange={(e) => setWaitId(e.target.value)}
+                          className="flex h-9 rounded-md border border-input bg-background px-2 text-sm"
+                        >
+                          <option value="">{t('waitlist.add')}</option>
+                          {waitlistCandidates.map((tr) => (
+                            <option key={tr.id} value={tr.id}>
+                              {tr.firstName} {tr.lastName}
+                            </option>
+                          ))}
+                        </select>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          disabled={!waitId || waitBusy}
+                          onClick={() => void onJoinWaitlist()}
+                        >
+                          {t('waitlist.cta')}
+                        </Button>
+                      </>
+                    ) : null}
+                  </>
                 ) : (
                   <>
                     <select
@@ -194,6 +328,8 @@ export default function AttendancePage() {
                       {candidates.map((tr) => (
                         <option key={tr.id} value={tr.id}>
                           {tr.firstName} {tr.lastName}
+                          {/* TKT-0108: ex-card-holder with nothing usable left — warn, never block. */}
+                          {tr.card === null && tr.hasCards ? ` — ${t('cards.noVisitsSuffix')}` : ''}
                         </option>
                       ))}
                     </select>
@@ -206,9 +342,52 @@ export default function AttendancePage() {
                     >
                       {t('attendance.addTraineeCta')}
                     </Button>
+                    {(() => {
+                      const chosen = candidates.find((c) => c.id === addId);
+                      return chosen && chosen.card === null && chosen.hasCards ? (
+                        <p className="w-full text-sm text-warning-foreground dark:text-warning">
+                          {t('cards.noVisitsWarning')}
+                        </p>
+                      ) : null;
+                    })()}
                   </>
                 )}
                 {addError ? <p className="text-sm text-destructive">{addError}</p> : null}
+              </div>
+            ) : null}
+            {rows !== null && (waitlistEnabled || waitlist.length > 0) ? (
+              <div className="mb-4 rounded-md border p-3">
+                <p className="mb-2 text-sm font-medium">{t('waitlist.title')}</p>
+                {waitlist.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">{t('waitlist.empty')}</p>
+                ) : (
+                  <ul className="space-y-1">
+                    {waitlist.map((w, i) => (
+                      <li
+                        key={w.id}
+                        data-testid="waitlist-entry"
+                        className="flex items-center gap-2 text-sm"
+                      >
+                        <span className="text-muted-foreground">{i + 1}.</span>
+                        <span className="flex-1">
+                          {w.trainee.firstName} {w.trainee.lastName}
+                        </span>
+                        <span className="text-xs text-muted-foreground">
+                          {new Date(w.createdAt).toLocaleString()}
+                        </span>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => void onRemoveWaitlist(w.id)}
+                        >
+                          {t('waitlist.remove')}
+                        </Button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {waitError ? <p className="mt-2 text-sm text-destructive">{waitError}</p> : null}
               </div>
             ) : null}
             {rows === null ? (
@@ -217,7 +396,10 @@ export default function AttendancePage() {
               <p className="text-sm text-muted-foreground">{t('attendance.empty')}</p>
             ) : (
               <div className="space-y-3">
-                <div className="rounded-md border">
+                {/* pd-card-table opts this table into the below-md card layout defined once in
+                    globals.css (TKT-0086). Each cell carries its own `data-label`, which the rule
+                    renders as a caption via content: attr(data-label). */}
+                <div className="pd-card-table rounded-md border">
                   <table className="w-full text-sm">
                     <thead className="bg-muted/50">
                       <tr>
@@ -241,8 +423,10 @@ export default function AttendancePage() {
                         const name = `${row.trainee.firstName} ${row.trainee.lastName}`;
                         return (
                           <tr key={row.id} className="border-t align-top">
-                            <td className="p-3 font-medium">{name}</td>
-                            <td className="p-3">
+                            <td data-label={t('attendance.fields.trainee')} className="p-3 font-medium">
+                              {name}
+                            </td>
+                            <td data-label={t('attendance.fields.status')} className="p-3">
                               <div role="group" aria-label={t('attendance.fields.status')} className="flex gap-1">
                                 {STATUSES.map((s) => {
                                   const active = draft?.status === s;
@@ -272,14 +456,29 @@ export default function AttendancePage() {
                                 className="mt-2 flex h-8 w-full rounded-md border border-input bg-background px-2 text-xs"
                               />
                             </td>
-                            <td className="p-3 text-muted-foreground">
+                            <td
+                              data-label={t('attendance.fields.rsvp')}
+                              className="p-3 text-muted-foreground"
+                            >
                               {row.traineeRsvp ? t(`attendance.rsvp.${row.traineeRsvp}`) : '—'}
                             </td>
-                            <td className="p-3 text-xs text-muted-foreground">
+                            <td
+                              data-label={t('attendance.fields.marker')}
+                              className="p-3 text-xs text-muted-foreground"
+                            >
                               {row.markedByEmailSnapshot ?? '—'}
                               {row.markedAt ? (
                                 <div>{new Date(row.markedAt).toLocaleString()}</div>
                               ) : null}
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="mt-2"
+                                onClick={() => void onRemoveRow(row.id)}
+                              >
+                                {t('attendance.removeRow')}
+                              </Button>
                             </td>
                           </tr>
                         );
@@ -288,11 +487,6 @@ export default function AttendancePage() {
                   </table>
                 </div>
 
-                {savedCount !== null ? (
-                  <p className="text-sm text-green-700">
-                    {t('attendance.savedAt', { updated: savedCount })}
-                  </p>
-                ) : null}
                 {saveError ? <p className="text-sm text-destructive">{saveError}</p> : null}
 
                 <div className="flex gap-2">

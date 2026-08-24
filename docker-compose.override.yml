@@ -29,6 +29,8 @@ services:
       # next dev compiles on the fly, so NEXT_PUBLIC_* are read at runtime here.
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:4000}
       NEXT_PUBLIC_DEFAULT_LOCALE: ${NEXT_PUBLIC_DEFAULT_LOCALE:-bg}
+      # Runtime here, a build arg in the prod stack. Empty = frontend error tracking off.
+      NEXT_PUBLIC_SENTRY_DSN: ${NEXT_PUBLIC_SENTRY_DSN:-}
       WATCHPACK_POLLING: "true"
       CHOKIDAR_USEPOLLING: "true"
     volumes:

@@ -24,6 +24,36 @@ export const assertLocationInTenant = (
     'locationId',
   );
 
+/**
+ * TKT-0125: a deactivated location takes no new dated work — no session, no schedule.
+ *
+ * Deliberately not built on `assertRefInTenant`: that throws a bare string with no `code`, and
+ * the frontend needs one to translate the refusal. Every call site runs `assertLocationInTenant`
+ * first, so by the time this runs the row is known to exist in the caller's tenant — a zero
+ * count here means "inactive", never "missing".
+ *
+ * Only for the single-`locationId` doors. `assertLocationIds` (the m2m list guard) stays
+ * untouched on purpose: those writes go through `setMany`, which resends the whole relation, so
+ * an active check there would refuse a legitimate `set` that merely carries an
+ * already-attached inactive hall. Attaching staff, trainees or classes creates no dated
+ * records anyway.
+ */
+export async function assertLocationActive(
+  prisma: PrismaService,
+  tenantId: string,
+  locationId: string,
+): Promise<void> {
+  const active = await prisma.location.count({
+    where: { id: locationId, tenantId, isActive: true },
+  });
+  if (!active) {
+    throw new BadRequestException({
+      message: 'That location is deactivated. Reactivate it, or choose another location.',
+      code: 'LOCATION_INACTIVE',
+    });
+  }
+}
+
 export const assertTraineeInTenant = (prisma: PrismaService, tenantId: string, traineeId: string) =>
   assertRefInTenant(
     () => prisma.trainee.count({ where: { id: traineeId, tenantId } }),

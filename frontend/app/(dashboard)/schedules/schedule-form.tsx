@@ -8,9 +8,11 @@ import { useTranslation } from 'react-i18next';
 import { z } from 'zod';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { FieldError, SubmitError } from '@/components/ui/field-error';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { apiErrorMessage } from '@/lib/api';
+import { showToast } from '@/components/toast';
 import {
   ClassSchedules,
   Classes,
@@ -28,28 +30,47 @@ const DAYS = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'] as const satisfie
 
 // classId is required on create only — the edit endpoint doesn't accept it
 // (a schedule can't move to another class), so edit skips the min(1).
+// TKT-0090: zod messages carry i18n keys; FieldError translates them.
 const baseSchema = z.object({
   classId: z.string(),
-  locationId: z.string().min(1),
+  locationId: z.string().min(1, 'common.errors.required'),
   dayOfWeek: z.enum(DAYS),
-  startTime: z.string().regex(HHMM, 'timeFormat'),
-  endTime: z.string().regex(HHMM, 'timeFormat'),
+  startTime: z.string().regex(HHMM, 'schedules.errors.timeFormat'),
+  endTime: z.string().regex(HHMM, 'schedules.errors.timeFormat'),
   isActive: z.boolean(),
 });
 
 const endAfterStart = {
   path: ['endTime'] as ['endTime'],
-  message: 'endsBeforeStarts',
+  message: 'schedules.errors.endsBeforeStarts',
 };
 const createSchema = baseSchema
-  .extend({ classId: z.string().min(1) })
+  .extend({ classId: z.string().min(1, 'common.errors.required') })
   .refine((v) => v.endTime > v.startTime, endAfterStart);
 const editSchema = baseSchema.refine((v) => v.endTime > v.startTime, endAfterStart);
 
 type FormValues = z.infer<typeof baseSchema>;
 
+const createDefaults = (classId: string): FormValues => ({
+  classId,
+  locationId: '',
+  dayOfWeek: 'MON',
+  startTime: '',
+  endTime: '',
+  isActive: true,
+});
+
 // id comes from the edit page's route params; create mode has none.
-export function ScheduleForm({ mode, id = '' }: { mode: 'create' | 'edit'; id?: string }) {
+// initialClassId is the new page's ?classId= — a contextual-create prefill (TKT-0091).
+export function ScheduleForm({
+  mode,
+  id = '',
+  initialClassId,
+}: {
+  mode: 'create' | 'edit';
+  id?: string;
+  initialClassId?: string;
+}) {
   const { t } = useTranslation();
   const router = useRouter();
 
@@ -63,18 +84,21 @@ export function ScheduleForm({ mode, id = '' }: { mode: 'create' | 'edit'; id?: 
     register,
     handleSubmit,
     reset,
+    setValue,
     formState: { errors, isSubmitting },
   } = useForm<FormValues>({
     resolver: zodResolver(mode === 'create' ? createSchema : editSchema),
-    defaultValues: {
-      classId: '',
-      locationId: '',
-      dayOfWeek: 'MON',
-      startTime: '',
-      endTime: '',
-      isActive: true,
-    },
+    defaultValues: createDefaults(''),
   });
+
+  // The query-parameter parent, kept only when it is in the tenant-scoped list — a malformed or
+  // foreign ?classId= is simply absent, so a bad link degrades to no selection (TKT-0091).
+  const prefilledClassId =
+    initialClassId && classes.some((c) => c.id === initialClassId) ? initialClassId : '';
+
+  // TKT-0127: same rule as the session form — see the note there for why the row's own hall
+  // stays in the list even once it is retired.
+  const selectableLocations = locations.filter((l) => l.isActive || l.id === schedule?.locationId);
 
   useEffect(() => {
     if (mode === 'create') {
@@ -102,6 +126,13 @@ export function ScheduleForm({ mode, id = '' }: { mode: 'create' | 'edit'; id?: 
       .catch((e: unknown) => setLoadError(apiErrorMessage(e)));
   }, [mode, id, reset]);
 
+  // Apply the prefill after the options render: setting a native select to a value with no
+  // matching <option> is silently ignored, so this cannot live in the fetch handler above.
+  useEffect(() => {
+    if (mode !== 'create' || !prefilledClassId) return;
+    setValue('classId', prefilledClassId);
+  }, [mode, prefilledClassId, setValue]);
+
   const onSubmit = async (values: FormValues) => {
     setSubmitError(null);
     try {
@@ -113,6 +144,9 @@ export function ScheduleForm({ mode, id = '' }: { mode: 'create' | 'edit'; id?: 
           startTime: values.startTime,
           endTime: values.endTime,
         });
+        // TKT-0092: stay on the form, ready for the next record — the query-parameter
+        // parent survives the reset.
+        reset(createDefaults(prefilledClassId));
       } else {
         await ClassSchedules.update(id, {
           locationId: values.locationId,
@@ -122,7 +156,7 @@ export function ScheduleForm({ mode, id = '' }: { mode: 'create' | 'edit'; id?: 
           isActive: values.isActive,
         });
       }
-      router.replace('/schedules');
+      showToast({ text: t('common.savedToast'), variant: 'success' });
     } catch (e) {
       setSubmitError(apiErrorMessage(e));
     }
@@ -151,7 +185,8 @@ export function ScheduleForm({ mode, id = '' }: { mode: 'create' | 'edit'; id?: 
                   <Label htmlFor="classId">{t('schedules.fields.class')}</Label>
                   <NativeSelect
                     id="classId"
-                    aria-invalid={Boolean(errors.classId)}
+                    aria-invalid={errors.classId ? true : undefined}
+                    aria-describedby={errors.classId ? 'classId-error' : undefined}
                     {...register('classId')}
                   >
                     <option value="">—</option>
@@ -161,6 +196,7 @@ export function ScheduleForm({ mode, id = '' }: { mode: 'create' | 'edit'; id?: 
                       </option>
                     ))}
                   </NativeSelect>
+                  <FieldError id="classId-error" messageKey={errors.classId?.message} />
                 </div>
               ) : null}
 
@@ -168,16 +204,18 @@ export function ScheduleForm({ mode, id = '' }: { mode: 'create' | 'edit'; id?: 
                 <Label htmlFor="locationId">{t('schedules.fields.location')}</Label>
                 <NativeSelect
                   id="locationId"
-                  aria-invalid={Boolean(errors.locationId)}
+                  aria-invalid={errors.locationId ? true : undefined}
+                  aria-describedby={errors.locationId ? 'locationId-error' : undefined}
                   {...register('locationId')}
                 >
                   <option value="">—</option>
-                  {locations.map((l) => (
+                  {selectableLocations.map((l) => (
                     <option key={l.id} value={l.id}>
                       {l.name}
                     </option>
                   ))}
                 </NativeSelect>
+                <FieldError id="locationId-error" messageKey={errors.locationId?.message} />
               </div>
 
               <div className="space-y-1.5">
@@ -200,26 +238,22 @@ export function ScheduleForm({ mode, id = '' }: { mode: 'create' | 'edit'; id?: 
                   <Input
                     id="startTime"
                     type="time"
-                    aria-invalid={Boolean(errors.startTime)}
+                    aria-invalid={errors.startTime ? true : undefined}
+                    aria-describedby={errors.startTime ? 'startTime-error' : undefined}
                     {...register('startTime')}
                   />
-                  {errors.startTime?.message === 'timeFormat' ? (
-                    <p className="text-xs text-destructive">{t('schedules.errors.timeFormat')}</p>
-                  ) : null}
+                  <FieldError id="startTime-error" messageKey={errors.startTime?.message} />
                 </div>
                 <div className="space-y-1.5">
                   <Label htmlFor="endTime">{t('schedules.fields.endTime')}</Label>
                   <Input
                     id="endTime"
                     type="time"
-                    aria-invalid={Boolean(errors.endTime)}
+                    aria-invalid={errors.endTime ? true : undefined}
+                    aria-describedby={errors.endTime ? 'endTime-error' : undefined}
                     {...register('endTime')}
                   />
-                  {errors.endTime?.message === 'endsBeforeStarts' ? (
-                    <p className="text-xs text-destructive">{t('schedules.errors.endsBeforeStarts')}</p>
-                  ) : errors.endTime?.message === 'timeFormat' ? (
-                    <p className="text-xs text-destructive">{t('schedules.errors.timeFormat')}</p>
-                  ) : null}
+                  <FieldError id="endTime-error" messageKey={errors.endTime?.message} />
                 </div>
               </div>
 
@@ -230,7 +264,7 @@ export function ScheduleForm({ mode, id = '' }: { mode: 'create' | 'edit'; id?: 
                 </label>
               ) : null}
 
-              {submitError ? <p className="text-sm text-destructive">{submitError}</p> : null}
+              <SubmitError message={submitError} />
 
               <div className="flex gap-2">
                 <Button type="submit" disabled={isSubmitting}>

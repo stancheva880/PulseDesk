@@ -16,6 +16,7 @@ import { ResponseSchemaInterceptor } from '@/common/response-schema.interceptor'
 import { PrismaService } from '@/prisma/prisma.service';
 import { SessionsModule } from './sessions.module';
 import { createTestUser } from '@/test-utils/create-user';
+import { createTestCard } from '@/test-utils/create-card';
 
 const PASSWORD = 'TestPass123!';
 
@@ -142,7 +143,15 @@ describe('SessionsController (e2e-ish)', () => {
       expect(res.body.endsAt).toBe('2026-06-01T19:00:00.000Z');
       expect(res.body.status).toBe('SCHEDULED');
 
-      expect(Object.keys(res.body.class).sort()).toEqual(['billingMode', 'id', 'name']);
+      // TKT-0103 (approved TCR #3): `capacity` joined the select deliberately — the pin stays exact.
+      // TKT-0112 (named in the approved plan): `waitlistMode` joined it too.
+      expect(Object.keys(res.body.class).sort()).toEqual([
+        'billingMode',
+        'capacity',
+        'id',
+        'name',
+        'waitlistMode',
+      ]);
       expect(res.body.class.billingMode).toBe('PER_SESSION');
       expect(Object.keys(res.body.location).sort()).toEqual(['id', 'name']);
       expect(Object.keys(res.body.trainers[0]).sort()).toEqual([
@@ -187,6 +196,96 @@ describe('SessionsController (e2e-ish)', () => {
           endsAt: '2026-06-01T19:00:00.000Z',
         })
         .expect(403);
+    });
+
+    // TKT-0107: auto-attendance at session creation is a booking — it draws down the card.
+    it('creating a session consumes a visit from an enrolled trainee card', async () => {
+      const a = await setupActor(UserRole.ADMIN);
+      const trainee = await prisma.trainee.create({
+        data: {
+          tenantId: a.tenantId,
+          firstName: 'T',
+          lastName: 'X',
+          dateOfBirth: new Date('2000-01-01'),
+        },
+      });
+      const cls = await newClass(a.tenantId);
+      await prisma.class.update({
+        where: { id: cls.id },
+        data: { trainees: { connect: [{ id: trainee.id }] } },
+      });
+      const card = await createTestCard(prisma, {
+        tenantId: a.tenantId,
+        traineeId: trainee.id,
+        totalVisits: 10,
+      });
+
+      await request(server)
+        .post('/sessions')
+        .set('Authorization', `Bearer ${a.accessToken}`)
+        .set('X-Tenant-Id', a.tenantId)
+        .send({
+          classId: cls.id,
+          locationId: a.locationId,
+          startsAt: '2026-06-01T18:00:00.000Z',
+          endsAt: '2026-06-01T19:00:00.000Z',
+        })
+        .expect(201);
+
+      expect(await prisma.cardConsumption.count({ where: { cardId: card.id } })).toBe(1);
+    });
+
+    // TKT-0123: an archived trainee stays on the class roster, and auto-attendance took the whole
+    // roster — so every new session booked them and drew a visit off their card, for someone who
+    // has left. The manual add and the candidates list both require isActive; this is the same rule.
+    it('skips an inactive trainee on the roster — no row, no card draw', async () => {
+      const a = await setupActor(UserRole.ADMIN);
+      const active = await prisma.trainee.create({
+        data: {
+          tenantId: a.tenantId,
+          firstName: 'Here',
+          lastName: 'X',
+          dateOfBirth: new Date('2000-01-01'),
+        },
+      });
+      const archived = await prisma.trainee.create({
+        data: {
+          tenantId: a.tenantId,
+          firstName: 'Gone',
+          lastName: 'X',
+          dateOfBirth: new Date('2000-01-01'),
+          isActive: false,
+        },
+      });
+      const cls = await newClass(a.tenantId);
+      await prisma.class.update({
+        where: { id: cls.id },
+        data: { trainees: { connect: [{ id: active.id }, { id: archived.id }] } },
+      });
+      const archivedCard = await createTestCard(prisma, {
+        tenantId: a.tenantId,
+        traineeId: archived.id,
+        totalVisits: 10,
+      });
+
+      const res = await request(server)
+        .post('/sessions')
+        .set('Authorization', `Bearer ${a.accessToken}`)
+        .set('X-Tenant-Id', a.tenantId)
+        .send({
+          classId: cls.id,
+          locationId: a.locationId,
+          startsAt: '2026-06-02T18:00:00.000Z',
+          endsAt: '2026-06-02T19:00:00.000Z',
+        })
+        .expect(201);
+
+      const rows = await prisma.attendance.findMany({
+        where: { sessionId: res.body.id },
+        select: { traineeId: true },
+      });
+      expect(rows.map((r) => r.traineeId)).toEqual([active.id]);
+      expect(await prisma.cardConsumption.count({ where: { cardId: archivedCard.id } })).toBe(0);
     });
 
     it('returns 400 when classId belongs to a different tenant', async () => {
@@ -403,6 +502,183 @@ describe('SessionsController (e2e-ish)', () => {
     });
   });
 
+  describe('GET /sessions filters (TKT-0100)', () => {
+    // Well-formed cuid that matches nothing — malformed ids are a different case (400).
+    const UNKNOWN_ID = 'cabcdefghij0123456789klm';
+
+    async function seedSession(
+      tenantId: string,
+      classId: string,
+      locationId: string,
+      startsAt: string,
+      trainerIds: string[] = [],
+    ) {
+      return prisma.session.create({
+        data: {
+          tenantId,
+          classId,
+          locationId,
+          startsAt: new Date(startsAt),
+          endsAt: new Date(new Date(startsAt).getTime() + 3_600_000),
+          ...(trainerIds.length
+            ? { trainers: { connect: trainerIds.map((id) => ({ id })) } }
+            : {}),
+        },
+      });
+    }
+
+    it('filters by classId', async () => {
+      const a = await setupActor(UserRole.ADMIN);
+      const clsA = await newClass(a.tenantId);
+      const clsB = await newClass(a.tenantId);
+      await seedSession(a.tenantId, clsA.id, a.locationId, '2026-07-06T10:00:00.000Z');
+      await seedSession(a.tenantId, clsB.id, a.locationId, '2026-07-07T10:00:00.000Z');
+
+      const res = await request(server)
+        .get(`/sessions?classId=${clsA.id}`)
+        .set('Authorization', `Bearer ${a.accessToken}`)
+        .set('X-Tenant-Id', a.tenantId)
+        .expect(200);
+
+      expect(res.body.total).toBe(1);
+      expect(res.body.items[0].classId).toBe(clsA.id);
+    });
+
+    // TKT-0103: occupancy for the calendar's X/Y chips rides on every list row.
+    it('list rows carry the attendance count', async () => {
+      const a = await setupActor(UserRole.ADMIN);
+      const cls = await newClass(a.tenantId);
+      const s = await seedSession(a.tenantId, cls.id, a.locationId, '2026-07-06T10:00:00.000Z');
+      const trainee = await prisma.trainee.create({
+        data: {
+          tenantId: a.tenantId,
+          firstName: 'T',
+          lastName: 'Count',
+          dateOfBirth: new Date('2000-01-01'),
+        },
+      });
+      await prisma.attendance.create({
+        data: { tenantId: a.tenantId, sessionId: s.id, traineeId: trainee.id },
+      });
+
+      const res = await request(server)
+        .get(`/sessions?classId=${cls.id}`)
+        .set('Authorization', `Bearer ${a.accessToken}`)
+        .set('X-Tenant-Id', a.tenantId)
+        .expect(200);
+
+      expect(res.body.items[0]._count).toEqual({ attendances: 1 });
+    });
+
+    it('filters by trainerId for an admin', async () => {
+      const a = await setupActor(UserRole.ADMIN);
+      const cls = await newClass(a.tenantId);
+      const trainer = await createTestUser(prisma, {
+        tenantId: a.tenantId,
+        email: `${randomUUID()}@x`,
+        passwordHash: 'x',
+        role: UserRole.EMPLOYEE,
+      });
+      await seedSession(a.tenantId, cls.id, a.locationId, '2026-07-06T10:00:00.000Z', [
+        trainer.id,
+      ]);
+      await seedSession(a.tenantId, cls.id, a.locationId, '2026-07-07T10:00:00.000Z');
+
+      const res = await request(server)
+        .get(`/sessions?trainerId=${trainer.id}`)
+        .set('Authorization', `Bearer ${a.accessToken}`)
+        .set('X-Tenant-Id', a.tenantId)
+        .expect(200);
+
+      expect(res.body.total).toBe(1);
+    });
+
+    it('combines filters with AND', async () => {
+      const a = await setupActor(UserRole.ADMIN);
+      const cls = await newClass(a.tenantId);
+      await seedSession(a.tenantId, cls.id, a.locationId, '2026-07-06T10:00:00.000Z');
+
+      const res = await request(server)
+        .get(`/sessions?classId=${cls.id}&locationId=${UNKNOWN_ID}`)
+        .set('Authorization', `Bearer ${a.accessToken}`)
+        .set('X-Tenant-Id', a.tenantId)
+        .expect(200);
+
+      expect(res.body.total).toBe(0);
+    });
+
+    it('rejects a malformed classId with 400', async () => {
+      const a = await setupActor(UserRole.ADMIN);
+      await request(server)
+        .get('/sessions?classId=not-a-cuid')
+        .set('Authorization', `Bearer ${a.accessToken}`)
+        .set('X-Tenant-Id', a.tenantId)
+        .expect(400);
+    });
+
+    it('returns an empty page for an unknown classId', async () => {
+      const a = await setupActor(UserRole.ADMIN);
+      const cls = await newClass(a.tenantId);
+      await seedSession(a.tenantId, cls.id, a.locationId, '2026-07-06T10:00:00.000Z');
+
+      const res = await request(server)
+        .get(`/sessions?classId=${UNKNOWN_ID}`)
+        .set('Authorization', `Bearer ${a.accessToken}`)
+        .set('X-Tenant-Id', a.tenantId)
+        .expect(200);
+
+      expect(res.body.total).toBe(0);
+    });
+
+    // setupActor connects the ADMIN to exactly one location, so they are location-scoped.
+    // The filter must intersect that scope, not replace it — a direct `where.locationId =`
+    // assignment would hand the admin any location they name.
+    it('location filter cannot widen a scoped admin access', async () => {
+      const a = await setupActor(UserRole.ADMIN);
+      const outside = await newLocation(a.tenantId);
+      const cls = await newClass(a.tenantId);
+      await seedSession(a.tenantId, cls.id, outside.id, '2026-07-06T10:00:00.000Z');
+
+      const res = await request(server)
+        .get(`/sessions?locationId=${outside.id}`)
+        .set('Authorization', `Bearer ${a.accessToken}`)
+        .set('X-Tenant-Id', a.tenantId)
+        .expect(200);
+
+      expect(res.body.total).toBe(0);
+    });
+
+    // The EMPLOYEE's own-sessions narrowing must survive a trainerId filter: filtering for
+    // a colleague yields the intersection (shared sessions), never the colleague's roster.
+    it('employee filtering another trainer sees only shared sessions', async () => {
+      const a = await setupActor(UserRole.EMPLOYEE);
+      const other = await createTestUser(prisma, {
+        tenantId: a.tenantId,
+        email: `${randomUUID()}@x`,
+        passwordHash: 'x',
+        role: UserRole.EMPLOYEE,
+      });
+      const cls = await newClass(a.tenantId);
+      // The colleague's solo session — invisible even when filtered for.
+      await seedSession(a.tenantId, cls.id, a.locationId, '2026-07-06T10:00:00.000Z', [
+        other.id,
+      ]);
+      // A shared session — the only visible match.
+      await seedSession(a.tenantId, cls.id, a.locationId, '2026-07-07T10:00:00.000Z', [
+        other.id,
+        a.userId,
+      ]);
+
+      const res = await request(server)
+        .get(`/sessions?trainerId=${other.id}`)
+        .set('Authorization', `Bearer ${a.accessToken}`)
+        .set('X-Tenant-Id', a.tenantId)
+        .expect(200);
+
+      expect(res.body.total).toBe(1);
+    });
+  });
+
   describe('DELETE /sessions/:id', () => {
     it('admin deletes (204)', async () => {
       const a = await setupActor(UserRole.ADMIN);
@@ -423,6 +699,114 @@ describe('SessionsController (e2e-ish)', () => {
         .set('Authorization', `Bearer ${a.accessToken}`)
         .set('X-Tenant-Id', a.tenantId)
         .expect(204);
+    });
+  });
+
+  // TKT-0125: Location.isActive was written by the edit form and read by nothing, so a
+  // deactivated hall still accepted new dated work. These are the first PATCH tests in this
+  // file — there was no update coverage at all before.
+  describe('a deactivated location (TKT-0125)', () => {
+    /** A second hall the actor is also assigned to, so only `isActive` can be what refuses. */
+    async function secondHall(a: TestActor, opts: { active: boolean }) {
+      const loc = await prisma.location.create({
+        data: { tenantId: a.tenantId, name: `Retired-${randomUUID()}`, isActive: opts.active },
+      });
+      await prisma.user.update({
+        where: { id: a.userId },
+        data: { locations: { connect: [{ id: loc.id }] } },
+      });
+      return loc;
+    }
+
+    async function createSession(a: TestActor, classId: string, locationId: string) {
+      const res = await request(server)
+        .post('/sessions')
+        .set('Authorization', `Bearer ${a.accessToken}`)
+        .set('X-Tenant-Id', a.tenantId)
+        .send({
+          classId,
+          locationId,
+          startsAt: '2026-06-01T18:00:00.000Z',
+          endsAt: '2026-06-01T19:00:00.000Z',
+        })
+        .expect(201);
+      return res.body as { id: string; locationId: string };
+    }
+
+    it('POST /sessions refuses it (400 LOCATION_INACTIVE)', async () => {
+      const a = await setupActor(UserRole.ADMIN);
+      const cls = await newClass(a.tenantId);
+      const retired = await secondHall(a, { active: false });
+
+      const res = await request(server)
+        .post('/sessions')
+        .set('Authorization', `Bearer ${a.accessToken}`)
+        .set('X-Tenant-Id', a.tenantId)
+        .send({
+          classId: cls.id,
+          locationId: retired.id,
+          startsAt: '2026-06-01T18:00:00.000Z',
+          endsAt: '2026-06-01T19:00:00.000Z',
+        })
+        .expect(400);
+      expect(res.body.code).toBe('LOCATION_INACTIVE');
+      expect(await prisma.session.count({ where: { locationId: retired.id } })).toBe(0);
+    });
+
+    it('PATCH /sessions/:id refuses a move onto it (400 LOCATION_INACTIVE)', async () => {
+      const a = await setupActor(UserRole.ADMIN);
+      const cls = await newClass(a.tenantId);
+      const session = await createSession(a, cls.id, a.locationId);
+      const retired = await secondHall(a, { active: false });
+
+      const res = await request(server)
+        .patch(`/sessions/${session.id}`)
+        .set('Authorization', `Bearer ${a.accessToken}`)
+        .set('X-Tenant-Id', a.tenantId)
+        .send({ locationId: retired.id })
+        .expect(400);
+      expect(res.body.code).toBe('LOCATION_INACTIVE');
+
+      const after = await prisma.session.findUniqueOrThrow({ where: { id: session.id } });
+      expect(after.locationId).toBe(a.locationId);
+    });
+
+    // The exemption that keeps an existing row editable: both edit forms always send
+    // locationId, so without this a session at a retired hall could not even have its time
+    // fixed.
+    it('PATCH /sessions/:id allows a resend of the row own deactivated location (200)', async () => {
+      const a = await setupActor(UserRole.ADMIN);
+      const cls = await newClass(a.tenantId);
+      const hall = await secondHall(a, { active: true });
+      const session = await createSession(a, cls.id, hall.id);
+      await prisma.location.update({ where: { id: hall.id }, data: { isActive: false } });
+
+      const res = await request(server)
+        .patch(`/sessions/${session.id}`)
+        .set('Authorization', `Bearer ${a.accessToken}`)
+        .set('X-Tenant-Id', a.tenantId)
+        // 18:30, not 19:00 — endsAt is 19:00 and assertTimeRange is strict.
+        .send({ locationId: hall.id, startsAt: '2026-06-01T18:30:00.000Z' })
+        .expect(200);
+      expect(res.body.locationId).toBe(hall.id);
+      expect(new Date(res.body.startsAt).toISOString()).toBe('2026-06-01T18:30:00.000Z');
+    });
+
+    // Guards the `## Do not change` trap: if getAccessibleLocationIds ever starts filtering
+    // isActive, an admin assigned only to a retired hall loses its whole history and this
+    // goes red.
+    it('an admin assigned only to a deactivated hall still reads its sessions', async () => {
+      const a = await setupActor(UserRole.ADMIN);
+      const cls = await newClass(a.tenantId);
+      const session = await createSession(a, cls.id, a.locationId);
+      await prisma.location.update({ where: { id: a.locationId }, data: { isActive: false } });
+
+      const res = await request(server)
+        .get('/sessions')
+        .set('Authorization', `Bearer ${a.accessToken}`)
+        .set('X-Tenant-Id', a.tenantId)
+        .expect(200);
+      expect(res.body.items.map((s: { id: string }) => s.id)).toContain(session.id);
     });
   });
 });

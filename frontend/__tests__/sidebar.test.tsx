@@ -100,4 +100,17 @@ describe('Sidebar', () => {
     expect(container.querySelector('a[href="/sessions"]')).not.toBeNull();
     expect(container.querySelector('a[href="/classes"]')).not.toBeNull();
   });
+
+  // TKT-0122: platform maintenance is the first SUPER_ADMIN-only destination, so it is also
+  // the first nav item an ADMIN must not see. layout.tsx DENY_RULES covers the deep link.
+  it('shows Maintenance to a SUPER_ADMIN and to nobody else', async () => {
+    const su = renderSidebar('SUPER_ADMIN');
+    await screen.findByText('authenticated:SUPER_ADMIN');
+    expect(su.container.querySelector('a[href="/maintenance"]')).not.toBeNull();
+    su.unmount();
+
+    const admin = renderSidebar('ADMIN');
+    await screen.findByText('authenticated:ADMIN');
+    expect(admin.container.querySelector('a[href="/maintenance"]')).toBeNull();
+  });
 });

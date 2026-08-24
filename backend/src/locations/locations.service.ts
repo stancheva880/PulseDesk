@@ -1,6 +1,7 @@
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { type Location } from '@prisma/client';
 import { LocationScopeService } from '@/auth/scope/location-scope.service';
+import { assertLocationUnused } from '@/common/ledger-guards';
 import { isUniqueConstraintError } from '@/common/prisma-relations';
 import type { AuthenticatedUser } from '@/auth/types/jwt-payload';
 import {
@@ -73,7 +74,24 @@ export class LocationsService {
     const existing = await this.prisma.location.findFirst({ where: { id, tenantId } });
     if (!existing) throw new NotFoundException(`Location ${id} not found`);
     try {
-      return await this.prisma.location.update({ where: { id }, data: dto });
+      return await this.prisma.$transaction(async (tx) => {
+        const updated = await tx.location.update({ where: { id }, data: dto });
+        // TKT-0126: retiring a hall stops its recurring generation. `generateSessions` already
+        // filters on the schedule's own isActive, so flipping these is enough — and unlike a
+        // hidden location filter in that query, it is visible on the schedules screen.
+        //
+        // `=== false`, not falsy: a PATCH without isActive must leave schedules alone. And it
+        // fires on the request body rather than on a false transition, so re-saving repairs a
+        // hall that was already inactive before this shipped with its schedules still live.
+        // One-way on purpose: isActive: true re-enables nothing.
+        if (dto.isActive === false) {
+          await tx.classSchedule.updateMany({
+            where: { locationId: id, tenantId },
+            data: { isActive: false },
+          });
+        }
+        return updated;
+      });
     } catch (e) {
       if (isUniqueConstraintError(e)) {
         throw new ConflictException({
@@ -88,6 +106,9 @@ export class LocationsService {
   async delete(tenantId: string, id: string): Promise<void> {
     const existing = await this.prisma.location.findFirst({ where: { id, tenantId } });
     if (!existing) throw new NotFoundException(`Location ${id} not found`);
+    // After the tenant lookup, so a wrong-tenant id still answers 404 rather than revealing
+    // that the hall exists and is busy.
+    await assertLocationUnused(this.prisma, tenantId, id);
     await this.prisma.location.delete({ where: { id } });
   }
 }

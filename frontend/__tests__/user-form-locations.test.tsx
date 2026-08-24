@@ -147,6 +147,28 @@ describe('UserForm — the location requirement', () => {
     expect(String((posted[1] as RequestInit).body)).toContain('loc-1');
   });
 
+  // TKT-0090: a failed field says what is wrong in words, wired for assistive tech.
+  it('says what is wrong on the email field with the a11y attributes wired', async () => {
+    const user = userEvent.setup();
+    render(
+      <I18nProvider>
+        <AuthProvider>
+          <UserForm mode="create" />
+        </AuthProvider>
+      </I18nProvider>,
+    );
+
+    await user.type(await screen.findByLabelText(/Имейл|Email/), 'not-an-email');
+    await user.click(screen.getByRole('button', { name: /Запазване|Save/ }));
+
+    const message = await screen.findByText('Въведете валиден имейл адрес.');
+    expect(message).toHaveAttribute('role', 'alert');
+    expect(message).toHaveAttribute('id', 'email-error');
+    const email = screen.getByLabelText(/Имейл|Email/);
+    expect(email).toHaveAttribute('aria-invalid', 'true');
+    expect(email).toHaveAttribute('aria-describedby', 'email-error');
+  });
+
   it('adds no request: locations are still fetched once and nothing is searched', async () => {
     const user = userEvent.setup();
     const { container } = render(

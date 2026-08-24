@@ -27,6 +27,7 @@
             }
           }
         },
+        "summary": "Report that the service is alive.",
         "tags": [
           "Health"
         ]
@@ -68,6 +69,7 @@
             }
           }
         },
+        "summary": "Sign in with email and password. Sets the refresh cookie.",
         "tags": [
           "Auth"
         ]
@@ -109,6 +111,7 @@
             }
           }
         },
+        "summary": "Rotate the token pair. The presented refresh token is revoked.",
         "tags": [
           "Auth"
         ]
@@ -143,6 +146,7 @@
             "description": ""
           }
         },
+        "summary": "Revoke the refresh token and clear the cookie. Always 204.",
         "tags": [
           "Auth"
         ]
@@ -184,6 +188,7 @@
             }
           }
         },
+        "summary": "Send a password-reset link. The answer never says if the account exists.",
         "tags": [
           "Auth"
         ]
@@ -218,6 +223,7 @@
             "description": ""
           }
         },
+        "summary": "Set a new password with a reset token.",
         "tags": [
           "Auth"
         ]
@@ -254,6 +260,7 @@
             "bearer": []
           }
         ],
+        "summary": "List the clubs the signed-in user belongs to.",
         "tags": [
           "Memberships"
         ]
@@ -332,6 +339,7 @@
             "bearer": []
           }
         ],
+        "summary": "List the accounts of the acting club. Filtered and paginated.",
         "tags": [
           "Users"
         ]
@@ -376,6 +384,7 @@
             "bearer": []
           }
         ],
+        "summary": "Create an account, or attach an existing email to this club.",
         "tags": [
           "Users"
         ]
@@ -420,6 +429,7 @@
             "bearer": []
           }
         ],
+        "summary": "Read one account. Role and locations are those of the acting club.",
         "tags": [
           "Users"
         ]
@@ -472,6 +482,7 @@
             "bearer": []
           }
         ],
+        "summary": "Change role and locations. The change lands in the acting club only.",
         "tags": [
           "Users"
         ]
@@ -507,6 +518,7 @@
             "bearer": []
           }
         ],
+        "summary": "Remove an account from the club. A SUPER_ADMIN deletes the account itself.",
         "tags": [
           "Users"
         ]
@@ -551,6 +563,7 @@
             "bearer": []
           }
         ],
+        "summary": "Send the invite mail again to an account that has no password yet.",
         "tags": [
           "Users"
         ]
@@ -606,6 +619,7 @@
             "bearer": []
           }
         ],
+        "summary": "List the locations you can reach in this club. Paginated.",
         "tags": [
           "Locations"
         ]
@@ -650,6 +664,7 @@
             "bearer": []
           }
         ],
+        "summary": "Create a location. SUPER_ADMIN only.",
         "tags": [
           "Locations"
         ]
@@ -694,6 +709,7 @@
             "bearer": []
           }
         ],
+        "summary": "Read one location.",
         "tags": [
           "Locations"
         ]
@@ -746,6 +762,7 @@
             "bearer": []
           }
         ],
+        "summary": "Change a location. Deactivating it also stops its weekly slots.",
         "tags": [
           "Locations"
         ]
@@ -781,6 +798,7 @@
             "bearer": []
           }
         ],
+        "summary": "Delete a location. Refused when it has sessions or weekly slots.",
         "tags": [
           "Locations"
         ]
@@ -853,6 +871,7 @@
             "bearer": []
           }
         ],
+        "summary": "List the classes of the club. Filtered and paginated.",
         "tags": [
           "Classes"
         ]
@@ -897,6 +916,7 @@
             "bearer": []
           }
         ],
+        "summary": "Create a class: billing mode, price, capacity and waiting-list mode.",
         "tags": [
           "Classes"
         ]
@@ -941,6 +961,7 @@
             "bearer": []
           }
         ],
+        "summary": "Read one class with its trainers, trainees and locations.",
         "tags": [
           "Classes"
         ]
@@ -993,6 +1014,7 @@
             "bearer": []
           }
         ],
+        "summary": "Change a class. You cannot detach a location you do not hold.",
         "tags": [
           "Classes"
         ]
@@ -1028,6 +1050,7 @@
             "bearer": []
           }
         ],
+        "summary": "Delete a class. Refused when its fees carry payments or refunds.",
         "tags": [
           "Classes"
         ]
@@ -1092,6 +1115,7 @@
             "bearer": []
           }
         ],
+        "summary": "List the trainees of the club. Filtered and paginated.",
         "tags": [
           "Trainees"
         ]
@@ -1136,6 +1160,7 @@
             "bearer": []
           }
         ],
+        "summary": "Create a trainee. A trainee under 18 needs one contact at least.",
         "tags": [
           "Trainees"
         ]
@@ -1180,6 +1205,7 @@
             "bearer": []
           }
         ],
+        "summary": "Read one trainee with contacts, classes, locations and guardians.",
         "tags": [
           "Trainees"
         ]
@@ -1232,6 +1258,7 @@
             "bearer": []
           }
         ],
+        "summary": "Change a trainee. You cannot detach a location you do not hold.",
         "tags": [
           "Trainees"
         ]
@@ -1267,6 +1294,7 @@
             "bearer": []
           }
         ],
+        "summary": "Delete a trainee. Refused when their fees carry payments or refunds.",
         "tags": [
           "Trainees"
         ]
@@ -1311,6 +1339,7 @@
             "bearer": []
           }
         ],
+        "summary": "List the contacts of one trainee.",
         "tags": [
           "Contacts"
         ]
@@ -1363,6 +1392,7 @@
             "bearer": []
           }
         ],
+        "summary": "Add a contact to one trainee.",
         "tags": [
           "Contacts"
         ]
@@ -1425,6 +1455,7 @@
             "bearer": []
           }
         ],
+        "summary": "Change one contact of one trainee.",
         "tags": [
           "Contacts"
         ]
@@ -1468,6 +1499,7 @@
             "bearer": []
           }
         ],
+        "summary": "Delete one contact of one trainee.",
         "tags": [
           "Contacts"
         ]
@@ -1513,6 +1545,30 @@
             }
           },
           {
+            "name": "classId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "trainerId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "locationId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
             "name": "X-Tenant-Id",
             "in": "header",
             "required": false,
@@ -1539,6 +1595,7 @@
             "bearer": []
           }
         ],
+        "summary": "List the dated sessions of the club. Filtered and paginated.",
         "tags": [
           "Sessions"
         ]
@@ -1583,6 +1640,7 @@
             "bearer": []
           }
         ],
+        "summary": "Create one dated session. Refused when the location is deactivated.",
         "tags": [
           "Sessions"
         ]
@@ -1627,6 +1685,7 @@
             "bearer": []
           }
         ],
+        "summary": "Read one session with its class, location and trainers.",
         "tags": [
           "Sessions"
         ]
@@ -1679,6 +1738,7 @@
             "bearer": []
           }
         ],
+        "summary": "Change one session, its time or its trainers.",
         "tags": [
           "Sessions"
         ]
@@ -1714,6 +1774,7 @@
             "bearer": []
           }
         ],
+        "summary": "Delete one session. Its attendance rows go with it.",
         "tags": [
           "Sessions"
         ]
@@ -1769,6 +1830,7 @@
             "bearer": []
           }
         ],
+        "summary": "List the weekly slots of the club. Paginated.",
         "tags": [
           "ClassSchedules"
         ]
@@ -1813,6 +1875,7 @@
             "bearer": []
           }
         ],
+        "summary": "Create a weekly slot. Refused when the location is deactivated.",
         "tags": [
           "ClassSchedules"
         ]
@@ -1857,6 +1920,7 @@
             "bearer": []
           }
         ],
+        "summary": "Read one weekly slot.",
         "tags": [
           "ClassSchedules"
         ]
@@ -1909,6 +1973,7 @@
             "bearer": []
           }
         ],
+        "summary": "Change a weekly slot.",
         "tags": [
           "ClassSchedules"
         ]
@@ -1944,6 +2009,7 @@
             "bearer": []
           }
         ],
+        "summary": "Delete a weekly slot. The sessions already made from it stay.",
         "tags": [
           "ClassSchedules"
         ]
@@ -1990,6 +2056,7 @@
             "bearer": []
           }
         ],
+        "summary": "Make dated sessions from the active weekly slots, for a date range.",
         "tags": [
           "ClassSchedules"
         ]
@@ -2042,7 +2109,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/PaginatedTrainee"
+                  "$ref": "#/components/schemas/AttendanceCandidates"
                 }
               }
             }
@@ -2053,6 +2120,7 @@
             "bearer": []
           }
         ],
+        "summary": "List the trainees you can still add to this session, with the spots left.",
         "tags": [
           "Attendances"
         ]
@@ -2097,6 +2165,7 @@
             "bearer": []
           }
         ],
+        "summary": "List the attendance rows of one session.",
         "tags": [
           "Attendances"
         ]
@@ -2149,6 +2218,7 @@
             "bearer": []
           }
         ],
+        "summary": "Add a trainee to a session. A prepaid visit is drawn if a card applies.",
         "tags": [
           "Attendances"
         ]
@@ -2201,6 +2271,53 @@
             "bearer": []
           }
         ],
+        "summary": "Mark the attendance of a whole session in one request.",
+        "tags": [
+          "Attendances"
+        ]
+      }
+    },
+    "/api/sessions/{sessionId}/attendances/{id}": {
+      "delete": {
+        "operationId": "AttendancesController_remove",
+        "parameters": [
+          {
+            "name": "sessionId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Tenant the caller acts in. A tenant-bound user must name one of their own tenants (403 otherwise); a SUPER_ADMIN may name any active tenant (404 otherwise).",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Remove a booking. The visit returns and the queue head can get the spot.",
         "tags": [
           "Attendances"
         ]
@@ -2255,6 +2372,7 @@
             "bearer": []
           }
         ],
+        "summary": "Record the reply of a customer for one session.",
         "tags": [
           "Attendances"
         ]
@@ -2264,6 +2382,22 @@
       "get": {
         "operationId": "AttendancesController_myUpcoming",
         "parameters": [
+          {
+            "name": "from",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "to",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
           {
             "name": "X-Tenant-Id",
             "in": "header",
@@ -2291,6 +2425,108 @@
             "bearer": []
           }
         ],
+        "summary": "List the sessions of the family, with bookings and queue positions.",
+        "tags": [
+          "Attendances"
+        ]
+      }
+    },
+    "/api/me/sessions/{sessionId}/bookings": {
+      "post": {
+        "operationId": "AttendancesController_bookForCustomer",
+        "parameters": [
+          {
+            "name": "sessionId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Tenant the caller acts in. A tenant-bound user must name one of their own tenants (403 otherwise); a SUPER_ADMIN may name any active tenant (404 otherwise).",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddAttendanceDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Attendance"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Book a spot as a customer. Needs self-booking on the class.",
+        "tags": [
+          "Attendances"
+        ]
+      }
+    },
+    "/api/me/sessions/{sessionId}/bookings/{traineeId}": {
+      "delete": {
+        "operationId": "AttendancesController_cancelForCustomer",
+        "parameters": [
+          {
+            "name": "sessionId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "traineeId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Tenant the caller acts in. A tenant-bound user must name one of their own tenants (403 otherwise); a SUPER_ADMIN may name any active tenant (404 otherwise).",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Cancel a booking as a customer. The visit returns.",
         "tags": [
           "Attendances"
         ]
@@ -2366,6 +2602,15 @@
             }
           },
           {
+            "name": "search",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "maxLength": 100,
+              "type": "string"
+            }
+          },
+          {
             "name": "X-Tenant-Id",
             "in": "header",
             "required": false,
@@ -2392,6 +2637,7 @@
             "bearer": []
           }
         ],
+        "summary": "List the fees of the club. Filtered and paginated.",
         "tags": [
           "Fees"
         ]
@@ -2436,6 +2682,7 @@
             "bearer": []
           }
         ],
+        "summary": "Create one fee for one trainee.",
         "tags": [
           "Fees"
         ]
@@ -2496,6 +2743,7 @@
             "bearer": []
           }
         ],
+        "summary": "List the enrolled trainees that have no fee yet for a month.",
         "tags": [
           "Fees"
         ]
@@ -2540,6 +2788,7 @@
             "bearer": []
           }
         ],
+        "summary": "Read one fee with its payments and its refunds.",
         "tags": [
           "Fees"
         ]
@@ -2592,6 +2841,7 @@
             "bearer": []
           }
         ],
+        "summary": "Change one fee. The amount cannot go below what is already paid.",
         "tags": [
           "Fees"
         ]
@@ -2627,6 +2877,7 @@
             "bearer": []
           }
         ],
+        "summary": "Delete one fee. Its payments and refunds go with it.",
         "tags": [
           "Fees"
         ]
@@ -2673,6 +2924,7 @@
             "bearer": []
           }
         ],
+        "summary": "Make the monthly fees of a class for one month, in one request.",
         "tags": [
           "Fees"
         ]
@@ -2719,6 +2971,54 @@
             "bearer": []
           }
         ],
+        "summary": "Make the per-session fees for the sessions of a period.",
+        "tags": [
+          "Fees"
+        ]
+      }
+    },
+    "/api/fees/generate-course": {
+      "post": {
+        "operationId": "FeesController_generateCourse",
+        "parameters": [
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Tenant the caller acts in. A tenant-bound user must name one of their own tenants (403 otherwise); a SUPER_ADMIN may name any active tenant (404 otherwise).",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GenerateCourseFeesDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenerateResult"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Make one course fee for each enrolled trainee of a class.",
         "tags": [
           "Fees"
         ]
@@ -2755,6 +3055,7 @@
             "bearer": []
           }
         ],
+        "summary": "List the fees of the family, for the portal.",
         "tags": [
           "CustomerFees"
         ]
@@ -2799,6 +3100,7 @@
             "bearer": []
           }
         ],
+        "summary": "List the payments recorded on one fee.",
         "tags": [
           "Payments"
         ]
@@ -2851,6 +3153,7 @@
             "bearer": []
           }
         ],
+        "summary": "Record a payment. Refused above the balance that is due.",
         "tags": [
           "Payments"
         ]
@@ -2896,8 +3199,668 @@
             "bearer": []
           }
         ],
+        "summary": "Delete a payment entered by mistake. The fee status is set again.",
         "tags": [
           "Payments"
+        ]
+      }
+    },
+    "/api/fees/{feeId}/refunds": {
+      "get": {
+        "operationId": "RefundsController_list",
+        "parameters": [
+          {
+            "name": "feeId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Tenant the caller acts in. A tenant-bound user must name one of their own tenants (403 otherwise); a SUPER_ADMIN may name any active tenant (404 otherwise).",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RefundList"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List the refunds recorded on one fee.",
+        "tags": [
+          "Refunds"
+        ]
+      },
+      "post": {
+        "operationId": "RefundsController_record",
+        "parameters": [
+          {
+            "name": "feeId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Tenant the caller acts in. A tenant-bound user must name one of their own tenants (403 otherwise); a SUPER_ADMIN may name any active tenant (404 otherwise).",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateRefundDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Refund"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Record money given back. Refused above the net amount paid.",
+        "tags": [
+          "Refunds"
+        ]
+      }
+    },
+    "/api/fees/{feeId}/refunds/{id}": {
+      "delete": {
+        "operationId": "RefundsController_remove",
+        "parameters": [
+          {
+            "name": "feeId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Tenant the caller acts in. A tenant-bound user must name one of their own tenants (403 otherwise); a SUPER_ADMIN may name any active tenant (404 otherwise).",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Delete a refund entered by mistake. The fee status is set again.",
+        "tags": [
+          "Refunds"
+        ]
+      }
+    },
+    "/api/sessions/{sessionId}/waitlist": {
+      "get": {
+        "operationId": "WaitlistsController_list",
+        "parameters": [
+          {
+            "name": "sessionId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Tenant the caller acts in. A tenant-bound user must name one of their own tenants (403 otherwise); a SUPER_ADMIN may name any active tenant (404 otherwise).",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WaitlistEntryList"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List the queue of one session, in order.",
+        "tags": [
+          "Waitlists"
+        ]
+      },
+      "post": {
+        "operationId": "WaitlistsController_join",
+        "parameters": [
+          {
+            "name": "sessionId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Tenant the caller acts in. A tenant-bound user must name one of their own tenants (403 otherwise); a SUPER_ADMIN may name any active tenant (404 otherwise).",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateWaitlistEntryDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WaitlistEntry"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Put a trainee on the queue of one full session.",
+        "tags": [
+          "Waitlists"
+        ]
+      }
+    },
+    "/api/sessions/{sessionId}/waitlist/{id}": {
+      "delete": {
+        "operationId": "WaitlistsController_remove",
+        "parameters": [
+          {
+            "name": "sessionId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Tenant the caller acts in. A tenant-bound user must name one of their own tenants (403 otherwise); a SUPER_ADMIN may name any active tenant (404 otherwise).",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Take a trainee off the queue.",
+        "tags": [
+          "Waitlists"
+        ]
+      }
+    },
+    "/api/me/sessions/{sessionId}/waitlist": {
+      "post": {
+        "operationId": "MeWaitlistController_join",
+        "parameters": [
+          {
+            "name": "sessionId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Tenant the caller acts in. A tenant-bound user must name one of their own tenants (403 otherwise); a SUPER_ADMIN may name any active tenant (404 otherwise).",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateWaitlistEntryDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WaitlistEntry"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Join the queue of a full session as a customer.",
+        "tags": [
+          "MeWaitlist"
+        ]
+      }
+    },
+    "/api/me/sessions/{sessionId}/waitlist/{traineeId}": {
+      "delete": {
+        "operationId": "MeWaitlistController_leave",
+        "parameters": [
+          {
+            "name": "sessionId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "traineeId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Tenant the caller acts in. A tenant-bound user must name one of their own tenants (403 otherwise); a SUPER_ADMIN may name any active tenant (404 otherwise).",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Leave the queue. Allowed after the booking deadline too.",
+        "tags": [
+          "MeWaitlist"
+        ]
+      }
+    },
+    "/api/waitlist/claim": {
+      "post": {
+        "operationId": "WaitlistClaimController_claim",
+        "parameters": [
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Tenant the caller acts in. A tenant-bound user must name one of their own tenants (403 otherwise); a SUPER_ADMIN may name any active tenant (404 otherwise).",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClaimWaitlistDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClaimResult"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Take a free spot with the token from a waiting-list mail. Public.",
+        "tags": [
+          "WaitlistClaim"
+        ]
+      }
+    },
+    "/api/waitlists/sweep": {
+      "post": {
+        "operationId": "WaitlistSweepController_sweep",
+        "parameters": [
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Tenant the caller acts in. A tenant-bound user must name one of their own tenants (403 otherwise); a SUPER_ADMIN may name any active tenant (404 otherwise).",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WaitlistSweepResult"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Delete queue entries for sessions that started over 48 hours ago.",
+        "tags": [
+          "WaitlistSweep"
+        ]
+      }
+    },
+    "/api/cards": {
+      "get": {
+        "operationId": "CardsController_list",
+        "parameters": [
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "pageSize",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "type": "number"
+            }
+          },
+          {
+            "name": "traineeId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Tenant the caller acts in. A tenant-bound user must name one of their own tenants (403 otherwise); a SUPER_ADMIN may name any active tenant (404 otherwise).",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedCardRow"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List the visit cards of the club. Filtered and paginated.",
+        "tags": [
+          "Cards"
+        ]
+      },
+      "post": {
+        "operationId": "CardsController_create",
+        "parameters": [
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Tenant the caller acts in. A tenant-bound user must name one of their own tenants (403 otherwise); a SUPER_ADMIN may name any active tenant (404 otherwise).",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateCardDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CardRow"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Sell a visit card. The fee for it is raised in the same transaction.",
+        "tags": [
+          "Cards"
+        ]
+      }
+    },
+    "/api/cards/{id}/cancel": {
+      "post": {
+        "operationId": "CardsController_cancel",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Tenant the caller acts in. A tenant-bound user must name one of their own tenants (403 otherwise); a SUPER_ADMIN may name any active tenant (404 otherwise).",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CardRow"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Cancel a card. Give the money back on its fee with a refund.",
+        "tags": [
+          "Cards"
+        ]
+      }
+    },
+    "/api/me/cards": {
+      "get": {
+        "operationId": "CustomerCardsController_myCards",
+        "parameters": [
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Tenant the caller acts in. A tenant-bound user must name one of their own tenants (403 otherwise); a SUPER_ADMIN may name any active tenant (404 otherwise).",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerCardEntryList"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List the visit cards of the family, with the visits that are left.",
+        "tags": [
+          "CustomerCards"
         ]
       }
     },
@@ -2950,6 +3913,7 @@
             "bearer": []
           }
         ],
+        "summary": "Sum the fees by status, for the charts.",
         "tags": [
           "Dashboard"
         ]
@@ -3004,6 +3968,7 @@
             "bearer": []
           }
         ],
+        "summary": "Sum the money in and out by month, for the charts.",
         "tags": [
           "Dashboard"
         ]
@@ -3040,6 +4005,7 @@
             "bearer": []
           }
         ],
+        "summary": "List every club, for the club picker.",
         "tags": [
           "Tenants"
         ]
@@ -3084,6 +4050,7 @@
             "bearer": []
           }
         ],
+        "summary": "Create a club with its first location and its first administrator.",
         "tags": [
           "Tenants"
         ]
@@ -3092,7 +4059,7 @@
   },
   "info": {
     "title": "PulseDesk API",
-    "description": "Multi-tenant API for trainers, clubs and schools: trainees, classes, weekly schedules,\nsessions, attendance and fees.\n\n**Authentication.** Every route is guarded by default. Send the access token as\n`Authorization: Bearer <token>`; obtain one from `POST /api/auth/login`. The routes under\n`/api/health` and the login, refresh, logout and password-reset routes under `/api/auth` are the\nonly public ones; `GET /api/auth/memberships` needs a token like every other route. The access\ntoken is short-lived — `POST /api/auth/refresh` rotates it using the opaque refresh token. A\nbrowser sends that token as an httpOnly cookie; any other client may send it in the request body\ninstead, and then the rotated pair comes back in the response body.\n\n**Tenancy.** A caller selects the tenant to act in with the `X-Tenant-Id` header. For a\ntenant-bound user it must name a tenant they hold a membership in — 403 otherwise — and the\nrequest's effective role becomes that membership's role. For a `SUPER_ADMIN`, who holds no\nmembership, it must name an existing active tenant — 404 otherwise. Omit the header and the\ntoken's own `role` and `tenantId` claims stand.\n\n**Pagination.** Top-level list routes accept `page`/`pageSize` (default 25, max 100) and\nreturn `{ items, page, pageSize, total, totalPages }`. Parent-scoped sub-lists — a trainee's\ncontacts, a fee's payments, a session's attendances, the `me/*` routes — return plain arrays.",
+    "description": "Multi-tenant API for trainers, clubs and schools: trainees, classes, weekly schedules,\nsessions, attendance, fees, refunds, prepaid visit cards, per-session waiting lists and\ncustomer self-booking.\n\n**Authentication.** Every route is guarded by default. Send the access token as\n`Authorization: Bearer <token>`; obtain one from `POST /api/auth/login`. Three groups are\npublic: the routes under `/api/health`, the login, refresh, logout and password-reset routes\nunder `/api/auth`, and `POST /api/waitlist/claim` — the link a waiting-list offer mail sends to\na customer, which carries its own single-use token. Everything else needs a token, including\n`GET /api/auth/memberships`. The access\ntoken is short-lived — `POST /api/auth/refresh` rotates it using the opaque refresh token. A\nbrowser sends that token as an httpOnly cookie; any other client may send it in the request body\ninstead, and then the rotated pair comes back in the response body.\n\n**Tenancy.** A caller selects the tenant to act in with the `X-Tenant-Id` header. For a\ntenant-bound user it must name a tenant they hold a membership in — 403 otherwise — and the\nrequest's effective role becomes that membership's role. For a `SUPER_ADMIN`, who holds no\nmembership, it must name an existing active tenant — 404 otherwise. Omit the header and the\ntoken's own `role` and `tenantId` claims stand.\n\n**Pagination.** Top-level list routes accept `page`/`pageSize` (default 25, max 100) and\nreturn `{ items, page, pageSize, total, totalPages }`. Parent-scoped sub-lists — a trainee's\ncontacts, a fee's payments, a session's attendances, the `me/*` routes — return plain arrays.",
     "version": "0.1.0",
     "contact": {}
   },
@@ -3152,6 +4119,34 @@
     {
       "name": "Payments",
       "description": "The manual payment ledger recorded against a fee."
+    },
+    {
+      "name": "Refunds",
+      "description": "Money given back on a fee. Same manual ledger, opposite direction."
+    },
+    {
+      "name": "Cards",
+      "description": "Prepaid visit cards: the sale, the remaining visits, and cancellation with a refund."
+    },
+    {
+      "name": "CustomerCards",
+      "description": "A customer's own visit cards, for the portal."
+    },
+    {
+      "name": "Waitlists",
+      "description": "The queue on a full session, as staff see it: add a trainee, or remove one."
+    },
+    {
+      "name": "MeWaitlist",
+      "description": "A customer's own queue positions: join a full session, or leave it."
+    },
+    {
+      "name": "WaitlistClaim",
+      "description": "The single-use link from a waiting-list offer mail. Public."
+    },
+    {
+      "name": "WaitlistSweep",
+      "description": "Platform housekeeping for dead queue entries. SUPER_ADMIN only."
     },
     {
       "name": "Dashboard",
@@ -3367,7 +4362,8 @@
             "type": "string",
             "enum": [
               "PER_MONTH",
-              "PER_SESSION"
+              "PER_SESSION",
+              "PER_COURSE"
             ]
           },
           "monthlyAmount": {
@@ -3379,6 +4375,36 @@
             "type": "number",
             "minimum": 0.01,
             "maximum": 1000000
+          },
+          "courseStart": {
+            "type": "string"
+          },
+          "courseEnd": {
+            "type": "string"
+          },
+          "coursePrice": {
+            "type": "number",
+            "minimum": 0.01,
+            "maximum": 1000000
+          },
+          "capacity": {
+            "type": "number",
+            "minimum": 1
+          },
+          "waitlistMode": {
+            "type": "string",
+            "enum": [
+              "NONE",
+              "FIFO_AUTO",
+              "CLAIM"
+            ]
+          },
+          "allowSelfBooking": {
+            "type": "boolean"
+          },
+          "bookingCutoffMin": {
+            "type": "number",
+            "minimum": 0
           },
           "locationIds": {
             "uniqueItems": true,
@@ -3410,6 +4436,14 @@
       "UpdateClassDto": {
         "type": "object",
         "properties": {
+          "billingMode": {
+            "type": "string",
+            "enum": [
+              "PER_MONTH",
+              "PER_SESSION",
+              "PER_COURSE"
+            ]
+          },
           "name": {
             "type": "string",
             "minLength": 1,
@@ -3429,8 +4463,40 @@
             "minimum": 0.01,
             "maximum": 1000000
           },
+          "courseStart": {
+            "type": "string"
+          },
+          "courseEnd": {
+            "type": "string"
+          },
+          "coursePrice": {
+            "type": "number",
+            "minimum": 0.01,
+            "maximum": 1000000
+          },
           "isActive": {
             "type": "boolean"
+          },
+          "capacity": {
+            "type": "number",
+            "nullable": true,
+            "minimum": 1
+          },
+          "waitlistMode": {
+            "type": "string",
+            "enum": [
+              "NONE",
+              "FIFO_AUTO",
+              "CLAIM"
+            ]
+          },
+          "allowSelfBooking": {
+            "type": "boolean"
+          },
+          "bookingCutoffMin": {
+            "type": "number",
+            "nullable": true,
+            "minimum": 0
           },
           "locationIds": {
             "uniqueItems": true,
@@ -3973,6 +5039,14 @@
           "to"
         ]
       },
+      "GenerateCourseFeesDto": {
+        "type": "object",
+        "properties": {
+          "classId": {
+            "type": "string"
+          }
+        }
+      },
       "CreatePaymentDto": {
         "type": "object",
         "properties": {
@@ -3996,6 +5070,83 @@
         "required": [
           "amount",
           "paidAt"
+        ]
+      },
+      "CreateRefundDto": {
+        "type": "object",
+        "properties": {
+          "amount": {
+            "type": "number",
+            "minimum": 0.01,
+            "maximum": 1000000
+          },
+          "refundedAt": {
+            "type": "string"
+          },
+          "method": {
+            "type": "string",
+            "maxLength": 120
+          },
+          "notes": {
+            "type": "string",
+            "maxLength": 2000
+          }
+        },
+        "required": [
+          "amount",
+          "refundedAt"
+        ]
+      },
+      "CreateWaitlistEntryDto": {
+        "type": "object",
+        "properties": {
+          "traineeId": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "traineeId"
+        ]
+      },
+      "ClaimWaitlistDto": {
+        "type": "object",
+        "properties": {
+          "token": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "token"
+        ]
+      },
+      "CreateCardDto": {
+        "type": "object",
+        "properties": {
+          "traineeId": {
+            "type": "string"
+          },
+          "classId": {
+            "type": "string"
+          },
+          "totalVisits": {
+            "type": "number",
+            "minimum": 1
+          },
+          "price": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1000000
+          },
+          "expiresAt": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "traineeId",
+          "totalVisits",
+          "price"
         ]
       },
       "CreateTenantDto": {
@@ -4701,7 +5852,8 @@
                   "type": "string",
                   "enum": [
                     "PER_MONTH",
-                    "PER_SESSION"
+                    "PER_SESSION",
+                    "PER_COURSE"
                   ]
                 },
                 "monthlyAmount": {
@@ -4724,6 +5876,71 @@
                     }
                   ]
                 },
+                "courseStart": {
+                  "anyOf": [
+                    {
+                      "type": "null"
+                    },
+                    {
+                      "type": "string"
+                    }
+                  ]
+                },
+                "courseEnd": {
+                  "anyOf": [
+                    {
+                      "type": "null"
+                    },
+                    {
+                      "type": "string"
+                    }
+                  ]
+                },
+                "coursePrice": {
+                  "anyOf": [
+                    {
+                      "type": "null"
+                    },
+                    {
+                      "type": "string"
+                    }
+                  ]
+                },
+                "capacity": {
+                  "anyOf": [
+                    {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "waitlistMode": {
+                  "type": "string",
+                  "enum": [
+                    "NONE",
+                    "FIFO_AUTO",
+                    "CLAIM"
+                  ]
+                },
+                "allowSelfBooking": {
+                  "type": "boolean"
+                },
+                "bookingCutoffMin": {
+                  "anyOf": [
+                    {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
                 "isActive": {
                   "type": "boolean"
                 },
@@ -4742,6 +5959,13 @@
                 "billingMode",
                 "monthlyAmount",
                 "sessionPrice",
+                "courseStart",
+                "courseEnd",
+                "coursePrice",
+                "capacity",
+                "waitlistMode",
+                "allowSelfBooking",
+                "bookingCutoffMin",
                 "isActive",
                 "createdAt",
                 "updatedAt"
@@ -4797,7 +6021,8 @@
             "type": "string",
             "enum": [
               "PER_MONTH",
-              "PER_SESSION"
+              "PER_SESSION",
+              "PER_COURSE"
             ]
           },
           "monthlyAmount": {
@@ -4820,6 +6045,71 @@
               }
             ]
           },
+          "courseStart": {
+            "anyOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "string"
+              }
+            ]
+          },
+          "courseEnd": {
+            "anyOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "string"
+              }
+            ]
+          },
+          "coursePrice": {
+            "anyOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "string"
+              }
+            ]
+          },
+          "capacity": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "waitlistMode": {
+            "type": "string",
+            "enum": [
+              "NONE",
+              "FIFO_AUTO",
+              "CLAIM"
+            ]
+          },
+          "allowSelfBooking": {
+            "type": "boolean"
+          },
+          "bookingCutoffMin": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "isActive": {
             "type": "boolean"
           },
@@ -4838,6 +6128,13 @@
           "billingMode",
           "monthlyAmount",
           "sessionPrice",
+          "courseStart",
+          "courseEnd",
+          "coursePrice",
+          "capacity",
+          "waitlistMode",
+          "allowSelfBooking",
+          "bookingCutoffMin",
           "isActive",
           "createdAt",
           "updatedAt"
@@ -4870,7 +6167,8 @@
             "type": "string",
             "enum": [
               "PER_MONTH",
-              "PER_SESSION"
+              "PER_SESSION",
+              "PER_COURSE"
             ]
           },
           "monthlyAmount": {
@@ -4890,6 +6188,71 @@
               },
               {
                 "type": "string"
+              }
+            ]
+          },
+          "courseStart": {
+            "anyOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "string"
+              }
+            ]
+          },
+          "courseEnd": {
+            "anyOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "string"
+              }
+            ]
+          },
+          "coursePrice": {
+            "anyOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "string"
+              }
+            ]
+          },
+          "capacity": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "waitlistMode": {
+            "type": "string",
+            "enum": [
+              "NONE",
+              "FIFO_AUTO",
+              "CLAIM"
+            ]
+          },
+          "allowSelfBooking": {
+            "type": "boolean"
+          },
+          "bookingCutoffMin": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              {
+                "type": "null"
               }
             ]
           },
@@ -4994,6 +6357,13 @@
           "billingMode",
           "monthlyAmount",
           "sessionPrice",
+          "courseStart",
+          "courseEnd",
+          "coursePrice",
+          "capacity",
+          "waitlistMode",
+          "allowSelfBooking",
+          "bookingCutoffMin",
           "isActive",
           "createdAt",
           "updatedAt",
@@ -5416,7 +6786,8 @@
                   "type": "string",
                   "enum": [
                     "PER_MONTH",
-                    "PER_SESSION"
+                    "PER_SESSION",
+                    "PER_COURSE"
                   ]
                 },
                 "monthlyAmount": {
@@ -5439,6 +6810,71 @@
                     }
                   ]
                 },
+                "courseStart": {
+                  "anyOf": [
+                    {
+                      "type": "null"
+                    },
+                    {
+                      "type": "string"
+                    }
+                  ]
+                },
+                "courseEnd": {
+                  "anyOf": [
+                    {
+                      "type": "null"
+                    },
+                    {
+                      "type": "string"
+                    }
+                  ]
+                },
+                "coursePrice": {
+                  "anyOf": [
+                    {
+                      "type": "null"
+                    },
+                    {
+                      "type": "string"
+                    }
+                  ]
+                },
+                "capacity": {
+                  "anyOf": [
+                    {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "waitlistMode": {
+                  "type": "string",
+                  "enum": [
+                    "NONE",
+                    "FIFO_AUTO",
+                    "CLAIM"
+                  ]
+                },
+                "allowSelfBooking": {
+                  "type": "boolean"
+                },
+                "bookingCutoffMin": {
+                  "anyOf": [
+                    {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
                 "isActive": {
                   "type": "boolean"
                 },
@@ -5457,6 +6893,13 @@
                 "billingMode",
                 "monthlyAmount",
                 "sessionPrice",
+                "courseStart",
+                "courseEnd",
+                "coursePrice",
+                "capacity",
+                "waitlistMode",
+                "allowSelfBooking",
+                "bookingCutoffMin",
                 "isActive",
                 "createdAt",
                 "updatedAt"
@@ -5748,6 +7191,20 @@
                 },
                 "updatedAt": {
                   "type": "string"
+                },
+                "_count": {
+                  "type": "object",
+                  "properties": {
+                    "attendances": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": [
+                    "attendances"
+                  ],
+                  "additionalProperties": false
                 }
               },
               "required": [
@@ -5831,6 +7288,20 @@
           },
           "updatedAt": {
             "type": "string"
+          },
+          "_count": {
+            "type": "object",
+            "properties": {
+              "attendances": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "attendances"
+            ],
+            "additionalProperties": false
           }
         },
         "required": [
@@ -5892,6 +7363,20 @@
           "updatedAt": {
             "type": "string"
           },
+          "_count": {
+            "type": "object",
+            "properties": {
+              "attendances": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "attendances"
+            ],
+            "additionalProperties": false
+          },
           "class": {
             "type": "object",
             "properties": {
@@ -5905,14 +7390,37 @@
                 "type": "string",
                 "enum": [
                   "PER_MONTH",
-                  "PER_SESSION"
+                  "PER_SESSION",
+                  "PER_COURSE"
+                ]
+              },
+              "capacity": {
+                "anyOf": [
+                  {
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "waitlistMode": {
+                "type": "string",
+                "enum": [
+                  "NONE",
+                  "FIFO_AUTO",
+                  "CLAIM"
                 ]
               }
             },
             "required": [
               "id",
               "name",
-              "billingMode"
+              "billingMode",
+              "capacity",
+              "waitlistMode"
             ],
             "additionalProperties": false
           },
@@ -6150,6 +7658,176 @@
         "required": [
           "created",
           "skipped"
+        ],
+        "additionalProperties": false
+      },
+      "AttendanceCandidates": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "tenantId": {
+                  "type": "string"
+                },
+                "firstName": {
+                  "type": "string"
+                },
+                "lastName": {
+                  "type": "string"
+                },
+                "dateOfBirth": {
+                  "type": "string"
+                },
+                "phone": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "email": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "notes": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "isActive": {
+                  "type": "boolean"
+                },
+                "userId": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "createdAt": {
+                  "type": "string"
+                },
+                "updatedAt": {
+                  "type": "string"
+                },
+                "card": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "visitsRemaining": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        "expiresAt": {
+                          "anyOf": [
+                            {
+                              "type": "null"
+                            },
+                            {
+                              "type": "string"
+                            }
+                          ]
+                        },
+                        "classScoped": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "visitsRemaining",
+                        "expiresAt",
+                        "classScoped"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "hasCards": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "id",
+                "tenantId",
+                "firstName",
+                "lastName",
+                "dateOfBirth",
+                "phone",
+                "email",
+                "notes",
+                "isActive",
+                "userId",
+                "createdAt",
+                "updatedAt",
+                "card",
+                "hasCards"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "page": {
+            "type": "number"
+          },
+          "pageSize": {
+            "type": "number"
+          },
+          "total": {
+            "type": "number"
+          },
+          "totalPages": {
+            "type": "number"
+          },
+          "spotsLeft": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "items",
+          "page",
+          "pageSize",
+          "total",
+          "totalPages",
+          "spotsLeft"
         ],
         "additionalProperties": false
       },
@@ -6462,6 +8140,20 @@
             "updatedAt": {
               "type": "string"
             },
+            "_count": {
+              "type": "object",
+              "properties": {
+                "attendances": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                }
+              },
+              "required": [
+                "attendances"
+              ],
+              "additionalProperties": false
+            },
             "class": {
               "type": "object",
               "properties": {
@@ -6470,11 +8162,37 @@
                 },
                 "name": {
                   "type": "string"
+                },
+                "allowSelfBooking": {
+                  "type": "boolean"
+                },
+                "bookingCutoffMin": {
+                  "anyOf": [
+                    {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "waitlistMode": {
+                  "type": "string",
+                  "enum": [
+                    "NONE",
+                    "FIFO_AUTO",
+                    "CLAIM"
+                  ]
                 }
               },
               "required": [
                 "id",
-                "name"
+                "name",
+                "allowSelfBooking",
+                "bookingCutoffMin",
+                "waitlistMode"
               ],
               "additionalProperties": false
             },
@@ -6630,6 +8348,47 @@
                 ],
                 "additionalProperties": false
               }
+            },
+            "spotsLeft": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "myTrainees": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "firstName": {
+                    "type": "string"
+                  },
+                  "lastName": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "id",
+                  "firstName",
+                  "lastName"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "myWaitlist": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
             }
           },
           "required": [
@@ -6645,7 +8404,10 @@
             "updatedAt",
             "class",
             "location",
-            "attendances"
+            "attendances",
+            "spotsLeft",
+            "myTrainees",
+            "myWaitlist"
           ],
           "additionalProperties": false
         }
@@ -6665,7 +8427,14 @@
                   "type": "string"
                 },
                 "classId": {
-                  "type": "string"
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
                 },
                 "traineeId": {
                   "type": "string"
@@ -6767,7 +8536,14 @@
             "type": "string"
           },
           "classId": {
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "traineeId": {
             "type": "string"
@@ -6877,7 +8653,14 @@
             "type": "string"
           },
           "classId": {
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "traineeId": {
             "type": "string"
@@ -6926,28 +8709,36 @@
             "type": "string"
           },
           "class": {
-            "type": "object",
-            "properties": {
-              "id": {
-                "type": "string"
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "billingMode": {
+                    "type": "string",
+                    "enum": [
+                      "PER_MONTH",
+                      "PER_SESSION",
+                      "PER_COURSE"
+                    ]
+                  }
+                },
+                "required": [
+                  "id",
+                  "name",
+                  "billingMode"
+                ],
+                "additionalProperties": false
               },
-              "name": {
-                "type": "string"
-              },
-              "billingMode": {
-                "type": "string",
-                "enum": [
-                  "PER_MONTH",
-                  "PER_SESSION"
-                ]
+              {
+                "type": "null"
               }
-            },
-            "required": [
-              "id",
-              "name",
-              "billingMode"
-            ],
-            "additionalProperties": false
+            ]
           },
           "trainee": {
             "type": "object",
@@ -7058,6 +8849,96 @@
               ],
               "additionalProperties": false
             }
+          },
+          "refunds": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "tenantId": {
+                  "type": "string"
+                },
+                "feeId": {
+                  "type": "string"
+                },
+                "amount": {
+                  "type": "string"
+                },
+                "refundedAt": {
+                  "type": "string"
+                },
+                "method": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "notes": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "recordedById": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "recordedByEmailSnapshot": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "recordedByNameSnapshot": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "createdAt": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "tenantId",
+                "feeId",
+                "amount",
+                "refundedAt",
+                "method",
+                "notes",
+                "recordedById",
+                "recordedByEmailSnapshot",
+                "recordedByNameSnapshot",
+                "createdAt"
+              ],
+              "additionalProperties": false
+            }
           }
         },
         "required": [
@@ -7075,7 +8956,8 @@
           "updatedAt",
           "class",
           "trainee",
-          "payments"
+          "payments",
+          "refunds"
         ],
         "additionalProperties": false
       },
@@ -7091,7 +8973,14 @@
               "type": "string"
             },
             "classId": {
-              "type": "string"
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
             },
             "traineeId": {
               "type": "string"
@@ -7140,20 +9029,27 @@
               "type": "string"
             },
             "class": {
-              "type": "object",
-              "properties": {
-                "id": {
-                  "type": "string"
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "name"
+                  ],
+                  "additionalProperties": false
                 },
-                "name": {
-                  "type": "string"
+                {
+                  "type": "null"
                 }
-              },
-              "required": [
-                "id",
-                "name"
-              ],
-              "additionalProperties": false
+              ]
             },
             "trainee": {
               "type": "object",
@@ -7462,6 +9358,602 @@
           "createdAt"
         ],
         "additionalProperties": false
+      },
+      "RefundList": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "tenantId": {
+              "type": "string"
+            },
+            "feeId": {
+              "type": "string"
+            },
+            "amount": {
+              "type": "string"
+            },
+            "refundedAt": {
+              "type": "string"
+            },
+            "method": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "notes": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "recordedById": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "recordedByEmailSnapshot": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "recordedByNameSnapshot": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "createdAt": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "id",
+            "tenantId",
+            "feeId",
+            "amount",
+            "refundedAt",
+            "method",
+            "notes",
+            "recordedById",
+            "recordedByEmailSnapshot",
+            "recordedByNameSnapshot",
+            "createdAt"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "Refund": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "tenantId": {
+            "type": "string"
+          },
+          "feeId": {
+            "type": "string"
+          },
+          "amount": {
+            "type": "string"
+          },
+          "refundedAt": {
+            "type": "string"
+          },
+          "method": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "recordedById": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "recordedByEmailSnapshot": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "recordedByNameSnapshot": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "createdAt": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "tenantId",
+          "feeId",
+          "amount",
+          "refundedAt",
+          "method",
+          "notes",
+          "recordedById",
+          "recordedByEmailSnapshot",
+          "recordedByNameSnapshot",
+          "createdAt"
+        ],
+        "additionalProperties": false
+      },
+      "WaitlistEntryList": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "tenantId": {
+              "type": "string"
+            },
+            "sessionId": {
+              "type": "string"
+            },
+            "traineeId": {
+              "type": "string"
+            },
+            "createdAt": {
+              "type": "string"
+            },
+            "trainee": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "firstName": {
+                  "type": "string"
+                },
+                "lastName": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "firstName",
+                "lastName"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "id",
+            "tenantId",
+            "sessionId",
+            "traineeId",
+            "createdAt",
+            "trainee"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "WaitlistEntry": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "tenantId": {
+            "type": "string"
+          },
+          "sessionId": {
+            "type": "string"
+          },
+          "traineeId": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "tenantId",
+          "sessionId",
+          "traineeId",
+          "createdAt"
+        ],
+        "additionalProperties": false
+      },
+      "ClaimResult": {
+        "type": "object",
+        "properties": {
+          "claimed": {
+            "type": "boolean",
+            "const": true
+          },
+          "className": {
+            "type": "string"
+          },
+          "startsAt": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "claimed",
+          "className",
+          "startsAt"
+        ],
+        "additionalProperties": false
+      },
+      "WaitlistSweepResult": {
+        "type": "object",
+        "properties": {
+          "deleted": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "deleted"
+        ],
+        "additionalProperties": false
+      },
+      "PaginatedCardRow": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "tenantId": {
+                  "type": "string"
+                },
+                "traineeId": {
+                  "type": "string"
+                },
+                "classId": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "feeId": {
+                  "type": "string"
+                },
+                "totalVisits": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                "price": {
+                  "type": "string"
+                },
+                "expiresAt": {
+                  "anyOf": [
+                    {
+                      "type": "null"
+                    },
+                    {
+                      "type": "string"
+                    }
+                  ]
+                },
+                "cancelledAt": {
+                  "anyOf": [
+                    {
+                      "type": "null"
+                    },
+                    {
+                      "type": "string"
+                    }
+                  ]
+                },
+                "visitsUsed": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                "visitsRemaining": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                "createdAt": {
+                  "type": "string"
+                },
+                "updatedAt": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "tenantId",
+                "traineeId",
+                "classId",
+                "feeId",
+                "totalVisits",
+                "price",
+                "expiresAt",
+                "cancelledAt",
+                "visitsUsed",
+                "visitsRemaining",
+                "createdAt",
+                "updatedAt"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "page": {
+            "type": "number"
+          },
+          "pageSize": {
+            "type": "number"
+          },
+          "total": {
+            "type": "number"
+          },
+          "totalPages": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "items",
+          "page",
+          "pageSize",
+          "total",
+          "totalPages"
+        ],
+        "additionalProperties": false
+      },
+      "CardRow": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "tenantId": {
+            "type": "string"
+          },
+          "traineeId": {
+            "type": "string"
+          },
+          "classId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "feeId": {
+            "type": "string"
+          },
+          "totalVisits": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "price": {
+            "type": "string"
+          },
+          "expiresAt": {
+            "anyOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "string"
+              }
+            ]
+          },
+          "cancelledAt": {
+            "anyOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "string"
+              }
+            ]
+          },
+          "visitsUsed": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "visitsRemaining": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "tenantId",
+          "traineeId",
+          "classId",
+          "feeId",
+          "totalVisits",
+          "price",
+          "expiresAt",
+          "cancelledAt",
+          "visitsUsed",
+          "visitsRemaining",
+          "createdAt",
+          "updatedAt"
+        ],
+        "additionalProperties": false
+      },
+      "CustomerCardEntryList": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "traineeId": {
+              "type": "string"
+            },
+            "totalVisits": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            },
+            "visitsUsed": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            },
+            "visitsRemaining": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            },
+            "expiresAt": {
+              "anyOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "type": "string"
+                }
+              ]
+            },
+            "cancelledAt": {
+              "anyOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "type": "string"
+                }
+              ]
+            },
+            "class": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "name"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "trainee": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "firstName": {
+                  "type": "string"
+                },
+                "lastName": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "firstName",
+                "lastName"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "id",
+            "traineeId",
+            "totalVisits",
+            "visitsUsed",
+            "visitsRemaining",
+            "expiresAt",
+            "cancelledAt",
+            "class",
+            "trainee"
+          ],
+          "additionalProperties": false
+        }
       },
       "FeesSummaryEntryList": {
         "type": "array",

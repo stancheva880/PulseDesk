@@ -3,6 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { randomUUID } from 'node:crypto';
 import { AttendanceStatus, BillingMode, SessionStatus } from '@prisma/client';
 import { PrismaService } from '@/prisma/prisma.service';
+import { createTestCard } from '@/test-utils/create-card';
 import { backfillFutureSessions } from './attendance-backfill';
 
 describe('backfillFutureSessions', () => {
@@ -106,5 +107,41 @@ describe('backfillFutureSessions', () => {
       where: { sessionId: session.id, traineeId: trainee.id },
     });
     expect(rows).toHaveLength(1);
+  });
+
+  // TKT-0107: backfilled bookings draw down the trainee's card, earliest session first.
+  it('consumes card visits for backfilled bookings, earliest session first', async () => {
+    const { tenant, location, cls, trainee } = await setup();
+    const later = new Date('2026-07-08T18:00:00.000Z');
+    const laterSession = await makeSession(tenant.id, cls.id, location.id, later);
+    const earlierSession = await makeSession(tenant.id, cls.id, location.id, FUTURE);
+    const card = await createTestCard(prisma, {
+      tenantId: tenant.id,
+      traineeId: trainee.id,
+      totalVisits: 1,
+    });
+
+    await prisma.$transaction((tx) =>
+      backfillFutureSessions(tx, {
+        tenantId: tenant.id,
+        classId: cls.id,
+        traineeIds: [trainee.id],
+        now: NOW,
+      }),
+    );
+
+    // Both sessions got booked, but the single visit went to the earlier one.
+    expect(await prisma.attendance.count({ where: { traineeId: trainee.id } })).toBe(2);
+    const consumptions = await prisma.cardConsumption.findMany({
+      where: { cardId: card.id },
+      include: { attendance: { select: { sessionId: true } } },
+    });
+    expect(consumptions).toHaveLength(1);
+    expect(consumptions[0]!.attendance.sessionId).toBe(earlierSession.id);
+    expect(
+      await prisma.cardConsumption.count({
+        where: { attendance: { sessionId: laterSession.id } },
+      }),
+    ).toBe(0);
   });
 });

@@ -3,7 +3,8 @@ import { BadRequestException } from '@nestjs/common';
 import { Test, type TestingModule } from '@nestjs/testing';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { randomUUID } from 'node:crypto';
-import { BillingMode } from '@prisma/client';
+import { BillingMode, UserRole } from '@prisma/client';
+import { createTestUser } from '@/test-utils/create-user';
 import { LocationScopeService } from '@/auth/scope/location-scope.service';
 import { PrismaService } from '@/prisma/prisma.service';
 import { FeesService } from '@/fees/fees.service';
@@ -320,6 +321,47 @@ describe('DashboardService', () => {
       await expect(
         service.getCashflowSummary(t.id, { from: '1900-01-01', to: '2026-08-31' }, su),
       ).rejects.toBeInstanceOf(BadRequestException);
+    });
+  });
+
+  // TKT-0106: class-less (card purchase) fees are tenant-level money — the class-location
+  // scope must not drop them from a location-scoped admin's numbers.
+  describe('class-less fees under location scoping', () => {
+    it('cashflow includes a class-less fee and its payment for a location-scoped admin', async () => {
+      const t = await newTenant();
+      const location = await prisma.location.create({
+        data: { tenantId: t.id, name: `Main-${randomUUID()}` },
+      });
+      const admin = await createTestUser(prisma, {
+        email: `${randomUUID()}@x`,
+        passwordHash: null,
+        role: UserRole.ADMIN,
+        tenantId: t.id,
+        locations: { connect: [{ id: location.id }] },
+      });
+      const trainee = await prisma.trainee.create({
+        data: { tenantId: t.id, firstName: 'T', lastName: 'X', dateOfBirth: new Date('2000-01-01') },
+      });
+      const fee = await prisma.fee.create({
+        data: {
+          tenantId: t.id,
+          classId: null,
+          traineeId: trainee.id,
+          periodStart: new Date('2026-03-01'),
+          periodEnd: new Date('2026-03-01'),
+          amount: 100,
+        },
+      });
+      await prisma.payment.create({
+        data: { tenantId: t.id, feeId: fee.id, amount: 40, paidAt: new Date('2026-03-05') },
+      });
+
+      const result = await service.getCashflowSummary(
+        t.id,
+        { from: '2026-03-01', to: '2026-03-31' },
+        { id: admin.id, email: admin.email, role: UserRole.ADMIN, tenantId: t.id },
+      );
+      expect(result).toEqual([{ period: '2026-03', collected: 40, billed: 100 }]);
     });
   });
 });

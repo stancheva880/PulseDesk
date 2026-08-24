@@ -291,4 +291,54 @@ describe('FeesChart', () => {
       expect(calls).toHaveLength(1);
     });
   });
+
+  // TKT-0096: the chart offers a way into /fees for the period in view. The fees page's month
+  // filter holds exactly one month, so a single-month view links filtered; a wider view links
+  // to the unfiltered list.
+  describe('link into /fees', () => {
+    const linkName = /View in fees list|Към списъка с такси/;
+
+    it('links to /fees?month= when a single month is in view', async () => {
+      mockFetch(() => jsonResponse(200, [{ period: '2026-05', collected: 5, pending: 5 }]));
+      renderChart();
+      await screen.findByTestId('chart-row-2026-05');
+
+      const link = await screen.findByRole('link', { name: linkName });
+      expect(link).toHaveAttribute('href', '/fees?month=2026-05');
+    });
+
+    it('links to /fees unfiltered when the view spans months', async () => {
+      mockFetch(() => jsonResponse(200, FEES_SUMMARY));
+      renderChart();
+      await screen.findByTestId('chart-row-2026-03');
+
+      const link = await screen.findByRole('link', { name: linkName });
+      expect(link).toHaveAttribute('href', '/fees');
+    });
+
+    it('offers no link while loading, on error, or on an empty response', async () => {
+      vi.spyOn(globalThis, 'fetch').mockImplementation(
+        () => new Promise<Response>(() => {}),
+      );
+      const loading = renderChart();
+      await act(async () => {
+        await Promise.resolve();
+      });
+      expect(screen.queryByRole('link', { name: linkName })).toBeNull();
+      loading.unmount();
+      vi.restoreAllMocks();
+
+      mockFetch(() => jsonResponse(500, { message: 'boom' }));
+      const failed = renderChart();
+      await screen.findByText('boom');
+      expect(screen.queryByRole('link', { name: linkName })).toBeNull();
+      failed.unmount();
+      vi.restoreAllMocks();
+
+      mockFetch(() => jsonResponse(200, []));
+      renderChart();
+      await screen.findByText(/No data in this range|Няма данни за този период/);
+      expect(screen.queryByRole('link', { name: linkName })).toBeNull();
+    });
+  });
 });
