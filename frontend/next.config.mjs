@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import path from 'node:path';
 
 // Content-Security-Policy is NOT set here. It needs a per-request nonce so that
@@ -26,10 +27,21 @@ const apiProxyTarget = process.env.API_PROXY_TARGET?.trim();
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  // Self-contained server bundle for a lean Docker prod image. Inert in dev, ignored by Vercel.
-  output: 'standalone',
-  // Trace hoisted deps from the monorepo root (workspace node_modules live there).
-  outputFileTracingRoot: path.join(import.meta.dirname, '..'),
+  // Self-contained server bundle for a lean Docker prod image. Skipped on Vercel (VERCEL=1 is
+  // set automatically there) - Vercel does its own equivalent packaging, and on Next.js 16.3.x
+  // `output: 'standalone'` changes the build output in a way that breaks Vercel's onBuildComplete
+  // packaging step (ENOENT on .next/next-server.js.nft.json): https://github.com/vercel/next.js/issues/43654
+  ...(process.env.VERCEL ? {} : { output: 'standalone' }),
+  // Trace hoisted deps from the monorepo root (workspace node_modules live there) - but only
+  // when that root actually exists with a hoisted node_modules, i.e. this app is nested inside
+  // the full repo (local dev, Docker, or a Vercel project rooted at the repo). Deployed as its
+  // own standalone zip/project (frontend/ uploaded alone), there is no parent to trace into -
+  // pointing there anyway sends Next's file tracer outside the sandboxed project directory and
+  // Vercel's build fails with ENOENT on the .nft.json trace files.
+  outputFileTracingRoot: (() => {
+    const monorepoRoot = path.join(import.meta.dirname, '..');
+    return fs.existsSync(path.join(monorepoRoot, 'node_modules')) ? monorepoRoot : import.meta.dirname;
+  })(),
   async headers() {
     return [
       {
