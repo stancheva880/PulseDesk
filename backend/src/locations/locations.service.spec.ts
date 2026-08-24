@@ -1,6 +1,6 @@
 import { ConflictException, NotFoundException } from '@nestjs/common';
 import { Test, type TestingModule } from '@nestjs/testing';
-import { UserRole } from '@prisma/client';
+import { BillingMode, UserRole } from '@prisma/client';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { randomUUID } from 'node:crypto';
 import { LocationScopeService } from '@/auth/scope/location-scope.service';
@@ -233,6 +233,34 @@ describe('LocationsService', () => {
       const inA = await service.create(a.id, { name: 'A-Loc' });
       await expect(service.delete(b.id, inA.id)).rejects.toBeInstanceOf(NotFoundException);
       await expect(service.findById(a.id, inA.id, SUPER)).resolves.toBeDefined();
+    });
+
+    // TKT-0124: the guard runs after the tenant lookup, so a wrong-tenant id keeps answering
+    // 404 (the case above) rather than leaking that the hall exists and is busy.
+    it('throws ConflictException when the location has a session', async () => {
+      const t = await newTenant();
+      const created = await service.create(t.id, { name: 'Busy Hall' });
+      const cls = await prisma.class.create({
+        data: {
+          tenantId: t.id,
+          name: `Class-${randomUUID()}`,
+          billingMode: BillingMode.PER_SESSION,
+          sessionPrice: 20,
+          locations: { connect: [{ id: created.id }] },
+        },
+      });
+      await prisma.session.create({
+        data: {
+          tenantId: t.id,
+          classId: cls.id,
+          locationId: created.id,
+          startsAt: new Date('2026-09-01T10:00:00Z'),
+          endsAt: new Date('2026-09-01T11:00:00Z'),
+        },
+      });
+
+      await expect(service.delete(t.id, created.id)).rejects.toBeInstanceOf(ConflictException);
+      await expect(service.findById(t.id, created.id, SUPER)).resolves.toBeDefined();
     });
   });
 });

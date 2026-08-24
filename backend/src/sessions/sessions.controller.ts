@@ -10,7 +10,7 @@ import {
   Patch,
   Post,
 } from '@nestjs/common';
-import { ApiBearerAuth } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { UserRole } from '@prisma/client';
 import { CurrentUser } from '@/auth/decorators/current-user.decorator';
 import { Roles } from '@/auth/decorators/roles.decorator';
@@ -33,6 +33,7 @@ import { SessionsService } from './sessions.service';
 export class SessionsController {
   constructor(private readonly sessions: SessionsService) {}
 
+  @ApiOperation({ summary: 'List the dated sessions of the club. Filtered and paginated.' })
   @Get()
   @ResponseSchema('PaginatedSession', PaginatedSessionSchema)
   list(
@@ -44,6 +45,7 @@ export class SessionsController {
     return this.sessions.list(tenantId, user, query, query);
   }
 
+  @ApiOperation({ summary: 'Read one session with its class, location and trainers.' })
   @Get(':id')
   @ResponseSchema('SessionDetail', SessionDetailSchema)
   findOne(
@@ -54,6 +56,7 @@ export class SessionsController {
     return this.sessions.findById(tenantId, id, user);
   }
 
+  @ApiOperation({ summary: 'Create one dated session. Refused when the location is deactivated.' })
   @Post()
   @Roles(UserRole.ADMIN)
   @ResponseSchema('Session', SessionSchema)
@@ -65,6 +68,7 @@ export class SessionsController {
     return this.sessions.create(tenantId, dto, user);
   }
 
+  @ApiOperation({ summary: 'Change one session, its time or its trainers.' })
   @Patch(':id')
   @Roles(UserRole.ADMIN)
   @ResponseSchema('Session', SessionSchema)
@@ -77,6 +81,7 @@ export class SessionsController {
     return this.sessions.update(tenantId, id, dto, user);
   }
 
+  @ApiOperation({ summary: 'Delete one session. Its attendance rows go with it.' })
   @Delete(':id')
   @Roles(UserRole.ADMIN)
   @HttpCode(HttpStatus.NO_CONTENT)

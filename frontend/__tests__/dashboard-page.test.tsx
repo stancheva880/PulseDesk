@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
 import DashboardHomePage from '@/app/(dashboard)/dashboard/page';
 import { AuthProvider } from '@/components/auth-provider';
 import { I18nProvider } from '@/components/i18n-provider';
@@ -116,6 +116,66 @@ describe('DashboardHomePage', () => {
 
     expect(await screen.findByText('Locations unavailable')).toBeInTheDocument();
     expect(screen.queryByText('0')).not.toBeInTheDocument();
+  });
+
+  // TKT-0096: each loaded tile is a real link into the list behind its number. The sessions
+  // link must carry the same window the count request sent — one computation, not two.
+  it('links each loaded tile into its list, sessions carrying the counted window', async () => {
+    const urls: string[] = [];
+    vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
+      const url = String(input);
+      urls.push(url);
+      if (url.includes('/auth/')) return Promise.resolve(jsonResponse(200, MEMBERSHIPS));
+      return Promise.resolve(
+        jsonResponse(200, { items: [], page: 1, pageSize: 1, total: 2, totalPages: 2 }),
+      );
+    });
+
+    renderPage();
+    await screen.findAllByText('2');
+
+    const hrefs = screen.getAllByRole('link').map((a) => a.getAttribute('href'));
+    expect(hrefs).toContain('/locations');
+    expect(hrefs).toContain('/classes?isActive=true');
+
+    const sessionsHref = hrefs.find((h) => h?.startsWith('/sessions?'));
+    expect(sessionsHref).toBeDefined();
+    const linkParams = new URL(sessionsHref!, 'http://test.local').searchParams;
+    const request = urls.find((u) => u.includes('/sessions'));
+    const requestParams = new URL(request!, 'http://test.local').searchParams;
+    expect(linkParams.get('startsAtFrom')).toBe(requestParams.get('startsAtFrom'));
+    expect(linkParams.get('startsAtBefore')).toBe(requestParams.get('startsAtBefore'));
+  });
+
+  it('renders no links while the counts are loading', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
+      const url = String(input);
+      if (url.includes('/auth/')) return Promise.resolve(jsonResponse(200, MEMBERSHIPS));
+      return new Promise<Response>(() => {});
+    });
+
+    renderPage();
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(screen.queryAllByRole('link')).toEqual([]);
+  });
+
+  it('renders no links when a count request failed', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
+      const url = String(input);
+      if (url.includes('/auth/')) return Promise.resolve(jsonResponse(200, MEMBERSHIPS));
+      if (url.includes('/locations')) {
+        return Promise.resolve(jsonResponse(500, { message: 'Locations unavailable' }));
+      }
+      return Promise.resolve(jsonResponse(200, paged([])));
+    });
+
+    renderPage();
+
+    expect(await screen.findByText('Locations unavailable')).toBeInTheDocument();
+    expect(screen.queryAllByRole('link')).toEqual([]);
   });
 
   it('renders the counts when every request succeeds', async () => {

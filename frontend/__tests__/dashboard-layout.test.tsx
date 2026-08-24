@@ -189,6 +189,29 @@ describe('DashboardLayout route guards', () => {
     await waitFor(() => expect(nav.replace).toHaveBeenCalledWith('/dashboard'));
     expect(screen.queryByText(CHILD)).not.toBeInTheDocument();
   });
+
+  // TKT-0122: the sweep endpoint is @Roles(SUPER_ADMIN), so /maintenance would render a page
+  // whose only button 403s. Bounce it like /tenants rather than showing a dead end.
+  it('redirects an ADMIN away from /maintenance', async () => {
+    renderLayout('ADMIN', '/maintenance');
+
+    await waitFor(() => expect(nav.replace).toHaveBeenCalledWith('/dashboard'));
+    expect(screen.queryByText(CHILD)).not.toBeInTheDocument();
+  });
+
+  it('redirects an EMPLOYEE away from /maintenance', async () => {
+    renderLayout('EMPLOYEE', '/maintenance');
+
+    await waitFor(() => expect(nav.replace).toHaveBeenCalledWith('/dashboard'));
+    expect(screen.queryByText(CHILD)).not.toBeInTheDocument();
+  });
+
+  it('lets a SUPER_ADMIN open /maintenance', async () => {
+    renderLayout('SUPER_ADMIN', '/maintenance');
+
+    expect(await screen.findByText(CHILD)).toBeInTheDocument();
+    expect(nav.replace).not.toHaveBeenCalled();
+  });
 });
 
 // TKT-0039: with no active tenant every tenant-scoped route answers 400 (SUPER_ADMIN) or

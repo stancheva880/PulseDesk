@@ -3,6 +3,7 @@
 import { useEffect, type ReactNode } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '@/components/auth-provider';
+import { MobileNav } from '@/components/mobile-nav';
 import { SelectTenantPanel } from '@/components/select-tenant-panel';
 import { Sidebar } from '@/components/sidebar';
 import { Topbar } from '@/components/topbar';
@@ -32,6 +33,10 @@ const DENY_RULES: Array<{
   // Creating a club is SUPER_ADMIN-only (tenants.controller.ts is @Roles(SUPER_ADMIN)).
   { role: 'ADMIN', matches: (p) => p.startsWith('/tenants'), redirectTo: '/dashboard' },
   { role: 'EMPLOYEE', matches: (p) => p.startsWith('/tenants'), redirectTo: '/dashboard' },
+  // TKT-0122: platform maintenance is SUPER_ADMIN-only (waitlist-sweep.controller.ts). The nav
+  // already hides it; this stops a deep link landing on a page whose only button would 403.
+  { role: 'ADMIN', matches: (p) => p.startsWith('/maintenance'), redirectTo: '/dashboard' },
+  { role: 'EMPLOYEE', matches: (p) => p.startsWith('/maintenance'), redirectTo: '/dashboard' },
 ];
 
 // Onboarding the very first club happens before any club can be active, so this one route
@@ -76,7 +81,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
     <div className="flex min-h-screen">
       <Sidebar />
       <div className="flex min-w-0 flex-1 flex-col">
-        <Topbar />
+        <Topbar nav={<MobileNav />} />
         <main className="app-surface flex-1 overflow-y-auto px-6 py-8">
           {tenant === 'ready' || TENANT_FREE_ROUTES.includes(pathname) ? (
             children

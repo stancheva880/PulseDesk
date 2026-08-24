@@ -10,7 +10,7 @@ import {
   Patch,
   Post,
 } from '@nestjs/common';
-import { ApiBearerAuth } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { UserRole } from '@prisma/client';
 import { CurrentUser } from '@/auth/decorators/current-user.decorator';
 import { Roles } from '@/auth/decorators/roles.decorator';
@@ -33,6 +33,7 @@ import { TraineesService } from './trainees.service';
 export class TraineesController {
   constructor(private readonly trainees: TraineesService) {}
 
+  @ApiOperation({ summary: 'List the trainees of the club. Filtered and paginated.' })
   @Get()
   @ResponseSchema('PaginatedTrainee', PaginatedTraineeSchema)
   list(
@@ -44,6 +45,7 @@ export class TraineesController {
     return this.trainees.list(tenantId, user, query, query);
   }
 
+  @ApiOperation({ summary: 'Read one trainee with contacts, classes, locations and guardians.' })
   @Get(':id')
   @ResponseSchema('TraineeDetail', TraineeDetailSchema)
   findOne(
@@ -54,6 +56,7 @@ export class TraineesController {
     return this.trainees.findById(tenantId, id, user);
   }
 
+  @ApiOperation({ summary: 'Create a trainee. A trainee under 18 needs one contact at least.' })
   @Post()
   @Roles(UserRole.ADMIN)
   @ResponseSchema('Trainee', TraineeSchema)
@@ -65,6 +68,7 @@ export class TraineesController {
     return this.trainees.create(tenantId, dto, user);
   }
 
+  @ApiOperation({ summary: 'Change a trainee. You cannot detach a location you do not hold.' })
   @Patch(':id')
   @Roles(UserRole.ADMIN)
   @ResponseSchema('Trainee', TraineeSchema)
@@ -77,6 +81,7 @@ export class TraineesController {
     return this.trainees.update(tenantId, id, dto, user);
   }
 
+  @ApiOperation({ summary: 'Delete a trainee. Refused when their fees carry payments or refunds.' })
   @Delete(':id')
   @Roles(UserRole.ADMIN)
   @HttpCode(HttpStatus.NO_CONTENT)

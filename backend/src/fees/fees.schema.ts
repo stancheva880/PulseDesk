@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { BillingModeSchema } from '@/classes/classes.schema';
 import { decimalString, isoDate, paginatedSchema } from '@/common/response-schema';
 import { PaymentSchema } from '@/payments/payments.schema';
+import { RefundSchema } from '@/refunds/refunds.schema';
 
 // The money contract. Every amount is a Prisma Decimal that reaches the wire as a string —
 // z.number() on an amount would turn "120.00" into 120 for every caller, and both the fees
@@ -14,7 +15,8 @@ export const FeeStatusSchema = z.enum(FeeStatus);
 export const FeeSchema = z.object({
   id: z.string(),
   tenantId: z.string(),
-  classId: z.string(),
+  // Null since TKT-0104 — tenant-wide card purchase fees carry no class.
+  classId: z.string().nullable(),
   traineeId: z.string(),
   // Set only for PER_SESSION fees, by generateSessionFees.
   sessionId: z.string().nullable(),
@@ -33,14 +35,18 @@ export const FeeRowSchema = FeeSchema.extend({ paid: decimalString });
 export const PaginatedFeeRowSchema = paginatedSchema(FeeRowSchema);
 
 export const FeeDetailSchema = FeeSchema.extend({
-  class: z.object({ id: z.string(), name: z.string(), billingMode: BillingModeSchema }),
+  class: z
+    .object({ id: z.string(), name: z.string(), billingMode: BillingModeSchema })
+    .nullable(),
   trainee: z.object({ id: z.string(), firstName: z.string(), lastName: z.string() }),
   payments: z.array(PaymentSchema),
+  // TKT-0105: the second ledger — staff detail renders payments and refunds side by side.
+  refunds: z.array(RefundSchema),
 });
 
 /** The customer portal gets the class name only — no billing mode. */
 export const CustomerFeeEntrySchema = FeeSchema.extend({
-  class: z.object({ id: z.string(), name: z.string() }),
+  class: z.object({ id: z.string(), name: z.string() }).nullable(),
   trainee: z.object({ id: z.string(), firstName: z.string(), lastName: z.string() }),
   payments: z.array(PaymentSchema),
 });

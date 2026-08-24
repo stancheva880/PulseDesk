@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event';
 import AttendancePage from '@/app/(dashboard)/sessions/[id]/attendance/page';
 import { AuthProvider } from '@/components/auth-provider';
 import { I18nProvider } from '@/components/i18n-provider';
+import { ToastViewport } from '@/components/toast';
 import { setAccessToken } from '@/lib/auth-storage';
 
 const back = vi.fn();
@@ -116,6 +117,7 @@ const TRAINEES = [
 function renderPage() {
   return render(
     <I18nProvider>
+      <ToastViewport />
       <AuthProvider>
         <AttendancePage />
       </AuthProvider>
@@ -137,6 +139,10 @@ describe('AttendancePage — toggle group + Save All', () => {
   function mockFetch(handler: (url: string, init?: RequestInit) => Response | Promise<Response>) {
     vi.spyOn(globalThis, 'fetch').mockImplementation((input, init) => {
       const url = typeof input === 'string' ? input : (input as Request).url;
+      // TKT-0112: the page loads the session's waitlist too; these cases don't exercise it.
+      if (url.endsWith('/sessions/session-1/waitlist')) {
+        return Promise.resolve(jsonResponse(200, []));
+      }
       return Promise.resolve(handler(url, init));
     });
   }
@@ -340,5 +346,53 @@ describe('AttendancePage — toggle group + Save All', () => {
 
     expect(await screen.findByText('Cleo Newton')).toBeInTheDocument();
     expect(postBody).toEqual({ traineeId: 'tr3' });
+  });
+
+  // TKT-0087 — the roster adopts the card mode DataTable got in TKT-0086. The rendered layout is
+  // not assertable here (vitest.config.ts sets `css: false`); these pin the contract the shared
+  // rule in globals.css keys off.
+  describe('card mode below md', () => {
+    function mockRoster() {
+      mockFetch((url) => {
+        if (url.endsWith('/sessions/session-1')) return jsonResponse(200, SESSION_DETAIL);
+        if (url.endsWith('/sessions/session-1/attendances'))
+          return jsonResponse(200, ATTENDANCE_ROWS);
+        if (url.includes('/attendance-candidates')) return jsonResponse(200, paged([]));
+        return jsonResponse(404, null);
+      });
+    }
+
+    it('labels each attendance cell with its column header', async () => {
+      mockRoster();
+      const { container } = renderPage();
+      const row = ((await screen.findByText('Ada Lovelace')).closest('tr')) as HTMLElement;
+
+      // Opted into the shared rule rather than carrying a copy of it.
+      expect(container.querySelector('.pd-card-table')).not.toBeNull();
+
+      const headers = Array.from(container.querySelectorAll('thead th')).map((th) =>
+        (th.textContent ?? '').trim(),
+      );
+      const labels = Array.from(row.querySelectorAll('td[data-label]')).map((td) =>
+        td.getAttribute('data-label'),
+      );
+
+      // Every column is labelled, and each label is the text its own header shows.
+      expect(labels).toEqual(headers);
+      expect(labels.length).toBe(4);
+    });
+
+    it('keeps the status controls row-scoped in card mode', async () => {
+      mockRoster();
+      renderPage();
+      const row = ((await screen.findByText('Ada Lovelace')).closest('tr')) as HTMLElement;
+
+      // The toggle group and the notes input stay inside the row's own cell, so making the cell a
+      // block cannot move them out of the record they belong to.
+      const group = within(row).getByRole('group');
+      expect(group.closest('td')).not.toBeNull();
+      expect(within(group).getAllByRole('button').length).toBeGreaterThanOrEqual(2);
+      expect(within(row).getByPlaceholderText(/Notes|Бележки/)).toBeInTheDocument();
+    });
   });
 });

@@ -64,6 +64,22 @@ const USER_SELECT = {
 
 type UserRow = Prisma.UserGetPayload<{ select: typeof USER_SELECT }>;
 
+/**
+ * TKT-0123: the same select with `locations` narrowed to one club.
+ *
+ * An account can hold memberships — and therefore location links — in several clubs, and the
+ * `locations` relation carries no tenant of its own, so the unscoped select hands every reader
+ * the names of halls in clubs they are not acting in. `create()`'s attach path already narrowed
+ * its own response for exactly this reason; this is that rule everywhere.
+ */
+function userSelect(tenantId: string | null) {
+  if (tenantId == null) return USER_SELECT;
+  return {
+    ...USER_SELECT,
+    locations: { where: { tenantId }, select: { id: true, name: true } },
+  } satisfies Prisma.UserSelect;
+}
+
 // Maps a DB row to the API shape. `tenantId` picks which membership provides
 // role/tenantId; when omitted, the user's first membership is used (single-
 // membership world until TKT-0001/0003 land).
@@ -168,7 +184,7 @@ export class UsersService {
       this.prisma.user.findMany({
         where,
         orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }, { email: 'asc' }],
-        select: USER_SELECT,
+        select: userSelect(tenantId),
         skip: p.skip,
         take: p.take,
       }),
@@ -177,10 +193,33 @@ export class UsersService {
     return buildPaginatedResult(rows.map((r) => toSummary(r, tenantId)), total, p);
   }
 
-  async findById(actor: AuthenticatedUser, id: string): Promise<UserSummary> {
-    const user = await this.prisma.user.findUnique({ where: { id }, select: USER_SELECT });
+  /**
+   * TKT-0123: `tenantId` is the club the request is acting in, and it is what decides which
+   * membership the summary reports. It defaults to the actor's own tenant so the internal callers
+   * (`resendInvite`, `delete`) keep the behaviour they had; the HTTP route always passes the
+   * header. A SUPER_ADMIN target has no memberships at all and is summarised without one.
+   */
+  async findById(
+    actor: AuthenticatedUser,
+    id: string,
+    tenantId: string | null = actor.tenantId,
+  ): Promise<UserSummary> {
+    const user = await this.prisma.user.findUnique({
+      where: { id },
+      select: userSelect(tenantId),
+    });
     if (!user) throw new NotFoundException(`User ${id} not found`);
-    if (actor.role === UserRole.SUPER_ADMIN) return toSummary(user);
+
+    // A tenant user outside the acting club is not visible from inside it — the same
+    // non-disclosing 404 every other per-target route gives. This applies to a SUPER_ADMIN
+    // actor too: they enter one club at a time, and reading a member of a different club
+    // through this club's context has no meaning (and no membership to report a role from).
+    if (!user.isSuperAdmin && tenantId != null) {
+      if (!user.memberships.some((m) => m.tenantId === tenantId)) {
+        throw new NotFoundException(`User ${id} not found`);
+      }
+    }
+    if (actor.role === UserRole.SUPER_ADMIN) return toSummary(user, tenantId);
 
     // Tenant users may only see users who are members of their own tenant.
     if (!user.memberships.some((m) => m.tenantId === actor.tenantId)) {
@@ -398,12 +437,13 @@ export class UsersService {
     actor: AuthenticatedUser,
     id: string,
     dto: UpdateUserDto,
+    actingTenantId: string,
   ): Promise<UserSummary> {
     const target = await this.prisma.user.findUnique({ where: { id }, select: USER_SELECT });
     if (!target) throw new NotFoundException(`User ${id} not found`);
 
-    // Visibility check uses findById's logic (tenant + admin-scope).
-    await this.findById(actor, id);
+    // Visibility check uses findById's logic (tenant + admin-scope), against the acting club.
+    await this.findById(actor, id, actingTenantId);
 
     const isSelf = actor.id === id;
     const isActorSuper = actor.role === UserRole.SUPER_ADMIN;
@@ -418,7 +458,16 @@ export class UsersService {
     }
 
     // Role lives on the membership now; SUPER_ADMIN status is account-level and immutable here.
-    const targetTenantId = target.memberships[0]?.tenantId ?? null;
+    //
+    // TKT-0123: the membership is the one in the club being acted in, never `memberships[0]`.
+    // An account attached to a second club (create()'s attach path) has more than one, and the
+    // oldest is not the caller's. findById above has already answered 404 unless the target is a
+    // member here or a SUPER_ADMIN, so a non-null value is exactly "the target's membership in
+    // this club"; null means the target is a platform admin with no memberships at all.
+    const targetMembership = target.isSuperAdmin
+      ? undefined
+      : target.memberships.find((m) => m.tenantId === actingTenantId);
+    const targetTenantId = targetMembership?.tenantId ?? null;
     if (dto.role !== undefined) {
       if (target.isSuperAdmin || dto.role === UserRole.SUPER_ADMIN) {
         throw new BadRequestException('Cannot change SUPER_ADMIN status via role update');
@@ -436,10 +485,24 @@ export class UsersService {
       }
     }
 
-    // The resulting role and location set, whichever of the two the caller is changing.
+    // The target's current links inside the acting club — the only ones this request may replace.
+    // `target.locations` spans every club the account belongs to, so it cannot serve either as the
+    // "has at least one location" fallback below or as the set to disconnect.
+    const currentInTenant =
+      targetTenantId === null
+        ? []
+        : (
+            await this.prisma.location.findMany({
+              where: { tenantId: targetTenantId, trainers: { some: { id } } },
+              select: { id: true },
+            })
+          ).map((l) => l.id);
+
+    // The resulting role and location set, whichever of the two the caller is changing. Both are
+    // read per-club: the location scope is per-club, so "an EMPLOYEE needs a location" is too.
     assertLocationScopedRoleHasLocations(
-      dto.role ?? target.memberships[0]?.role,
-      dto.locationIds ?? target.locations.map((l) => l.id),
+      dto.role ?? targetMembership?.role,
+      dto.locationIds ?? currentInTenant,
     );
 
     const data: Prisma.UserUpdateInput = {};
@@ -463,30 +526,35 @@ export class UsersService {
       };
     }
     if (dto.locationIds !== undefined) {
-      data.locations = { set: dto.locationIds.map((lid) => ({ id: lid })) };
+      // Never `set`: the relation is global, so replacing it wholesale severs the account's links
+      // in every other club it belongs to. Disconnect only this club's current links that are
+      // leaving, connect only the ones arriving — the disjoint pair is what keeps the two sets
+      // unambiguous within one update.
+      const wanted = new Set(dto.locationIds);
+      const held = new Set(currentInTenant);
+      const disconnect = currentInTenant.filter((lid) => !wanted.has(lid));
+      const connect = dto.locationIds.filter((lid) => !held.has(lid));
+      data.locations = {
+        ...(disconnect.length ? { disconnect: disconnect.map((lid) => ({ id: lid })) } : {}),
+        ...(connect.length ? { connect: connect.map((lid) => ({ id: lid })) } : {}),
+      };
     }
 
     // A new password or a deactivation has to end the sessions already running, or the person
     // it was aimed at keeps refreshing for JWT_REFRESH_TTL. Lazy: a PrismaPromise does not run
     // until awaited, so the same expression serves both branches and the revocation lands in
     // one transaction with the update.
-    const update = this.prisma.user.update({ where: { id }, data, select: USER_SELECT });
+    const update = this.prisma.user.update({
+      where: { id },
+      data,
+      select: userSelect(targetTenantId),
+    });
     const endsSessions = dto.password !== undefined || dto.isActive === false;
 
-    try {
-      const updated = endsSessions
-        ? (await this.prisma.$transaction([update, this.auth.revokeAllRefreshTokens(id)]))[0]
-        : await update;
-      return toSummary(updated, targetTenantId);
-    } catch (e) {
-      if (isUniqueConstraintError(e)) {
-        throw new ConflictException({
-          message: 'Email already exists',
-          code: 'USER_EMAIL_TAKEN',
-        });
-      }
-      throw e;
-    }
+    const updated = endsSessions
+      ? (await this.prisma.$transaction([update, this.auth.revokeAllRefreshTokens(id)]))[0]
+      : await update;
+    return toSummary(updated, targetTenantId);
   }
 
   async delete(actor: AuthenticatedUser, id: string): Promise<void> {

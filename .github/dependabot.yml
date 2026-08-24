@@ -1,0 +1,46 @@
+version: 2
+
+# One npm entry is enough: this is an npm-workspaces monorepo with a single root lockfile, so
+# updates for backend/ and frontend/ both resolve from "/". Dependencies are grouped so a week's
+# patches arrive as one PR per ecosystem instead of a dozen — CI runs typecheck, lint, both test
+# suites and the generated-contract drift check on each, and reviewing that once is the point.
+#
+# Note for whoever merges these: never resolve an advisory with `npm audit fix --force`. Upgrade the
+# offending package, and if only a transitive pin will do, use the root `overrides` block and then
+# verify the pin actually took effect — npm 11 with lockfileVersion 3 accepts overrides and
+# silently ignores them. See CLAUDE.md and .workflow/board/TKT-0077-*.
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      production:
+        patterns: ['*']
+        dependency-type: production
+        update-types: [minor, patch]
+      development:
+        patterns: ['*']
+        dependency-type: development
+        update-types: [minor, patch]
+    ignore:
+      # Majors land by hand: Nest, Prisma, Next and React majors all carry migration work, and
+      # this repo pins Node >= 24 in .nvmrc.
+      - dependency-name: '*'
+        update-types: [version-update:semver-major]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    groups:
+      actions:
+        patterns: ['*']
+
+  - package-ecosystem: docker
+    directories:
+      - /backend
+      - /frontend
+    schedule:
+      interval: monthly

@@ -1,8 +1,9 @@
-import { BillingMode } from '@prisma/client';
+import { BillingMode, WaitlistMode } from '@prisma/client';
 import { z } from 'zod';
 import {
   isoDate,
   nullableDecimalString,
+  nullableIsoDate,
   paginatedSchema,
 } from '@/common/response-schema';
 
@@ -16,6 +17,9 @@ import {
  */
 export const BillingModeSchema = z.enum(BillingMode);
 
+/** TKT-0112: same ownership rule — sessions embed it via their class subset. */
+export const WaitlistModeSchema = z.enum(WaitlistMode);
+
 export const ClassRowSchema = z.object({
   id: z.string(),
   tenantId: z.string(),
@@ -24,6 +28,15 @@ export const ClassRowSchema = z.object({
   billingMode: BillingModeSchema,
   monthlyAmount: nullableDecimalString,
   sessionPrice: nullableDecimalString,
+  // TKT-0109: set when billingMode = PER_COURSE.
+  courseStart: nullableIsoDate,
+  courseEnd: nullableIsoDate,
+  coursePrice: nullableDecimalString,
+  capacity: z.number().int().nullable(),
+  waitlistMode: WaitlistModeSchema,
+  // TKT-0117: the self-booking pair.
+  allowSelfBooking: z.boolean(),
+  bookingCutoffMin: z.number().int().nullable(),
   isActive: z.boolean(),
   createdAt: isoDate,
   updatedAt: isoDate,

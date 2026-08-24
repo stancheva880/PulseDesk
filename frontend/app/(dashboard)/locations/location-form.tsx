@@ -8,15 +8,22 @@ import { useTranslation } from 'react-i18next';
 import { z } from 'zod';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { FieldError, SubmitError } from '@/components/ui/field-error';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { ApiError, apiErrorMessage } from '@/lib/api';
+import { showToast } from '@/components/toast';
 import { Locations } from '@/lib/api-resources';
 
+// TKT-0090: zod messages carry i18n keys; FieldError translates them.
 const schema = z.object({
-  name: z.string().trim().min(1).max(120),
-  address: z.string().trim().max(500).optional(),
+  name: z
+    .string()
+    .trim()
+    .min(1, 'common.errors.required')
+    .max(120, 'common.errors.tooLong'),
+  address: z.string().trim().max(500, 'common.errors.tooLong').optional(),
   isActive: z.boolean(),
 });
 type FormValues = z.infer<typeof schema>;
@@ -60,7 +67,9 @@ export function LocationForm({ mode, id = '' }: { mode: 'create' | 'edit'; id?: 
           isActive: values.isActive,
         });
       }
-      router.replace('/locations');
+      // TKT-0092: stay on the form; create resets ready for the next record.
+      if (mode === 'create') reset({ name: '', address: '', isActive: true });
+      showToast({ text: t('common.savedToast'), variant: 'success' });
     } catch (e) {
       if (e instanceof ApiError && e.status === 409) {
         setSubmitError(t('locations.errors.duplicate'));
@@ -86,14 +95,24 @@ export function LocationForm({ mode, id = '' }: { mode: 'create' | 'edit'; id?: 
             <form className="space-y-4" onSubmit={handleSubmit(onSubmit)} noValidate>
               <div className="space-y-1.5">
                 <Label htmlFor="name">{t('locations.fields.name')}</Label>
-                <Input id="name" aria-invalid={Boolean(errors.name)} {...register('name')} />
-                {errors.name ? (
-                  <p className="text-xs text-destructive">{t('common.errors.required')}</p>
-                ) : null}
+                <Input
+                  id="name"
+                  aria-invalid={errors.name ? true : undefined}
+                  aria-describedby={errors.name ? 'name-error' : undefined}
+                  {...register('name')}
+                />
+                <FieldError id="name-error" messageKey={errors.name?.message} />
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="address">{t('locations.fields.address')}</Label>
-                <Textarea id="address" rows={3} {...register('address')} />
+                <Textarea
+                  id="address"
+                  rows={3}
+                  aria-invalid={errors.address ? true : undefined}
+                  aria-describedby={errors.address ? 'address-error' : undefined}
+                  {...register('address')}
+                />
+                <FieldError id="address-error" messageKey={errors.address?.message} />
               </div>
               {mode === 'edit' ? (
                 <label className="flex items-center gap-2 text-sm">
@@ -101,7 +120,7 @@ export function LocationForm({ mode, id = '' }: { mode: 'create' | 'edit'; id?: 
                   {t('locations.fields.active')}
                 </label>
               ) : null}
-              {submitError ? <p className="text-sm text-destructive">{submitError}</p> : null}
+              <SubmitError message={submitError} />
               <div className="flex gap-2">
                 <Button type="submit" disabled={isSubmitting}>
                   {isSubmitting ? t('common.saving') : t('common.save')}

@@ -237,4 +237,76 @@ describe('PaymentsController (e2e-ish)', () => {
       expect(updated?.status).toBe(FeeStatus.UNPAID);
     });
   });
+
+  // TKT-0105: money out is a Refund ledger; deleting a payment may not strand refunds
+  // above what remains collected — net paid never goes negative.
+  describe('DELETE /fees/:feeId/payments/:id with refunds on the fee', () => {
+    it('returns 400 PAYMENT_DELETE_BELOW_REFUNDED and keeps the payment', async () => {
+      const a = await setupActor(UserRole.ADMIN);
+      const fee = await makeFee(a.tenantId, 100, a.locationId);
+      const created = await request(server)
+        .post(`/fees/${fee.id}/payments`)
+        .set('Authorization', `Bearer ${a.accessToken}`)
+        .set('X-Tenant-Id', a.tenantId)
+        .send({ amount: 100, paidAt: '2026-03-15' })
+        .expect(201);
+      // Seeded directly: this spec's module graph has no refunds controller, and the guard
+      // reads the rows, not the route.
+      await prisma.refund.create({
+        data: {
+          tenantId: a.tenantId,
+          feeId: fee.id,
+          amount: 50,
+          refundedAt: new Date('2026-03-20'),
+        },
+      });
+      const res = await request(server)
+        .delete(`/fees/${fee.id}/payments/${created.body.id}`)
+        .set('Authorization', `Bearer ${a.accessToken}`)
+        .set('X-Tenant-Id', a.tenantId)
+        .expect(400);
+      expect(res.body.code).toBe('PAYMENT_DELETE_BELOW_REFUNDED');
+      expect(await prisma.payment.count({ where: { feeId: fee.id } })).toBe(1);
+    });
+  });
+
+  // TKT-0106: class-less (card purchase) fees are tenant-level money — the fee-accessibility
+  // gate must not hide them from a location-scoped admin.
+  describe('payments on a class-less fee', () => {
+    it('location-scoped admin records and lists payments on a fee without a class', async () => {
+      const a = await setupActor(UserRole.ADMIN);
+      const trainee = await prisma.trainee.create({
+        data: {
+          tenantId: a.tenantId,
+          firstName: 'T',
+          lastName: 'X',
+          dateOfBirth: new Date('2000-01-01'),
+        },
+      });
+      const fee = await prisma.fee.create({
+        data: {
+          tenantId: a.tenantId,
+          classId: null,
+          traineeId: trainee.id,
+          periodStart: new Date('2026-03-01'),
+          periodEnd: new Date('2026-03-01'),
+          amount: 100,
+        },
+      });
+
+      await request(server)
+        .post(`/fees/${fee.id}/payments`)
+        .set('Authorization', `Bearer ${a.accessToken}`)
+        .set('X-Tenant-Id', a.tenantId)
+        .send({ amount: 40, paidAt: '2026-03-05' })
+        .expect(201);
+
+      const res = await request(server)
+        .get(`/fees/${fee.id}/payments`)
+        .set('Authorization', `Bearer ${a.accessToken}`)
+        .set('X-Tenant-Id', a.tenantId)
+        .expect(200);
+      expect(res.body).toHaveLength(1);
+    });
+  });
 });

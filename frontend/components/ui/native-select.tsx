@@ -11,6 +11,9 @@ export const NativeSelect = React.forwardRef<
     ref={ref}
     className={cn(
       'flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm',
+      // TKT-0090: the same invalid ring Input carries (ui/input.tsx) — an invalid select must
+      // not be indistinguishable from a valid one.
+      'aria-[invalid=true]:border-destructive',
       className,
     )}
     {...props}

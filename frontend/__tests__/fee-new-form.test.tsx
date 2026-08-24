@@ -4,12 +4,16 @@ import userEvent from '@testing-library/user-event';
 import NewFeePage from '@/app/(dashboard)/fees/new/page';
 import { AuthProvider } from '@/components/auth-provider';
 import { I18nProvider } from '@/components/i18n-provider';
+import { ToastViewport } from '@/components/toast';
 import { setAccessToken } from '@/lib/auth-storage';
 
 const replace = vi.fn();
+// TKT-0091: switchable per test — the page reads ?classId=/?traineeId= via useSearchParams.
+let search = '';
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ replace, push: vi.fn(), back: vi.fn() }),
   usePathname: () => '/fees/new',
+  useSearchParams: () => new URLSearchParams(search),
 }));
 
 function buildJwt(payload: Record<string, unknown>): string {
@@ -78,6 +82,7 @@ const TRAINEES = [
 function renderForm() {
   return render(
     <I18nProvider>
+      <ToastViewport />
       <AuthProvider>
         <NewFeePage />
       </AuthProvider>
@@ -95,6 +100,7 @@ describe('NewFeePage — amount', () => {
     const exp = Math.floor(Date.now() / 1000) + 600;
     setAccessToken(buildJwt({ sub: 'u', email: 'a@b', role: 'ADMIN', tenantId: 't', exp }));
     replace.mockClear();
+    search = '';
     postedBody = null;
     vi.spyOn(globalThis, 'fetch').mockImplementation((input, init) => {
       const url = typeof input === 'string' ? input : (input as Request).url;
@@ -179,6 +185,61 @@ describe('NewFeePage — amount', () => {
     },
   );
 
+  // TKT-0091: contextual create — query parameters preselect class/trainee, membership-checked.
+  it('preselects the class from ?classId= and lets it drive the amount', async () => {
+    search = 'classId=c-month';
+    renderForm();
+
+    const select = await screen.findByLabelText(classLabel);
+    await vi.waitFor(() => expect(select).toHaveValue('c-month'));
+    // AC #3: the TKT-0073 amount prefill runs off the prefilled class.
+    expect(await screen.findByDisplayValue('80')).toBeInTheDocument();
+  });
+
+  it('preselects the trainee from ?traineeId=', async () => {
+    search = 'traineeId=tr1';
+    renderForm();
+
+    const select = await screen.findByLabelText(/^Трениращ$|^Trainee$/);
+    await vi.waitFor(() => expect(select).toHaveValue('tr1'));
+  });
+
+  it('leaves nothing selected for ids that are not in the lists', async () => {
+    search = 'classId=bogus&traineeId=also-bogus';
+    renderForm();
+
+    expect(await screen.findByRole('option', { name: 'Judo monthly' })).toBeInTheDocument();
+    expect(screen.getByLabelText(classLabel)).toHaveValue('');
+    expect(screen.getByLabelText(/^Трениращ$|^Trainee$/)).toHaveValue('');
+  });
+
+  it('submitted unchanged, the created fee references both parents from the parameters', async () => {
+    search = 'classId=c-month&traineeId=tr1';
+    const user = userEvent.setup();
+    renderForm();
+
+    const select = await screen.findByLabelText(classLabel);
+    await vi.waitFor(() => expect(select).toHaveValue('c-month'));
+    await user.type(screen.getByLabelText(/Начало на периода|Period start/), '2026-03-01');
+    await user.type(screen.getByLabelText(/Край на периода|Period end/), '2026-03-31');
+
+    await user.click(screen.getByRole('button', { name: /Запазване|^Save$/ }));
+
+    await vi.waitFor(() => expect(postedBody).not.toBeNull());
+    expect(postedBody).toMatchObject({ classId: 'c-month', traineeId: 'tr1', amount: 80 });
+
+    // TKT-0092: stays on the form, confirms with a toast; the reset preserves both
+    // query-parameter parents, clears the period, and the amount re-primes off the class.
+    expect(await screen.findByText(/Запазено|^Saved$/)).toBeInTheDocument();
+    expect(replace).not.toHaveBeenCalled();
+    await vi.waitFor(() => {
+      expect(screen.getByLabelText(classLabel)).toHaveValue('c-month');
+      expect(screen.getByLabelText(/^Трениращ$|^Trainee$/)).toHaveValue('tr1');
+      expect(screen.getByLabelText(/Начало на периода|Period start/)).toHaveValue('');
+      expect(screen.getByLabelText(amountLabel)).toHaveValue(80);
+    });
+  });
+
   it('posts the amount as a number once the form is valid', async () => {
     const user = userEvent.setup();
     renderForm();
@@ -193,5 +254,24 @@ describe('NewFeePage — amount', () => {
     // Requests carry numbers, responses carry strings (api-response-aliases.test.ts pins both).
     expect(postedBody).toMatchObject({ classId: 'c-month', traineeId: 'tr1', amount: 80 });
     expect(typeof postedBody!.amount).toBe('number');
+  });
+
+  // TKT-0090: a failed field says what is wrong in words, wired for assistive tech.
+  it('says what is wrong and wires the a11y attributes when submitted empty', async () => {
+    const user = userEvent.setup();
+    renderForm();
+
+    await user.click(await screen.findByRole('button', { name: /Запазване|^Save$/ }));
+
+    const messages = await screen.findAllByText('Това поле е задължително.');
+    expect(messages.length).toBeGreaterThanOrEqual(3); // class, trainee, both period bounds
+    const classSelect = screen.getByLabelText(classLabel);
+    expect(classSelect).toHaveAttribute('aria-invalid', 'true');
+    expect(classSelect).toHaveAttribute('aria-describedby', 'classId-error');
+    const classError = messages.find((m) => m.id === 'classId-error');
+    expect(classError).toBeDefined();
+    expect(classError).toHaveAttribute('role', 'alert');
+    // The amount refine carries its own message.
+    expect(screen.getByText(/Сумата трябва|Amount must/)).toHaveAttribute('id', 'amount-error');
   });
 });

@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event';
 import FeeDetailPage from '@/app/(dashboard)/fees/[id]/page';
 import { AuthProvider } from '@/components/auth-provider';
 import { I18nProvider } from '@/components/i18n-provider';
+import { ToastViewport } from '@/components/toast';
 import { setAccessToken } from '@/lib/auth-storage';
 
 vi.mock('next/navigation', () => ({
@@ -40,11 +41,13 @@ const FEE_DETAIL_BASE = {
   class: { id: 'c1', name: 'Yoga 101', billingMode: 'PER_MONTH' },
   trainee: { id: 'tr1', firstName: 'Ada', lastName: 'Lovelace' },
   payments: [],
+  refunds: [],
 };
 
 function renderPage() {
   return render(
     <I18nProvider>
+      <ToastViewport />
       <AuthProvider>
         <FeeDetailPage />
       </AuthProvider>
@@ -132,6 +135,8 @@ describe('FeeDetailPage — payment ledger flow', () => {
 
       await vi.waitFor(() => expect(patched).not.toBeNull());
       expect(patched).toMatchObject({ amount: 75.5 });
+      // TKT-0092 AC — an in-place save confirms itself instead of only refetching a number.
+      expect(await screen.findByText(/Запазено|^Saved$/)).toBeInTheDocument();
     });
 
     it.each(['0', '-5', '1.234', '2000000'])(
@@ -148,7 +153,7 @@ describe('FeeDetailPage — payment ledger flow', () => {
         await user.type(document.getElementById('p-amount') as HTMLInputElement, value);
         await user.type(document.getElementById('p-paidAt') as HTMLInputElement, '2026-03-15');
         const buttons = saveButtons();
-        const last = buttons[buttons.length - 1];
+        const last = buttons[1]; // TKT-0105: the refund form appends a third Save; the payment one is second
         if (!last) throw new Error('expected the payment Save button');
         await user.click(last);
 
@@ -182,7 +187,7 @@ describe('FeeDetailPage — payment ledger flow', () => {
       await user.type(document.getElementById('p-amount') as HTMLInputElement, '150');
       await user.type(document.getElementById('p-paidAt') as HTMLInputElement, '2026-03-15');
       const buttons = saveButtons();
-      const last = buttons[buttons.length - 1];
+      const last = buttons[1]; // TKT-0105: the refund form appends a third Save; the payment one is second
       if (!last) throw new Error('expected the payment Save button');
       await user.click(last);
 
@@ -216,7 +221,7 @@ describe('FeeDetailPage — payment ledger flow', () => {
       await user.type(document.getElementById('p-amount') as HTMLInputElement, '150');
       await user.type(document.getElementById('p-paidAt') as HTMLInputElement, '2026-03-15');
       const buttons = saveButtons();
-      const last = buttons[buttons.length - 1];
+      const last = buttons[1]; // TKT-0105: the refund form appends a third Save; the payment one is second
       if (!last) throw new Error('expected the payment Save button');
       await user.click(last);
 
@@ -279,7 +284,7 @@ describe('FeeDetailPage — payment ledger flow', () => {
     await user.type(document.getElementById('p-method') as HTMLInputElement, 'cash');
     // Submit — second Save button (the first one is on the edit-fee form).
     const saveBtns = screen.getAllByRole('button', { name: /^Save$|^Запазване$/ });
-    const lastSave = saveBtns[saveBtns.length - 1];
+    const lastSave = saveBtns[1]; // TKT-0105: refund form appends a third Save; payment is second
     if (!lastSave) throw new Error('expected at least one Save button');
     await user.click(lastSave);
 
@@ -291,5 +296,248 @@ describe('FeeDetailPage — payment ledger flow', () => {
     });
     // Status badge flipped to PAID
     expect(screen.getAllByText(/^Paid$|^Платена$/).length).toBeGreaterThanOrEqual(1);
+    // TKT-0092 AC — recording a payment confirms itself with a toast.
+    expect(
+      await screen.findByText(/Payment recorded|Плащането е записано/),
+    ).toBeInTheDocument();
+  });
+
+  // TKT-0092 AC — a deleted payment raises a toast naming what was removed; the refetch stays.
+  it('confirms a deleted payment with a toast naming the amount', async () => {
+    const user = userEvent.setup();
+    const withPayment = {
+      ...FEE_DETAIL_BASE,
+      status: 'PAID',
+      payments: [
+        {
+          id: 'p1',
+          tenantId: 't',
+          feeId: 'f1',
+          amount: '100.00',
+          paidAt: '2026-03-15T00:00:00.000Z',
+          method: 'cash',
+          notes: null,
+          recordedById: 'u',
+          recordedByEmailSnapshot: 'admin@x',
+          recordedByNameSnapshot: null,
+          createdAt: '',
+        },
+      ],
+    };
+    let deleted = false;
+    vi.spyOn(globalThis, 'fetch').mockImplementation((input, init) => {
+      const url = typeof input === 'string' ? input : (input as Request).url;
+      const method = init?.method ?? 'GET';
+      if (url.endsWith('/fees/f1/payments/p1') && method === 'DELETE') {
+        deleted = true;
+        return Promise.resolve(jsonResponse(200, null));
+      }
+      if (url.endsWith('/fees/f1')) {
+        return Promise.resolve(jsonResponse(200, deleted ? FEE_DETAIL_BASE : withPayment));
+      }
+      return Promise.resolve(jsonResponse(404, null));
+    });
+
+    renderPage();
+    await screen.findByText(/cash/);
+    await user.click(screen.getByRole('button', { name: /^Delete$|^Изтриване$/ }));
+    // The confirm dialog's destructive action carries the same label.
+    const confirmButtons = await screen.findAllByRole('button', { name: /^Delete$|^Изтриване$/ });
+    const lastButton = confirmButtons[confirmButtons.length - 1];
+    if (!lastButton) throw new Error('expected the confirm button');
+    await user.click(lastButton);
+
+    expect(await screen.findByText(/Removed:|Премахнато:/)).toBeInTheDocument();
+    expect(deleted).toBe(true);
+  });
+
+  // TKT-0087 — the ledger adopts the same card mode as DataTable and the attendance roster.
+  it('labels each ledger cell and leaves the actions cell unlabelled', async () => {
+    const withPayment = {
+      ...FEE_DETAIL_BASE,
+      status: 'PAID',
+      payments: [
+        {
+          id: 'p1',
+          tenantId: 't',
+          feeId: 'f1',
+          amount: '100.00',
+          paidAt: '2026-03-15T00:00:00.000Z',
+          method: 'cash',
+          recordedByEmailSnapshot: 'admin@x',
+          createdAt: '',
+          updatedAt: '',
+        },
+      ],
+    };
+    vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
+      const url = typeof input === 'string' ? input : (input as Request).url;
+      if (url.endsWith('/fees/f1')) return Promise.resolve(jsonResponse(200, withPayment));
+      return Promise.resolve(jsonResponse(404, null));
+    });
+
+    const { container } = renderPage();
+    await screen.findByText(/cash/);
+
+    // Opted into the shared rule, not a copy of it.
+    const wrapper = container.querySelector('.pd-card-table');
+    expect(wrapper).not.toBeNull();
+
+    const row = wrapper!.querySelector('tbody tr') as HTMLElement;
+    const headers = Array.from(wrapper!.querySelectorAll('thead th')).map((th) =>
+      (th.textContent ?? '').trim(),
+    );
+    const cells = Array.from(row.querySelectorAll('td'));
+
+    // Four data columns are labelled with their own header text; the trailing actions cell is
+    // chrome, not a field, so it carries no label — same contract as DataTable's actions cell.
+    const labels = cells.map((td) => td.getAttribute('data-label'));
+    expect(labels.slice(0, 4)).toEqual(headers.slice(0, 4));
+    expect(labels.at(-1)).toBeNull();
+  });
+
+  // TKT-0105 — money out: the refunds ledger sits beside the payments ledger, and the page
+  // shows net paid (payments − refunds) instead of pretending gross is what the club holds.
+  describe('refund ledger', () => {
+    const PAID_FEE = {
+      ...FEE_DETAIL_BASE,
+      status: 'PAID',
+      payments: [
+        {
+          id: 'p1',
+          tenantId: 't',
+          feeId: 'f1',
+          amount: '100.00',
+          paidAt: '2026-03-15T00:00:00.000Z',
+          method: 'cash',
+          notes: null,
+          recordedById: 'u',
+          recordedByEmailSnapshot: 'admin@x',
+          recordedByNameSnapshot: null,
+          createdAt: '',
+        },
+      ],
+    };
+    const REFUND_ROW = {
+      id: 'r1',
+      tenantId: 't',
+      feeId: 'f1',
+      amount: '40.00',
+      refundedAt: '2026-03-20T00:00:00.000Z',
+      method: 'bank',
+      notes: null,
+      recordedById: 'u',
+      recordedByEmailSnapshot: 'admin@x',
+      recordedByNameSnapshot: null,
+      createdAt: '',
+    };
+
+    it('records a refund, refetches, and shows the refund row, net paid and the PARTIAL badge', async () => {
+      const user = userEvent.setup();
+      let postedBody: unknown = null;
+      let getCount = 0;
+      vi.spyOn(globalThis, 'fetch').mockImplementation((input, init) => {
+        const url = typeof input === 'string' ? input : (input as Request).url;
+        const method = init?.method ?? 'GET';
+        if (url.endsWith('/fees/f1') && method === 'GET') {
+          getCount += 1;
+          const body =
+            getCount === 1
+              ? PAID_FEE
+              : { ...PAID_FEE, status: 'PARTIAL', refunds: [REFUND_ROW] };
+          return Promise.resolve(jsonResponse(200, body));
+        }
+        if (url.endsWith('/fees/f1/refunds') && method === 'POST') {
+          postedBody = JSON.parse(init!.body as string);
+          return Promise.resolve(jsonResponse(201, REFUND_ROW));
+        }
+        return Promise.resolve(jsonResponse(404, null));
+      });
+
+      renderPage();
+      await screen.findByText(/Yoga 101/);
+      await user.type(document.getElementById('r-amount') as HTMLInputElement, '40');
+      await user.type(document.getElementById('r-refundedAt') as HTMLInputElement, '2026-03-20');
+      await user.type(document.getElementById('r-method') as HTMLInputElement, 'bank');
+      const saveBtns = screen.getAllByRole('button', { name: /^Save$|^Запазване$/ });
+      const refundSave = saveBtns[saveBtns.length - 1];
+      if (!refundSave) throw new Error('expected the refund Save button');
+      await user.click(refundSave);
+
+      await screen.findByText(/bank/);
+      expect(postedBody).toEqual({ amount: 40, refundedAt: '2026-03-20', method: 'bank' });
+      // Net paid = 100 − 40; the badge follows the server's recompute.
+      expect(screen.getByText(/Net paid|Нетно платено/)).toBeInTheDocument();
+      expect(screen.getByText(/^60\.00/)).toBeInTheDocument();
+      expect(screen.getAllByText(/^Partial|^Частично/).length).toBeGreaterThanOrEqual(1);
+      expect(
+        await screen.findByText(/Refund recorded|Възстановяването е записано/),
+      ).toBeInTheDocument();
+    });
+
+    it('confirms a deleted refund with a toast naming the amount', async () => {
+      const user = userEvent.setup();
+      const withRefund = { ...FEE_DETAIL_BASE, status: 'PARTIAL', refunds: [REFUND_ROW] };
+      let deleted = false;
+      vi.spyOn(globalThis, 'fetch').mockImplementation((input, init) => {
+        const url = typeof input === 'string' ? input : (input as Request).url;
+        const method = init?.method ?? 'GET';
+        if (url.endsWith('/fees/f1/refunds/r1') && method === 'DELETE') {
+          deleted = true;
+          return Promise.resolve(jsonResponse(200, null));
+        }
+        if (url.endsWith('/fees/f1')) {
+          return Promise.resolve(jsonResponse(200, deleted ? FEE_DETAIL_BASE : withRefund));
+        }
+        return Promise.resolve(jsonResponse(404, null));
+      });
+
+      renderPage();
+      await screen.findByText(/bank/);
+      await user.click(screen.getByRole('button', { name: /^Delete$|^Изтриване$/ }));
+      const confirmButtons = await screen.findAllByRole('button', { name: /^Delete$|^Изтриване$/ });
+      const lastButton = confirmButtons[confirmButtons.length - 1];
+      if (!lastButton) throw new Error('expected the confirm button');
+      await user.click(lastButton);
+
+      expect(await screen.findByText(/Removed:|Премахнато:/)).toBeInTheDocument();
+      expect(deleted).toBe(true);
+    });
+
+    // The over-refund rule lives on the server; its 400 carries a code the page must render
+    // in the active locale, same contract as the overpayment guard.
+    it('shows the over-refund reason in the active locale when the 400 carries a code', async () => {
+      const user = userEvent.setup();
+      vi.spyOn(globalThis, 'fetch').mockImplementation((input, init) => {
+        const url = typeof input === 'string' ? input : (input as Request).url;
+        const method = init?.method ?? 'GET';
+        if (url.endsWith('/fees/f1/refunds') && method === 'POST') {
+          return Promise.resolve(
+            jsonResponse(400, {
+              statusCode: 400,
+              message: 'Refund of 150 exceeds the net paid 100 on this fee',
+              error: 'BadRequest',
+              code: 'REFUND_EXCEEDS_NET_PAID',
+              params: { amount: 150, netPaid: '100' },
+            }),
+          );
+        }
+        if (url.endsWith('/fees/f1')) return Promise.resolve(jsonResponse(200, PAID_FEE));
+        return Promise.resolve(jsonResponse(404, null));
+      });
+
+      renderPage();
+      await screen.findByText(/Yoga 101/);
+      await user.type(document.getElementById('r-amount') as HTMLInputElement, '150');
+      await user.type(document.getElementById('r-refundedAt') as HTMLInputElement, '2026-03-20');
+      const saveBtns = screen.getAllByRole('button', { name: /^Save$|^Запазване$/ });
+      const refundSave = saveBtns[saveBtns.length - 1];
+      if (!refundSave) throw new Error('expected the refund Save button');
+      await user.click(refundSave);
+
+      const shown = await screen.findByText(/надвишава нетно платените 100/);
+      expect(shown).toBeInTheDocument();
+      expect(shown.textContent).toContain('150');
+    });
   });
 });

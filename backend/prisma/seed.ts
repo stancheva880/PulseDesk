@@ -1,7 +1,7 @@
 /**
- * Idempotent seed: Super Admin (from env), languages (en + bg, bg default),
- * dummy tenant with an Admin, a Teacher and a Customer (deterministic local-dev
- * passwords), plus a demo club populated well enough to exercise every screen.
+ * Idempotent seed: Super Admin (from env), dummy tenant with an Admin, a Teacher
+ * and a Customer (deterministic local-dev passwords), plus a demo club populated
+ * well enough to exercise every screen.
  *
  * Run with: `npm run seed` (or `npx prisma db seed`).
  */
@@ -70,18 +70,6 @@ export async function seed(prisma: PrismaClient): Promise<void> {
   }
   const seedDemo = shouldSeedDemoData(process.env.NODE_ENV);
 
-  // Languages — bg as default, en as second.
-  await prisma.language.upsert({
-    where: { code: 'bg' },
-    update: { name: 'Български', isDefault: true },
-    create: { code: 'bg', name: 'Български', isDefault: true },
-  });
-  await prisma.language.upsert({
-    where: { code: 'en' },
-    update: { name: 'English', isDefault: false },
-    create: { code: 'en', name: 'English', isDefault: false },
-  });
-
   // Super Admin (no memberships).
   const existingSuper = await prisma.user.findFirst({
     where: { email: superEmail, isSuperAdmin: true },
@@ -98,8 +86,8 @@ export async function seed(prisma: PrismaClient): Promise<void> {
     });
   }
 
-  // Demo data carries passwords hardcoded above, so it is dev/test only. Languages and
-  // the super admin above stay unconditional — seeding those in production is the point.
+  // Demo data carries passwords hardcoded above, so it is dev/test only. The super admin
+  // above stays unconditional — seeding that in production is the point.
   if (seedDemo) {
     // Dummy tenant.
     const tenant = await prisma.tenant.upsert({

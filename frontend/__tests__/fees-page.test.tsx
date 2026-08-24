@@ -4,11 +4,16 @@ import userEvent from '@testing-library/user-event';
 import FeesListPage from '@/app/(dashboard)/fees/page';
 import { AuthProvider } from '@/components/auth-provider';
 import { I18nProvider } from '@/components/i18n-provider';
+import { ToastViewport } from '@/components/toast';
 import { setAccessToken } from '@/lib/auth-storage';
 
+const push = vi.fn();
+// TKT-0096: the page reads ?month= — switchable per test.
+let search = '';
 vi.mock('next/navigation', () => ({
-  useRouter: () => ({ replace: vi.fn(), push: vi.fn(), back: vi.fn() }),
+  useRouter: () => ({ replace: vi.fn(), push, back: vi.fn() }),
   usePathname: () => '/fees',
+  useSearchParams: () => new URLSearchParams(search),
 }));
 
 function buildJwt(payload: Record<string, unknown>): string {
@@ -109,6 +114,7 @@ const CLASSES = [
 function renderPage() {
   return render(
     <I18nProvider>
+      <ToastViewport />
       <AuthProvider>
         <FeesListPage />
       </AuthProvider>
@@ -123,6 +129,7 @@ describe('FeesListPage', () => {
   });
   afterEach(() => {
     vi.restoreAllMocks();
+    search = '';
   });
 
   function mockFetch(handler: (url: string, init?: RequestInit) => Response | Promise<Response>) {
@@ -131,6 +138,45 @@ describe('FeesListPage', () => {
       return Promise.resolve(handler(url, init));
     });
   }
+
+  // TKT-0096: the fees chart links here with ?month= — it must land in the visible month
+  // filter and bound the request, so indication and clearing come with the existing input.
+  it('seeds the month filter from ?month= and bounds the request', async () => {
+    search = 'month=2026-03';
+    const urls: string[] = [];
+    mockFetch((url) => {
+      urls.push(url);
+      if (url.includes('/fees?') || url.endsWith('/fees')) return jsonResponse(200, paged(FEES));
+      if (url.includes('/trainees')) return jsonResponse(200, paged(TRAINEES));
+      if (url.includes('/classes')) return jsonResponse(200, paged(CLASSES));
+      return jsonResponse(404, null);
+    });
+    renderPage();
+    await screen.findByText('Ada Lovelace');
+
+    const feesRequest = urls.find((u) => u.includes('/fees?'));
+    expect(feesRequest).toContain('periodStartFrom=2026-03-01');
+    expect(feesRequest).toContain('periodStartTo=2026-03-31');
+    expect(screen.getByLabelText(/Month|Месец/)).toHaveValue('2026-03');
+  });
+
+  it('ignores a malformed ?month=', async () => {
+    search = 'month=garbage';
+    const urls: string[] = [];
+    mockFetch((url) => {
+      urls.push(url);
+      if (url.includes('/fees?') || url.endsWith('/fees')) return jsonResponse(200, paged(FEES));
+      if (url.includes('/trainees')) return jsonResponse(200, paged(TRAINEES));
+      if (url.includes('/classes')) return jsonResponse(200, paged(CLASSES));
+      return jsonResponse(404, null);
+    });
+    renderPage();
+    await screen.findByText('Ada Lovelace');
+
+    const feesRequest = urls.find((u) => u.includes('/fees'));
+    expect(feesRequest).not.toContain('periodStartFrom');
+    expect(screen.getByLabelText(/Month|Месец/)).toHaveValue('');
+  });
 
   it('renders one row per fee with trainee + class joined client-side AND outstanding column', async () => {
     mockFetch((url) => {
@@ -151,9 +197,13 @@ describe('FeesListPage', () => {
     expect(screen.getByText(/^0\.00 EUR$/)).toBeInTheDocument();
   });
 
-  it('global search filters rows by trainee name', async () => {
-    const user = userEvent.setup();
+  // TKT-0095: the free-text box asks the server — the old client-side filter over the 25
+  // loaded rows made a miss on page 2 look like an answer. Replaced per the TEST CHANGE
+  // REQUEST in .workflow/tech-plans/TKT-0095.md.
+  it('sends the query as the search parameter and resets to page 1', async () => {
+    const urls: string[] = [];
     mockFetch((url) => {
+      urls.push(url);
       if (url.includes('/trainees')) return jsonResponse(200, paged(TRAINEES));
       if (url.includes('/classes')) return jsonResponse(200, paged(CLASSES));
       if (url.includes('/fees')) return jsonResponse(200, paged(FEES));
@@ -161,10 +211,17 @@ describe('FeesListPage', () => {
     });
     renderPage();
     await screen.findByText('Ada Lovelace');
-    const searchBox = screen.getByPlaceholderText(/Search|Търсене/);
-    await user.type(searchBox, 'Bob');
-    expect(screen.queryByText('Ada Lovelace')).not.toBeInTheDocument();
-    expect(screen.getByText('Bob Builder')).toBeInTheDocument();
+
+    fireEvent.change(screen.getByPlaceholderText(/Search|Търсене/), {
+      target: { value: 'Bob' },
+    });
+
+    await waitFor(() => {
+      const last = urls.filter((u) => u.includes('/fees?')).pop()!;
+      const params = new URL(last, 'http://test.local').searchParams;
+      expect(params.get('search')).toBe('Bob');
+      expect(params.get('page')).toBe('1');
+    });
   });
 
   it('sorts by periodStart desc by default and toggles asc/desc on Amount header click', async () => {
@@ -264,6 +321,59 @@ describe('FeesListPage', () => {
       periodEnd: '2026-03-31',
     });
   });
+
+  // TKT-0110 — the third generator: no dates, the course class carries its own period.
+  it('Generate-course form posts the chosen classId to /fees/generate-course', async () => {
+    const user = userEvent.setup();
+    const courseClass = {
+      id: 'course-1',
+      tenantId: 't',
+      name: 'English Spring',
+      description: null,
+      billingMode: 'PER_COURSE',
+      monthlyAmount: null,
+      sessionPrice: null,
+      courseStart: '2026-03-01T00:00:00.000Z',
+      courseEnd: '2026-08-31T00:00:00.000Z',
+      coursePrice: '300',
+      capacity: null,
+      isActive: true,
+      createdAt: '',
+      updatedAt: '',
+    };
+    let postedTo: string | null = null;
+    let postedBody: unknown = null;
+    mockFetch((url, init) => {
+      if (url.endsWith('/fees/generate-course') && init?.method === 'POST') {
+        postedTo = url;
+        postedBody = JSON.parse(init.body as string);
+        return jsonResponse(200, { created: 2, skipped: 0 });
+      }
+      if (url.includes('/trainees')) return jsonResponse(200, paged(TRAINEES));
+      if (url.includes('/classes')) return jsonResponse(200, paged([...CLASSES, courseClass]));
+      if (url.includes('/fees')) return jsonResponse(200, paged(FEES));
+      return jsonResponse(404, null);
+    });
+    renderPage();
+    await screen.findByText('Ada Lovelace');
+
+    const courseCard = screen
+      .getByText(/Generate course fees|Генериране на курсови/)
+      .closest('div')!.parentElement!.parentElement! as HTMLElement;
+    // Only PER_COURSE classes are offered.
+    const select = within(courseCard).getByLabelText(/Class|Клас/) as HTMLSelectElement;
+    const optionLabels = Array.from(select.options).map((o) => o.textContent);
+    expect(optionLabels).toContain('English Spring');
+    expect(optionLabels).not.toContain(CLASSES[0]!.name);
+
+    await user.selectOptions(select, 'course-1');
+    const submitBtn = within(courseCard).getByRole('button', { name: /Generate|Генериране/ });
+    await user.click(submitBtn);
+
+    await screen.findByText(/Created 2 fee\(s\)|Създадени 2 такси/);
+    expect(postedTo).toContain('/fees/generate-course');
+    expect(postedBody).toEqual({ classId: 'course-1' });
+  });
   // The API always accepted classId and a period window; until now the page never sent them,
   // so "who still owes for this class this month" could not be asked from the UI at all.
   describe('class + month + outstanding filters', () => {
@@ -337,5 +447,44 @@ describe('FeesListPage', () => {
 
       expect(await screen.findByText(/Grace Hopper · Yoga 101/)).toBeInTheDocument();
     });
+  });
+});
+
+// TKT-0088 AC #5: fees passes `actions: undefined` for non-admins — no actions column at all —
+// and a non-admin must still open a fee by activating its row.
+describe('FeesListPage — row navigation', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    push.mockReset();
+  });
+
+  function signInAndMock(role: string) {
+    const exp = Math.floor(Date.now() / 1000) + 600;
+    setAccessToken(buildJwt({ sub: 'u', email: 'a@b', role, tenantId: 't', exp }));
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = typeof input === 'string' ? input : (input as Request).url;
+      if (url.includes('/trainees')) return jsonResponse(200, paged(TRAINEES));
+      if (url.includes('/classes')) return jsonResponse(200, paged(CLASSES));
+      if (url.includes('/fees')) return jsonResponse(200, paged(FEES));
+      return jsonResponse(200, {});
+    });
+  }
+
+  it('a non-admin opens the fee detail by activating the row', async () => {
+    signInAndMock('EMPLOYEE');
+    renderPage();
+
+    fireEvent.click(await screen.findByText('Ada Lovelace'));
+
+    expect(push).toHaveBeenCalledWith('/fees/f1');
+  });
+
+  it('an admin opens the fee detail by activating the row too', async () => {
+    signInAndMock('ADMIN');
+    renderPage();
+
+    fireEvent.click(await screen.findByText('Ada Lovelace'));
+
+    expect(push).toHaveBeenCalledWith('/fees/f1');
   });
 });

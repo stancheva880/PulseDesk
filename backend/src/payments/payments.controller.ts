@@ -8,7 +8,7 @@ import {
   Param,
   Post,
 } from '@nestjs/common';
-import { ApiBearerAuth } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { UserRole } from '@prisma/client';
 import { CurrentUser } from '@/auth/decorators/current-user.decorator';
 import { Roles } from '@/auth/decorators/roles.decorator';
@@ -25,6 +25,7 @@ import { PaymentsService } from './payments.service';
 export class PaymentsController {
   constructor(private readonly payments: PaymentsService) {}
 
+  @ApiOperation({ summary: 'List the payments recorded on one fee.' })
   @Get()
   @ResponseSchema('PaymentList', PaymentListSchema)
   list(
@@ -35,6 +36,7 @@ export class PaymentsController {
     return this.payments.listForFee(tenantId, feeId, user);
   }
 
+  @ApiOperation({ summary: 'Record a payment. Refused above the balance that is due.' })
   @Post()
   @Roles(UserRole.ADMIN)
   @ResponseSchema('Payment', PaymentSchema)
@@ -47,6 +49,7 @@ export class PaymentsController {
     return this.payments.record(tenantId, feeId, user, dto);
   }
 
+  @ApiOperation({ summary: 'Delete a payment entered by mistake. The fee status is set again.' })
   @Delete(':id')
   @Roles(UserRole.ADMIN)
   @HttpCode(HttpStatus.NO_CONTENT)

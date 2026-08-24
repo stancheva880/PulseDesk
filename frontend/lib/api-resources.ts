@@ -168,6 +168,8 @@ export function resetClubsRequest(): void {
 interface UserListFilters {
   /** Membership role in the acting club — the server matches it there, not on User. */
   role?: AppUserRole;
+  /** Substring over email/first/last name, four-casing fold server-side. Max 100 chars. */
+  search?: string;
 }
 
 export const Users = {
@@ -208,6 +210,13 @@ export const Locations = {
 // shape is this module's own business, and callers pass an object literal.
 interface ClassListFilters {
   isActive?: boolean;
+  /** Substring over the class name, four-casing fold server-side. Max 100 chars. */
+  search?: string;
+}
+
+interface TraineeListFilters {
+  /** Substring over email/first/last name, four-casing fold server-side. Max 100 chars. */
+  search?: string;
 }
 
 interface SessionListFilters {
@@ -215,6 +224,10 @@ interface SessionListFilters {
   startsAtFrom?: string;
   /** Exclusive upper bound — a week is half-open, so its last instant belongs to the next one. */
   startsAtBefore?: string;
+  /** TKT-0100: id filters AND together server-side; malformed (non-cuid) values are a 400. */
+  classId?: string;
+  trainerId?: string;
+  locationId?: string;
 }
 
 export const Classes = {
@@ -229,7 +242,7 @@ export const Classes = {
 };
 
 export const Trainees = {
-  list: (params: PageParams = {}) =>
+  list: (params: TraineeListFilters & PageParams = {}) =>
     apiRequest<PaginatedResult<Trainee>>(`/trainees${buildQuery({ ...params })}`),
   get: (id: string) => apiRequest<TraineeDetail>(`/trainees/${id}`),
   create: (input: CreateTraineeInput) =>
@@ -291,6 +304,10 @@ export type Attendance = components['schemas']['Attendance'];
 // three-column subset is enforced against ATTENDANCE_WITH_TRAINEE server-side (TKT-0038).
 export type AttendanceWithTrainee = components['schemas']['AttendanceWithTraineeList'][number];
 
+// TKT-0108: candidates envelope — items carry the card a booking would consume + hasCards.
+export type AttendanceCandidates = components['schemas']['AttendanceCandidates'];
+export type CandidateTrainee = AttendanceCandidates['items'][number];
+
 type BulkMarkAttendancesInput = components['schemas']['BulkMarkAttendancesDto'];
 type BulkMarkResult = components['schemas']['BulkMarkResult'];
 
@@ -349,14 +366,21 @@ export const Attendances = {
    * session open and apply them in the browser, which no pageSize could fix because neither filter
    * existed server-side (TKT-0071).
    */
-  listCandidates: (sessionId: string, params: PageParams = {}) =>
-    apiRequest<PaginatedResult<Trainee>>(
+  // TKT-0103: the envelope also says how many spots the session still has (null = unlimited).
+  // TKT-0108: each item carries the card a booking would consume + hasCards (warning trigger).
+  listCandidates: (sessionId: string, params: PageParams = {}): Promise<AttendanceCandidates> =>
+    apiRequest<components['schemas']['AttendanceCandidates']>(
       `/sessions/${sessionId}/attendance-candidates${buildQuery({ ...params })}`,
     ),
   addTrainee: (sessionId: string, traineeId: string) =>
     apiRequest<Attendance>(`/sessions/${sessionId}/attendances`, {
       method: 'POST',
       body: { traineeId },
+    }),
+  // TKT-0113: unbooking; on FIFO_AUTO classes the server promotes the queue head in-tx.
+  remove: (sessionId: string, attendanceId: string) =>
+    apiRequest<void>(`/sessions/${sessionId}/attendances/${attendanceId}`, {
+      method: 'DELETE',
     }),
   bulkMark: (sessionId: string, input: BulkMarkAttendancesInput) =>
     apiRequest<BulkMarkResult>(`/sessions/${sessionId}/attendances`, {
@@ -368,8 +392,66 @@ export const Attendances = {
       method: 'PATCH',
       body: input,
     }),
-  myUpcoming: () => apiRequest<CustomerSessionEntry[]>('/me/sessions'),
+  // TKT-0102: from (inclusive) / to (exclusive) bound the portal calendar's visible window;
+  // with a range the server drops its DEFAULT_LIST_TAKE cap, without one behaviour is as before.
+  myUpcoming: (params: { from?: string; to?: string } = {}) =>
+    apiRequest<CustomerSessionEntry[]>(`/me/sessions${buildQuery({ ...params })}`),
+  // TKT-0118: the customer booking door — same body shape as addTrainee, customer-gated
+  // server-side (self-booking flag, enrollment, cutoff, capacity).
+  book: (sessionId: string, traineeId: string) =>
+    apiRequest<Attendance>(`/me/sessions/${sessionId}/bookings`, {
+      method: 'POST',
+      body: { traineeId },
+    }),
+  // TKT-0119: addressed by trainee — the portal knows the trainee, not the attendance id.
+  // The freed spot runs the same waitlist machinery as the staff removal.
+  cancelBooking: (sessionId: string, traineeId: string) =>
+    apiRequest<void>(`/me/sessions/${sessionId}/bookings/${traineeId}`, {
+      method: 'DELETE',
+    }),
 };
+
+// === Waitlist (TKT-0112) ===
+
+// Per-session queue rows, createdAt order = position.
+export type WaitlistEntry = components['schemas']['WaitlistEntryList'][number];
+
+type CreateWaitlistEntryInput = components['schemas']['CreateWaitlistEntryDto'];
+type ClaimWaitlistInput = components['schemas']['ClaimWaitlistDto'];
+
+export const Waitlist = {
+  // TKT-0114: @Public() route — the token is the authorization; works with no session
+  // (apiRequest simply attaches nothing when logged out).
+  claim: (input: ClaimWaitlistInput) =>
+    apiRequest<components['schemas']['ClaimResult']>('/waitlist/claim', {
+      method: 'POST',
+      body: input,
+    }),
+  list: (sessionId: string) =>
+    apiRequest<WaitlistEntry[]>(`/sessions/${sessionId}/waitlist`),
+  // POST returns the bare entry — trainee names come from the list.
+  join: (sessionId: string, input: CreateWaitlistEntryInput) =>
+    apiRequest<components['schemas']['WaitlistEntry']>(`/sessions/${sessionId}/waitlist`, {
+      method: 'POST',
+      body: input,
+    }),
+  remove: (sessionId: string, id: string) =>
+    apiRequest<void>(`/sessions/${sessionId}/waitlist/${id}`, { method: 'DELETE' }),
+  // TKT-0121: the customer doors, addressed by trainee — the portal never sees an entry id.
+  // Leaving is ungated by the cutoff server-side, so the button may stay up when Book is gone.
+  joinMine: (sessionId: string, traineeId: string) =>
+    apiRequest<components['schemas']['WaitlistEntry']>(`/me/sessions/${sessionId}/waitlist`, {
+      method: 'POST',
+      body: { traineeId },
+    }),
+  leaveMine: (sessionId: string, traineeId: string) =>
+    apiRequest<void>(`/me/sessions/${sessionId}/waitlist/${traineeId}`, { method: 'DELETE' }),
+  // TKT-0122: SUPER_ADMIN-only maintenance sweep, platform-wide — no tenant argument.
+  sweep: () =>
+    apiRequest<WaitlistSweepResult>('/waitlists/sweep', { method: 'POST' }),
+};
+
+export type WaitlistSweepResult = components['schemas']['WaitlistSweepResult'];
 
 // === Phase 4 — Fees, Payments, Dashboard ===
 
@@ -394,6 +476,7 @@ type UpdateFeeInput = components['schemas']['UpdateFeeDto'];
 
 type GenerateMonthlyFeesInput = components['schemas']['GenerateMonthlyFeesDto'];
 type GenerateSessionFeesInput = components['schemas']['GenerateSessionFeesDto'];
+type GenerateCourseFeesInput = components['schemas']['GenerateCourseFeesDto'];
 export type GenerateFeesResult = components['schemas']['GenerateResult'];
 
 /** OUTSTANDING is UNPAID + PARTIAL — a query value, not a fee state. See the backend DTO. */
@@ -408,11 +491,18 @@ interface FeeListFilters {
   traineeId?: string;
   periodStartFrom?: string;
   periodStartTo?: string;
+  /** Substring over the fee's trainee (email/first/last), four-casing fold server-side. */
+  search?: string;
 }
 
 export type Payment = components['schemas']['Payment'];
 
 type CreatePaymentInput = components['schemas']['CreatePaymentDto'];
+
+// TKT-0105: money out — the second ledger on a fee.
+export type Refund = components['schemas']['Refund'];
+
+type CreateRefundInput = components['schemas']['CreateRefundDto'];
 
 function buildQuery(params: Record<string, unknown>): string {
   const entries = Object.entries(params)
@@ -450,6 +540,12 @@ export const Fees = {
       method: 'POST',
       body: input,
     }),
+  // TKT-0110: the course class carries its own period and price — only the filter travels.
+  generateCourse: (input: GenerateCourseFeesInput) =>
+    apiRequest<GenerateFeesResult>('/fees/generate-course', {
+      method: 'POST',
+      body: input,
+    }),
 };
 
 export const Payments = {
@@ -457,6 +553,36 @@ export const Payments = {
     apiRequest<Payment>(`/fees/${feeId}/payments`, { method: 'POST', body: input }),
   remove: (feeId: string, id: string) =>
     apiRequest<void>(`/fees/${feeId}/payments/${id}`, { method: 'DELETE' }),
+};
+
+export const Refunds = {
+  record: (feeId: string, input: CreateRefundInput) =>
+    apiRequest<Refund>(`/fees/${feeId}/refunds`, { method: 'POST', body: input }),
+  remove: (feeId: string, id: string) =>
+    apiRequest<void>(`/fees/${feeId}/refunds/${id}`, { method: 'DELETE' }),
+};
+
+// === Visit cards (TKT-0106) ===
+
+// Card rows carry the derived visit counters server-side; classId null = whole club.
+export type CardRow = components['schemas']['PaginatedCardRow']['items'][number];
+
+type CreateCardInput = components['schemas']['CreateCardDto'];
+
+// TKT-0116: the portal's read-only card rows (visits, expiry, scope, cancelled flag).
+export type CustomerCardEntry = components['schemas']['CustomerCardEntryList'][number];
+
+export const Cards = {
+  list: (filters: { traineeId?: string } & PageParams = {}) =>
+    apiRequest<PaginatedResult<CardRow>>(
+      `/cards${buildQuery({ ...filters } as Record<string, unknown>)}`,
+    ),
+  create: (input: CreateCardInput) =>
+    apiRequest<CardRow>('/cards', { method: 'POST', body: input }),
+  // TKT-0115: one-way; the refund half of the flow goes through Refunds.record.
+  cancel: (id: string) => apiRequest<CardRow>(`/cards/${id}/cancel`, { method: 'POST' }),
+  // TKT-0116: the customer's own cards (linked + guarded trainees), server-side filtered.
+  myCards: () => apiRequest<CustomerCardEntry[]>('/me/cards'),
 };
 
 // Dashboard sums are numbers by design: DashboardService aggregates and rounds each bucket,

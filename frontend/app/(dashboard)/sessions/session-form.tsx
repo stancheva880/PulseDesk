@@ -8,10 +8,12 @@ import { useTranslation } from 'react-i18next';
 import { z } from 'zod';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { FieldError, SubmitError } from '@/components/ui/field-error';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { apiErrorMessage } from '@/lib/api';
+import { showToast } from '@/components/toast';
 import {
   Classes,
   Locations,
@@ -44,22 +46,23 @@ const SESSION_STATUSES = ['SCHEDULED', 'COMPLETED', 'CANCELLED'] as const satisf
 // `datetime-local` produces "YYYY-MM-DDTHH:MM" without a timezone — we treat it as
 // local time and convert to a full ISO string at submit time. Backend stores UTC.
 // classId is create-only (a session can't move to another class); status is edit-only.
+// TKT-0090: zod messages carry i18n keys; FieldError translates them.
 const baseSchema = z.object({
   classId: z.string(),
-  locationId: z.string().min(1),
-  startsAt: z.string().min(1),
-  endsAt: z.string().min(1),
+  locationId: z.string().min(1, 'common.errors.required'),
+  startsAt: z.string().min(1, 'common.errors.required'),
+  endsAt: z.string().min(1, 'common.errors.required'),
   status: z.enum(SESSION_STATUSES),
   trainerIds: z.array(z.string()),
-  notes: z.string().max(2000).optional(),
+  notes: z.string().max(2000, 'common.errors.tooLong').optional(),
 });
 
 const endAfterStart = {
   path: ['endsAt'] as ['endsAt'],
-  message: 'endsBeforeStarts',
+  message: 'sessions.errors.endsBeforeStarts',
 };
 const createSchema = baseSchema
-  .extend({ classId: z.string().min(1) })
+  .extend({ classId: z.string().min(1, 'common.errors.required') })
   .refine((v) => new Date(v.endsAt).getTime() > new Date(v.startsAt).getTime(), endAfterStart);
 const editSchema = baseSchema.refine(
   (v) => new Date(v.endsAt).getTime() > new Date(v.startsAt).getTime(),
@@ -67,6 +70,16 @@ const editSchema = baseSchema.refine(
 );
 
 type FormValues = z.infer<typeof baseSchema>;
+
+const createDefaults = (classId: string): FormValues => ({
+  classId,
+  locationId: '',
+  startsAt: '',
+  endsAt: '',
+  status: 'SCHEDULED',
+  trainerIds: [],
+  notes: '',
+});
 
 function isoToLocal(iso: string): string {
   // Render the existing UTC time as a local "datetime-local" value (no seconds, no TZ).
@@ -79,7 +92,16 @@ function localToIso(local: string): string {
 }
 
 // id comes from the edit page's route params; create mode has none.
-export function SessionForm({ mode, id = '' }: { mode: 'create' | 'edit'; id?: string }) {
+// initialClassId is the new page's ?classId= — a contextual-create prefill (TKT-0091).
+export function SessionForm({
+  mode,
+  id = '',
+  initialClassId,
+}: {
+  mode: 'create' | 'edit';
+  id?: string;
+  initialClassId?: string;
+}) {
   const { t } = useTranslation();
   const router = useRouter();
 
@@ -95,19 +117,24 @@ export function SessionForm({ mode, id = '' }: { mode: 'create' | 'edit'; id?: s
     control,
     handleSubmit,
     reset,
+    setValue,
     formState: { errors, isSubmitting },
   } = useForm<FormValues>({
     resolver: zodResolver(mode === 'create' ? createSchema : editSchema),
-    defaultValues: {
-      classId: '',
-      locationId: '',
-      startsAt: '',
-      endsAt: '',
-      status: 'SCHEDULED',
-      trainerIds: [],
-      notes: '',
-    },
+    defaultValues: createDefaults(''),
   });
+
+  // The query-parameter parent, kept only when it is in the tenant-scoped list — a malformed or
+  // foreign ?classId= is simply absent, so a bad link degrades to no selection (TKT-0091).
+  const prefilledClassId =
+    initialClassId && classes.some((c) => c.id === initialClassId) ? initialClassId : '';
+
+  // TKT-0127: a deactivated hall is not offered — the backend refuses it (400 LOCATION_INACTIVE)
+  // and an ADMIN cannot reactivate it, since locations are SUPER_ADMIN-only. The row's own hall
+  // stays in the list even when retired: react-hook-form keeps `locationId` in its own state, so
+  // the *saved* value would survive either way, but a select with no matching <option> renders
+  // the first one — the form would show a hall this session is not at.
+  const selectableLocations = locations.filter((l) => l.isActive || l.id === session?.locationId);
 
   useEffect(() => {
     if (mode === 'create') {
@@ -142,6 +169,13 @@ export function SessionForm({ mode, id = '' }: { mode: 'create' | 'edit'; id?: s
       .catch((e: unknown) => setLoadError(apiErrorMessage(e)));
   }, [mode, id, reset]);
 
+  // Apply the prefill after the options render: setting a native select to a value with no
+  // matching <option> is silently ignored, so this cannot live in the fetch handler above.
+  useEffect(() => {
+    if (mode !== 'create' || !prefilledClassId) return;
+    setValue('classId', prefilledClassId);
+  }, [mode, prefilledClassId, setValue]);
+
   const onSubmit = async (values: FormValues) => {
     setSubmitError(null);
     try {
@@ -154,6 +188,9 @@ export function SessionForm({ mode, id = '' }: { mode: 'create' | 'edit'; id?: s
           trainerIds: values.trainerIds.length ? values.trainerIds : undefined,
           notes: values.notes || undefined,
         });
+        // TKT-0092: stay on the form, ready for the next record — the query-parameter
+        // parent survives the reset.
+        reset(createDefaults(prefilledClassId));
       } else {
         await Sessions.update(id, {
           locationId: values.locationId,
@@ -164,7 +201,7 @@ export function SessionForm({ mode, id = '' }: { mode: 'create' | 'edit'; id?: s
           notes: values.notes || undefined,
         });
       }
-      router.replace('/sessions');
+      showToast({ text: t('common.savedToast'), variant: 'success' });
     } catch (e) {
       setSubmitError(apiErrorMessage(e));
     }
@@ -193,7 +230,8 @@ export function SessionForm({ mode, id = '' }: { mode: 'create' | 'edit'; id?: s
                   <Label htmlFor="classId">{t('sessions.fields.class')}</Label>
                   <NativeSelect
                     id="classId"
-                    aria-invalid={Boolean(errors.classId)}
+                    aria-invalid={errors.classId ? true : undefined}
+                    aria-describedby={errors.classId ? 'classId-error' : undefined}
                     {...register('classId')}
                   >
                     <option value="">—</option>
@@ -203,6 +241,7 @@ export function SessionForm({ mode, id = '' }: { mode: 'create' | 'edit'; id?: s
                       </option>
                     ))}
                   </NativeSelect>
+                  <FieldError id="classId-error" messageKey={errors.classId?.message} />
                 </div>
               ) : (
                 <div className="space-y-1.5">
@@ -217,16 +256,18 @@ export function SessionForm({ mode, id = '' }: { mode: 'create' | 'edit'; id?: s
                 <Label htmlFor="locationId">{t('sessions.fields.location')}</Label>
                 <NativeSelect
                   id="locationId"
-                  aria-invalid={Boolean(errors.locationId)}
+                  aria-invalid={errors.locationId ? true : undefined}
+                  aria-describedby={errors.locationId ? 'locationId-error' : undefined}
                   {...register('locationId')}
                 >
                   {mode === 'create' ? <option value="">—</option> : null}
-                  {locations.map((l) => (
+                  {selectableLocations.map((l) => (
                     <option key={l.id} value={l.id}>
                       {l.name}
                     </option>
                   ))}
                 </NativeSelect>
+                <FieldError id="locationId-error" messageKey={errors.locationId?.message} />
               </div>
 
               <div className="grid gap-4 sm:grid-cols-2">
@@ -235,23 +276,22 @@ export function SessionForm({ mode, id = '' }: { mode: 'create' | 'edit'; id?: s
                   <Input
                     id="startsAt"
                     type="datetime-local"
-                    aria-invalid={Boolean(errors.startsAt)}
+                    aria-invalid={errors.startsAt ? true : undefined}
+                    aria-describedby={errors.startsAt ? 'startsAt-error' : undefined}
                     {...register('startsAt')}
                   />
+                  <FieldError id="startsAt-error" messageKey={errors.startsAt?.message} />
                 </div>
                 <div className="space-y-1.5">
                   <Label htmlFor="endsAt">{t('sessions.fields.endsAt')}</Label>
                   <Input
                     id="endsAt"
                     type="datetime-local"
-                    aria-invalid={Boolean(errors.endsAt)}
+                    aria-invalid={errors.endsAt ? true : undefined}
+                    aria-describedby={errors.endsAt ? 'endsAt-error' : undefined}
                     {...register('endsAt')}
                   />
-                  {errors.endsAt?.message === 'endsBeforeStarts' ? (
-                    <p className="text-xs text-destructive">
-                      {t('sessions.errors.endsBeforeStarts')}
-                    </p>
-                  ) : null}
+                  <FieldError id="endsAt-error" messageKey={errors.endsAt?.message} />
                 </div>
               </div>
 
@@ -294,10 +334,17 @@ export function SessionForm({ mode, id = '' }: { mode: 'create' | 'edit'; id?: s
 
               <div className="space-y-1.5">
                 <Label htmlFor="notes">{t('sessions.fields.notes')}</Label>
-                <Textarea id="notes" rows={3} {...register('notes')} />
+                <Textarea
+                  id="notes"
+                  rows={3}
+                  aria-invalid={errors.notes ? true : undefined}
+                  aria-describedby={errors.notes ? 'notes-error' : undefined}
+                  {...register('notes')}
+                />
+                <FieldError id="notes-error" messageKey={errors.notes?.message} />
               </div>
 
-              {submitError ? <p className="text-sm text-destructive">{submitError}</p> : null}
+              <SubmitError message={submitError} />
 
               <div className="flex gap-2">
                 <Button type="submit" disabled={isSubmitting}>

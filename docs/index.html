@@ -32,7 +32,7 @@
       </li>
       <li>
         <h3>Администратор</h3>
-        <p>Управлява своя клуб: трениращи, класове, графици, такси, потребители.</p>
+        <p>Управлява своя клуб: трениращи, класове, графици, такси, карти, потребители.</p>
         <a class="go" href="bg/admin.html">Отваряне →</a>
       </li>
       <li>
@@ -42,8 +42,19 @@
       </li>
       <li>
         <h3>Клиент (трениращ или родител)</h3>
-        <p>Вижда своя график, потвърждава участие и следи таксите си.</p>
+        <p>
+          Вижда своя график, потвърждава участие, следи таксите и картите си, а когато клубът
+          позволи — записва се и се отписва сам.
+        </p>
         <a class="go" href="bg/klient.html">Отваряне →</a>
+      </li>
+      <li>
+        <h3>Примерни настройки</h3>
+        <p>
+          Пет вида дейност — пилатес студио, танцова школа, салон, HIIT зала, летен лагер — и как
+          се настройва всяка от тях, роля по роля.
+        </p>
+        <a class="go" href="bg/primeri.html">Отваряне →</a>
       </li>
     </ul>
 
@@ -61,7 +72,7 @@
       </li>
       <li>
         <h3>Administrator</h3>
-        <p>Runs one club: trainees, classes, schedules, fees, users.</p>
+        <p>Runs one club: trainees, classes, schedules, fees, visit cards, users.</p>
         <a class="go" href="en/admin.html">Open →</a>
       </li>
       <li>
@@ -71,8 +82,19 @@
       </li>
       <li>
         <h3>Customer (trainee or parent)</h3>
-        <p>Sees their schedule, confirms attendance and follows their fees.</p>
+        <p>
+          Sees their schedule, confirms attendance, follows their fees and visit cards, and — when
+          the club allows it — books and cancels their own spot.
+        </p>
         <a class="go" href="en/customer.html">Open →</a>
+      </li>
+      <li>
+        <h3>Example setups</h3>
+        <p>
+          Five kinds of business — a pilates studio, a dance school, a salon, a HIIT gym, a summer
+          camp — and how each one is built, role by role.
+        </p>
+        <a class="go" href="en/examples.html">Open →</a>
       </li>
     </ul>
 
@@ -128,7 +150,14 @@
           <td class="yes">пълен</td>
           <td class="yes">пълен</td>
           <td class="yes">пълен</td>
-          <td class="no">не</td>
+          <td>само своите, ако класът позволява</td>
+        </tr>
+        <tr>
+          <td>Чакащи · Waitlist</td>
+          <td class="yes">пълен</td>
+          <td class="yes">пълен</td>
+          <td class="yes">пълен</td>
+          <td>само своите, ако класът позволява</td>
         </tr>
         <tr>
           <td>Трениращи · Trainees</td>
@@ -145,6 +174,13 @@
           <td>само своите</td>
         </tr>
         <tr>
+          <td>Карти · Visit cards</td>
+          <td class="yes">пълен</td>
+          <td class="yes">пълен</td>
+          <td>само четене</td>
+          <td>само своите</td>
+        </tr>
+        <tr>
           <td>Потребители · Users</td>
           <td class="yes">пълен</td>
           <td class="yes">пълен</td>
@@ -152,7 +188,14 @@
           <td class="no">не</td>
         </tr>
         <tr>
-          <td>Портал (Моят график, Моите такси)</td>
+          <td>Поддръжка · Maintenance</td>
+          <td class="yes">да</td>
+          <td class="no">не</td>
+          <td class="no">не</td>
+          <td class="no">не</td>
+        </tr>
+        <tr>
+          <td>Портал (Моят график, Моите такси, Моите карти)</td>
           <td class="no">не</td>
           <td class="no">не</td>
           <td class="no">не</td>

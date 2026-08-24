@@ -25,6 +25,7 @@ export default function PortalLayout({ children }: { children: ReactNode }) {
   const navItems = [
     { href: '/portal/schedule', labelKey: 'portal.navSchedule' },
     { href: '/portal/fees', labelKey: 'portal.navFees' },
+    { href: '/portal/cards', labelKey: 'portal.navCards' },
   ];
 
   const portalNav = (

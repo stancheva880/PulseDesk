@@ -21,8 +21,12 @@ FROM deps AS build
 # what the *browser* uses to reach the API (host-mapped port on a single host).
 ARG NEXT_PUBLIC_API_URL=http://localhost:4000
 ARG NEXT_PUBLIC_DEFAULT_LOCALE=bg
+# Empty = frontend error tracking off, which is the default. Because it is inlined here, the
+# runtime environment cannot switch it on later — enabling it is a rebuild, not a restart.
+ARG NEXT_PUBLIC_SENTRY_DSN=
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 ENV NEXT_PUBLIC_DEFAULT_LOCALE=$NEXT_PUBLIC_DEFAULT_LOCALE
+ENV NEXT_PUBLIC_SENTRY_DSN=$NEXT_PUBLIC_SENTRY_DSN
 COPY frontend ./frontend
 RUN npm run build --workspace frontend
 

@@ -1,12 +1,15 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { buildCsp } from '@/lib/csp';
+import { SENTRY_DSN, sentryIngestOrigin } from '@/lib/sentry';
 
 const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
 const isDev = process.env.NODE_ENV !== 'production';
+// Null without a DSN — the policy then stays exactly as before TKT-0098.
+const sentryOrigin = sentryIngestOrigin(SENTRY_DSN);
 
 export function middleware(request: NextRequest): NextResponse {
   const nonce = crypto.randomUUID().replace(/-/g, '');
-  const csp = buildCsp(nonce, isDev, apiUrl);
+  const csp = buildCsp(nonce, isDev, apiUrl, sentryOrigin);
 
   // Next reads the CSP off the *request* headers to discover the nonce and stamps it on
   // the bootstrap/streaming scripts it injects itself. Skip this and those scripts are

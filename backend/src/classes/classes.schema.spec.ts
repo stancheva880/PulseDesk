@@ -13,6 +13,15 @@ const runtimeRow = {
   billingMode: 'PER_MONTH',
   monthlyAmount: new Prisma.Decimal('80.00'),
   sessionPrice: null,
+  courseStart: null,
+  courseEnd: null,
+  coursePrice: null,
+  capacity: null,
+  waitlistMode: 'NONE',
+  // TKT-0117: fixture completion — the schema parses lossless-or-fail, so new required
+  // columns must appear here; no assertion changed.
+  allowSelfBooking: false,
+  bookingCutoffMin: null,
   isActive: true,
   createdAt: new Date('2026-08-17T10:00:00.000Z'),
   updatedAt: new Date('2026-08-17T11:30:00.000Z'),
@@ -38,6 +47,23 @@ describe('ClassRowSchema', () => {
     const { isActive: _dropped, ...withoutIsActive } = runtimeRow;
     const result = ClassRowSchema.safeParse(withoutIsActive);
     expect(result.success).toBe(false);
+  });
+
+  // TKT-0109: the third mode's fields ride the same Decimal/Date-to-string transforms.
+  it('parses a PER_COURSE row with dates and price as wire strings', () => {
+    const parsed = ClassRowSchema.parse({
+      ...runtimeRow,
+      billingMode: 'PER_COURSE',
+      monthlyAmount: null,
+      courseStart: new Date('2026-03-01T00:00:00.000Z'),
+      courseEnd: new Date('2026-08-31T00:00:00.000Z'),
+      coursePrice: new Prisma.Decimal('300.00'),
+    });
+    expect(parsed.billingMode).toBe('PER_COURSE');
+    expect(parsed.courseStart).toBe('2026-03-01T00:00:00.000Z');
+    expect(parsed.courseEnd).toBe('2026-08-31T00:00:00.000Z');
+    expect(parsed.coursePrice).toBe('300');
+    expect(typeof parsed.coursePrice).toBe('string');
   });
 });
 

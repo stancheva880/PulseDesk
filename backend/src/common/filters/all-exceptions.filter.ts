@@ -7,6 +7,7 @@ import {
   type ExceptionFilter,
 } from '@nestjs/common';
 import type { Request, Response } from 'express';
+import * as Sentry from '@sentry/nestjs';
 
 // What a throw site adds when the message is one a user can act on, so the client can
 // show it in the user's language: `throw new BadRequestException({ message, code, params })`.
@@ -22,7 +23,7 @@ interface CodedResponse {
 export class AllExceptionsFilter implements ExceptionFilter {
   private readonly logger = new Logger(AllExceptionsFilter.name);
 
-  catch(exception: unknown, host: ArgumentsHost): void {
+  async catch(exception: unknown, host: ArgumentsHost): Promise<void> {
     const ctx = host.switchToHttp();
     const response = ctx.getResponse<Response>();
     const request = ctx.getRequest<Request>();
@@ -32,6 +33,17 @@ export class AllExceptionsFilter implements ExceptionFilter {
     if (statusCode >= HttpStatus.INTERNAL_SERVER_ERROR) {
       const stack = exception instanceof Error ? exception.stack : String(exception);
       this.logger.error(`${request.method} ${request.url} -> ${statusCode}: ${message}`, stack);
+      // getClient() is undefined unless instrument.ts initialized the SDK (SENTRY_DSN set),
+      // so the DSN-less path costs nothing. The flush must complete BEFORE the response:
+      // Vercel freezes the function when the response ends, and a buffered event would be
+      // lost (TKT-0097). Worst case this holds a 5xx response for 2s; 4xx and the happy
+      // path never enter this branch. A flush failure must never break the response.
+      if (Sentry.getClient()) {
+        Sentry.captureException(exception, {
+          contexts: { request: { method: request.method, url: request.url } },
+        });
+        await Sentry.flush(2000).catch(() => undefined);
+      }
     }
 
     const body = {

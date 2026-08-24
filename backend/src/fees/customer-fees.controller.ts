@@ -1,5 +1,5 @@
 import { Controller, Get } from '@nestjs/common';
-import { ApiBearerAuth } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { UserRole } from '@prisma/client';
 import { CurrentUser } from '@/auth/decorators/current-user.decorator';
 import { Roles } from '@/auth/decorators/roles.decorator';
@@ -17,6 +17,7 @@ import { FeesService } from './fees.service';
 export class CustomerFeesController {
   constructor(private readonly fees: FeesService) {}
 
+  @ApiOperation({ summary: 'List the fees of the family, for the portal.' })
   @Get()
   @ResponseSchema('CustomerFeeEntryList', CustomerFeeEntryListSchema)
   list(@TenantId() tenantId: string, @CurrentUser() user: AuthenticatedUser) {

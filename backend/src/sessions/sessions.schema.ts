@@ -1,6 +1,6 @@
 import { SessionStatus } from '@prisma/client';
 import { z } from 'zod';
-import { BillingModeSchema } from '@/classes/classes.schema';
+import { BillingModeSchema, WaitlistModeSchema } from '@/classes/classes.schema';
 import { isoDate, paginatedSchema } from '@/common/response-schema';
 import { LocationRefSchema } from '@/locations/locations.schema';
 
@@ -24,6 +24,9 @@ export const SessionSchema = z.object({
   notes: z.string().nullable(),
   createdAt: isoDate,
   updatedAt: isoDate,
+  // TKT-0103: present on list rows only (occupancy for the calendar's X/Y chips);
+  // create/update return the bare row, hence optional.
+  _count: z.object({ attendances: z.number().int() }).optional(),
 });
 
 export const PaginatedSessionSchema = paginatedSchema(SessionSchema);
@@ -31,7 +34,14 @@ export const PaginatedSessionSchema = paginatedSchema(SessionSchema);
 // Exactly the three relation subsets sessions.service.ts:79-83 selects, and no more —
 // .parse() strips anything a future include adds.
 export const SessionDetailSchema = SessionSchema.extend({
-  class: z.object({ id: z.string(), name: z.string(), billingMode: BillingModeSchema }),
+  class: z.object({
+    id: z.string(),
+    name: z.string(),
+    billingMode: BillingModeSchema,
+    capacity: z.number().int().nullable(),
+    // TKT-0112: the attendance page decides whether to offer the waitlist from this.
+    waitlistMode: WaitlistModeSchema,
+  }),
   location: LocationRefSchema,
   trainers: z.array(
     z.object({

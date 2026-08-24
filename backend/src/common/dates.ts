@@ -1,4 +1,4 @@
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, ConflictException } from '@nestjs/common';
 
 // Two deliberate families — do not "unify" them:
 //  * Local — club wall-clock semantics. A schedule "Monday 18:00" must generate a
@@ -36,6 +36,34 @@ export function startOfMonth(d: Date): Date {
 
 export function endOfMonth(d: Date): Date {
   return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0, 23, 59, 59, 999));
+}
+
+// TKT-0120: the one time rule for self-service on a session — booking, cancelling and the
+// automatic waitlist backfill all read it, so they cannot disagree. A null cutoff closes at
+// the start itself, which also makes every started session closed.
+export function selfServiceClosed(
+  startsAt: Date,
+  bookingCutoffMin: number | null,
+  now: Date,
+): boolean {
+  return now.getTime() >= startsAt.getTime() - (bookingCutoffMin ?? 0) * 60_000;
+}
+
+/**
+ * The 409 face of the rule above — the customer write doors' time gate (booking, cancelling and
+ * queueing all answer identically, TKT-0117..0121).
+ */
+export function assertBookingOpen(
+  startsAt: Date,
+  bookingCutoffMin: number | null,
+  now: Date,
+): void {
+  if (selfServiceClosed(startsAt, bookingCutoffMin, now)) {
+    throw new ConflictException({
+      message: 'Booking for this session has closed',
+      code: 'BOOKING_CLOSED',
+    });
+  }
 }
 
 // Shared start/end ordering guard. `strict` rejects equal endpoints (a session must

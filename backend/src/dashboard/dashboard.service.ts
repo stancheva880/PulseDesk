@@ -78,9 +78,9 @@ export class DashboardService {
   ): Promise<CashflowSummaryEntry[]> {
     const { from, to } = resolveAndValidateRange(filters);
     const classFilter = await this.classScopeFilter(tenantId, user);
-    // Payments scope via fee.class.locations.
-    const paymentScope: Prisma.PaymentWhereInput = classFilter.class
-      ? { fee: { class: classFilter.class } }
+    // Payments scope via fee.class.locations (class-less fees included, TKT-0106).
+    const paymentScope: Prisma.PaymentWhereInput = classFilter.OR
+      ? { fee: classFilter }
       : {};
 
     // Two independent queries — payments by paidAt and fees by periodStart — then
@@ -115,13 +115,14 @@ export class DashboardService {
   }
 
   // Returns a Prisma where fragment that scopes Fee queries to the user's accessible
-  // classes (via class.locations). SUPER_ADMIN → no constraint.
+  // classes (via class.locations). Class-less (card purchase) fees are tenant-level
+  // money and always pass (TKT-0106). SUPER_ADMIN → no constraint.
   private async classScopeFilter(
     tenantId: string,
     user: AuthenticatedUser,
-  ): Promise<{ class?: Prisma.ClassWhereInput }> {
+  ): Promise<Pick<Prisma.FeeWhereInput, 'OR'>> {
     const scoped = await this.scope.locationsWhere(user, tenantId);
-    return scoped.locations ? { class: scoped } : {};
+    return scoped.locations ? { OR: [{ classId: null }, { class: scoped }] } : {};
   }
 }
 

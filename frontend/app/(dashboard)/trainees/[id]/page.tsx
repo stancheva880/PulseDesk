@@ -9,7 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { calculateAge } from '@/lib/age';
-import { Trainees, type TraineeDetail } from '@/lib/api-resources';
+import { Cards, Trainees, type CardRow, type TraineeDetail } from '@/lib/api-resources';
 import { isManager } from '@/lib/auth-storage';
 import { apiErrorMessage } from '@/lib/api';
 
@@ -35,12 +35,18 @@ export default function TraineeDetailPage() {
   const id = params.id;
 
   const [trainee, setTrainee] = useState<TraineeDetail | null>(null);
+  const [cards, setCards] = useState<CardRow[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
     Trainees.get(id)
       .then(setTrainee)
       .catch((e: unknown) => setLoadError(apiErrorMessage(e)));
+    // TKT-0106: the trainee's visit cards, shown as a sub-list below the contacts.
+    // A failed or malformed cards read never blanks the trainee view it sits under.
+    Cards.list({ traineeId: id })
+      .then((r) => setCards(r.items ?? []))
+      .catch(() => undefined);
   }, [id]);
 
   return (
@@ -49,9 +55,18 @@ export default function TraineeDetailPage() {
         <h1 className="text-2xl font-semibold tracking-tight">{t('trainees.formTitle')}</h1>
         <div className="flex gap-2">
           {admin && trainee ? (
-            <Button asChild variant="outline">
-              <Link href={`/trainees/${trainee.id}/edit`}>{t('common.edit')}</Link>
-            </Button>
+            <>
+              {/* TKT-0091: contextual create — the fee form opens with this trainee chosen. */}
+              <Button asChild variant="outline">
+                <Link href={`/fees/new?traineeId=${trainee.id}`}>{t('fees.new')}</Link>
+              </Button>
+              <Button asChild variant="outline">
+                <Link href={`/cards/new?traineeId=${trainee.id}`}>{t('cards.new')}</Link>
+              </Button>
+              <Button asChild variant="outline">
+                <Link href={`/trainees/${trainee.id}/edit`}>{t('common.edit')}</Link>
+              </Button>
+            </>
           ) : null}
           <Button type="button" variant="outline" onClick={() => router.push('/trainees')}>
             {t('common.cancel')}
@@ -133,6 +148,49 @@ export default function TraineeDetailPage() {
                         />
                         <Field label={t('trainees.contacts.phone')} value={contact.phone} />
                         <Field label={t('trainees.contacts.email')} value={contact.email} />
+                      </dl>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">{t('cards.title')}</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {cards.length === 0 ? (
+                <p className="text-sm text-muted-foreground">{t('cards.empty')}</p>
+              ) : (
+                <ul className="space-y-4">
+                  {cards.map((card) => (
+                    <li key={card.id} className="rounded-md border p-3">
+                      <p className="text-sm font-medium">
+                        {card.visitsRemaining} / {card.totalVisits}{' '}
+                        {t('cards.fields.remaining').toLowerCase()}
+                        {card.cancelledAt ? (
+                          <Badge className="ml-2" variant="secondary">
+                            {t('cards.state.cancelled')}
+                          </Badge>
+                        ) : null}
+                      </p>
+                      <dl className="mt-2 grid gap-3 sm:grid-cols-2">
+                        <Field
+                          label={t('cards.fields.scope')}
+                          value={
+                            card.classId
+                              ? (trainee.classes.find((c) => c.id === card.classId)?.name ?? '—')
+                              : t('cards.wholeClub')
+                          }
+                        />
+                        <Field
+                          label={t('cards.fields.expiresAt')}
+                          value={
+                            card.expiresAt ? card.expiresAt.slice(0, 10) : t('cards.neverExpires')
+                          }
+                        />
                       </dl>
                     </li>
                   ))}

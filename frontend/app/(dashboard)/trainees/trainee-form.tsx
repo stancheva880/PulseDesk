@@ -10,10 +10,12 @@ import { ConfirmDialog } from '@/components/confirm-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { FieldError, SubmitError } from '@/components/ui/field-error';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { ApiError, apiErrorMessage } from '@/lib/api';
+import { showToast } from '@/components/toast';
 import {
   Classes,
   Contacts,
@@ -57,28 +59,46 @@ import { ChipsCombobox, type ComboboxOption } from '@/components/ui/chips-combob
 
 const RELATIONSHIPS = ['PARENT', 'GUARDIAN', 'GRANDPARENT', 'SIBLING', 'OTHER'] as const;
 
+// TKT-0090: zod messages carry i18n keys; FieldError translates them. The optional-email rule
+// keeps its exact pass/fail set ('' OR a valid email up to 255 chars) — restated as refines so a
+// failure carries one message instead of zod's aggregate union error.
+const optionalEmail = z
+  .string()
+  .trim()
+  .max(255, 'common.errors.tooLong')
+  .refine((v) => v === '' || z.string().email().safeParse(v).success, 'login.errors.email')
+  .transform((v) => v || undefined)
+  .optional();
+
+// TKT-0090 (the one sanctioned rule change): a date of birth in the future is rejected. The
+// input's `max` stops the picker earlier; this stops a typed date.
+function todayLocalDate(): string {
+  const n = new Date();
+  const pad = (x: number) => String(x).padStart(2, '0');
+  return `${n.getFullYear()}-${pad(n.getMonth() + 1)}-${pad(n.getDate())}`;
+}
+
 const contactSchema = z.object({
-  firstName: z.string().trim().min(1).max(100),
-  lastName: z.string().trim().min(1).max(100),
+  firstName: z.string().trim().min(1, 'common.errors.required').max(100, 'common.errors.tooLong'),
+  lastName: z.string().trim().min(1, 'common.errors.required').max(100, 'common.errors.tooLong'),
   relationship: z.enum(RELATIONSHIPS),
-  phone: z.string().trim().max(50).optional(),
-  email: z
-    .union([z.string().trim().email().max(255), z.literal('').transform(() => undefined)])
-    .optional(),
+  phone: z.string().trim().max(50, 'common.errors.tooLong').optional(),
+  email: optionalEmail,
   isPrimary: z.boolean().optional(),
 });
 
 // contacts + the under-18 refine are create-only (edit manages contacts through the
 // separate ContactsSection CRUD card); isActive is edit-only.
 const baseSchema = z.object({
-  firstName: z.string().trim().min(1).max(100),
-  lastName: z.string().trim().min(1).max(100),
-  dateOfBirth: z.string().min(1),
-  phone: z.string().trim().max(50).optional(),
-  email: z
-    .union([z.string().trim().email().max(255), z.literal('').transform(() => undefined)])
-    .optional(),
-  notes: z.string().trim().max(2000).optional(),
+  firstName: z.string().trim().min(1, 'common.errors.required').max(100, 'common.errors.tooLong'),
+  lastName: z.string().trim().min(1, 'common.errors.required').max(100, 'common.errors.tooLong'),
+  dateOfBirth: z
+    .string()
+    .min(1, 'common.errors.required')
+    .refine((v) => v <= todayLocalDate(), 'trainees.errors.dobFuture'),
+  phone: z.string().trim().max(50, 'common.errors.tooLong').optional(),
+  email: optionalEmail,
+  notes: z.string().trim().max(2000, 'common.errors.tooLong').optional(),
   locationIds: z.array(z.string()),
   classIds: z.array(z.string()),
   userId: z.string().optional(),
@@ -90,10 +110,25 @@ const baseSchema = z.object({
 // PRD: under-18 trainees must have ≥1 contact in the create payload.
 const createSchema = baseSchema.refine(
   (v) => !isMinor(v.dateOfBirth) || v.contacts.length >= 1,
-  { path: ['contacts'], message: 'minor-requires-contact' },
+  { path: ['contacts'], message: 'trainees.contacts.required' },
 );
 
 type FormValues = z.infer<typeof baseSchema>;
+
+const createDefaults = (): FormValues => ({
+  firstName: '',
+  lastName: '',
+  dateOfBirth: '',
+  phone: '',
+  email: '',
+  notes: '',
+  locationIds: [],
+  classIds: [],
+  userId: '',
+  guardianUserIds: [],
+  contacts: [],
+  isActive: true,
+});
 
 const customerDisplayName = (u: UserRow) =>
   [u.firstName, u.lastName].filter(Boolean).join(' ') || u.email;
@@ -130,20 +165,7 @@ export function TraineeForm({ mode, id = '' }: { mode: 'create' | 'edit'; id?: s
     formState: { errors, isSubmitting },
   } = useForm<FormValues>({
     resolver: zodResolver(mode === 'create' ? createSchema : baseSchema),
-    defaultValues: {
-      firstName: '',
-      lastName: '',
-      dateOfBirth: '',
-      phone: '',
-      email: '',
-      notes: '',
-      locationIds: [],
-      classIds: [],
-      userId: '',
-      guardianUserIds: [],
-      contacts: [],
-      isActive: true,
-    },
+    defaultValues: createDefaults(),
   });
 
   const reload = () => {
@@ -236,7 +258,9 @@ export function TraineeForm({ mode, id = '' }: { mode: 'create' | 'edit'; id?: s
           isActive: values.isActive,
         });
       }
-      router.replace('/trainees');
+      // TKT-0092: stay on the form; create resets ready for the next record.
+      if (mode === 'create') reset(createDefaults());
+      showToast({ text: t('common.savedToast'), variant: 'success' });
     } catch (e) {
       if (e instanceof ApiError && e.status === 409) {
         setSubmitError(t('trainees.linking.conflict'));
@@ -270,17 +294,21 @@ export function TraineeForm({ mode, id = '' }: { mode: 'create' | 'edit'; id?: s
                   <Label htmlFor="firstName">{t('trainees.fields.firstName')}</Label>
                   <Input
                     id="firstName"
-                    aria-invalid={Boolean(errors.firstName)}
+                    aria-invalid={errors.firstName ? true : undefined}
+                    aria-describedby={errors.firstName ? 'firstName-error' : undefined}
                     {...register('firstName')}
                   />
+                  <FieldError id="firstName-error" messageKey={errors.firstName?.message} />
                 </div>
                 <div className="space-y-1.5">
                   <Label htmlFor="lastName">{t('trainees.fields.lastName')}</Label>
                   <Input
                     id="lastName"
-                    aria-invalid={Boolean(errors.lastName)}
+                    aria-invalid={errors.lastName ? true : undefined}
+                    aria-describedby={errors.lastName ? 'lastName-error' : undefined}
                     {...register('lastName')}
                   />
+                  <FieldError id="lastName-error" messageKey={errors.lastName?.message} />
                 </div>
               </div>
 
@@ -289,25 +317,48 @@ export function TraineeForm({ mode, id = '' }: { mode: 'create' | 'edit'; id?: s
                 <Input
                   id="dateOfBirth"
                   type="date"
-                  aria-invalid={Boolean(errors.dateOfBirth)}
+                  max={todayLocalDate()}
+                  aria-invalid={errors.dateOfBirth ? true : undefined}
+                  aria-describedby={errors.dateOfBirth ? 'dateOfBirth-error' : undefined}
                   {...register('dateOfBirth')}
                 />
+                <FieldError id="dateOfBirth-error" messageKey={errors.dateOfBirth?.message} />
               </div>
 
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-1.5">
                   <Label htmlFor="phone">{t('trainees.fields.phone')}</Label>
-                  <Input id="phone" {...register('phone')} />
+                  <Input
+                    id="phone"
+                    aria-invalid={errors.phone ? true : undefined}
+                    aria-describedby={errors.phone ? 'phone-error' : undefined}
+                    {...register('phone')}
+                  />
+                  <FieldError id="phone-error" messageKey={errors.phone?.message} />
                 </div>
                 <div className="space-y-1.5">
                   <Label htmlFor="email">{t('trainees.fields.email')}</Label>
-                  <Input id="email" type="email" {...register('email')} />
+                  <Input
+                    id="email"
+                    type="email"
+                    aria-invalid={errors.email ? true : undefined}
+                    aria-describedby={errors.email ? 'email-error' : undefined}
+                    {...register('email')}
+                  />
+                  <FieldError id="email-error" messageKey={errors.email?.message} />
                 </div>
               </div>
 
               <div className="space-y-1.5">
                 <Label htmlFor="notes">{t('trainees.fields.notes')}</Label>
-                <Textarea id="notes" rows={3} {...register('notes')} />
+                <Textarea
+                  id="notes"
+                  rows={3}
+                  aria-invalid={errors.notes ? true : undefined}
+                  aria-describedby={errors.notes ? 'notes-error' : undefined}
+                  {...register('notes')}
+                />
+                <FieldError id="notes-error" messageKey={errors.notes?.message} />
               </div>
 
               <fieldset className="space-y-2 rounded-md border p-3">
@@ -415,7 +466,17 @@ export function TraineeForm({ mode, id = '' }: { mode: 'create' | 'edit'; id?: s
                             </Label>
                             <Input
                               id={`contacts.${index}.firstName`}
+                              aria-invalid={errors.contacts?.[index]?.firstName ? true : undefined}
+                              aria-describedby={
+                                errors.contacts?.[index]?.firstName
+                                  ? `contacts.${index}.firstName-error`
+                                  : undefined
+                              }
                               {...register(`contacts.${index}.firstName` as const)}
+                            />
+                            <FieldError
+                              id={`contacts.${index}.firstName-error`}
+                              messageKey={errors.contacts?.[index]?.firstName?.message}
                             />
                           </div>
                           <div className="space-y-1">
@@ -424,7 +485,17 @@ export function TraineeForm({ mode, id = '' }: { mode: 'create' | 'edit'; id?: s
                             </Label>
                             <Input
                               id={`contacts.${index}.lastName`}
+                              aria-invalid={errors.contacts?.[index]?.lastName ? true : undefined}
+                              aria-describedby={
+                                errors.contacts?.[index]?.lastName
+                                  ? `contacts.${index}.lastName-error`
+                                  : undefined
+                              }
                               {...register(`contacts.${index}.lastName` as const)}
+                            />
+                            <FieldError
+                              id={`contacts.${index}.lastName-error`}
+                              messageKey={errors.contacts?.[index]?.lastName?.message}
                             />
                           </div>
                         </div>
@@ -451,7 +522,17 @@ export function TraineeForm({ mode, id = '' }: { mode: 'create' | 'edit'; id?: s
                             </Label>
                             <Input
                               id={`contacts.${index}.phone`}
+                              aria-invalid={errors.contacts?.[index]?.phone ? true : undefined}
+                              aria-describedby={
+                                errors.contacts?.[index]?.phone
+                                  ? `contacts.${index}.phone-error`
+                                  : undefined
+                              }
                               {...register(`contacts.${index}.phone` as const)}
+                            />
+                            <FieldError
+                              id={`contacts.${index}.phone-error`}
+                              messageKey={errors.contacts?.[index]?.phone?.message}
                             />
                           </div>
                           <div className="space-y-1">
@@ -461,7 +542,17 @@ export function TraineeForm({ mode, id = '' }: { mode: 'create' | 'edit'; id?: s
                             <Input
                               id={`contacts.${index}.email`}
                               type="email"
+                              aria-invalid={errors.contacts?.[index]?.email ? true : undefined}
+                              aria-describedby={
+                                errors.contacts?.[index]?.email
+                                  ? `contacts.${index}.email-error`
+                                  : undefined
+                              }
                               {...register(`contacts.${index}.email` as const)}
+                            />
+                            <FieldError
+                              id={`contacts.${index}.email-error`}
+                              messageKey={errors.contacts?.[index]?.email?.message}
                             />
                           </div>
                         </div>
@@ -496,11 +587,9 @@ export function TraineeForm({ mode, id = '' }: { mode: 'create' | 'edit'; id?: s
                     {t('trainees.contacts.add')}
                   </Button>
 
-                  {errors.contacts ? (
-                    <p role="alert" className="text-xs text-destructive">
-                      {t('trainees.contacts.required')}
-                    </p>
-                  ) : null}
+                  {/* The array-level refine ("a minor needs a contact") — per-contact field
+                      errors render inline above, so this only fires with its own message. */}
+                  <FieldError id="contacts-error" messageKey={errors.contacts?.message} />
                 </fieldset>
               ) : null}
 
@@ -511,7 +600,7 @@ export function TraineeForm({ mode, id = '' }: { mode: 'create' | 'edit'; id?: s
                 </label>
               ) : null}
 
-              {submitError ? <p className="text-sm text-destructive">{submitError}</p> : null}
+              <SubmitError message={submitError} />
 
               <div className="flex gap-2">
                 <Button type="submit" disabled={isSubmitting}>
@@ -577,6 +666,8 @@ function ContactsSection({
         isPrimary: false,
       });
       setShowForm(false);
+      // TKT-0092: a completed create confirms itself.
+      showToast({ text: t('common.savedToast'), variant: 'success' });
       onChange();
     } catch (e) {
       setError(apiErrorMessage(e));
@@ -587,7 +678,15 @@ function ContactsSection({
     if (!pendingDeleteId) return;
     setDelBusy(true);
     try {
+      const removed = contacts.find((c) => c.id === pendingDeleteId);
       await Contacts.remove(traineeId, pendingDeleteId);
+      // TKT-0092: name what was removed; the refetch below stays as it was.
+      showToast({
+        text: t('common.deletedToast', {
+          name: removed ? `${removed.firstName} ${removed.lastName}` : '',
+        }),
+        variant: 'success',
+      });
       setPendingDeleteId(null);
       onChange();
     } catch (e) {
@@ -693,7 +792,7 @@ function ContactsSection({
               />
               {t('trainees.contacts.primary')}
             </label>
-            {error ? <p className="text-xs text-destructive">{error}</p> : null}
+            <SubmitError message={error} />
             <div className="flex gap-2">
               <Button size="sm" onClick={() => void submit()}>
                 {t('common.save')}

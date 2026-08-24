@@ -1,5 +1,5 @@
 import { Controller, Get, Query } from '@nestjs/common';
-import { ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiOperation, ApiQuery } from '@nestjs/swagger';
 import { UserRole } from '@prisma/client';
 import { CurrentUser } from '@/auth/decorators/current-user.decorator';
 import { Roles } from '@/auth/decorators/roles.decorator';
@@ -26,6 +26,7 @@ const TO_DESCRIPTION =
 export class DashboardController {
   constructor(private readonly dashboard: DashboardService) {}
 
+  @ApiOperation({ summary: 'Sum the fees by status, for the charts.' })
   @Get('fees-summary')
   @ApiQuery({ name: 'from', required: false, description: FROM_DESCRIPTION })
   @ApiQuery({ name: 'to', required: false, description: TO_DESCRIPTION })
@@ -39,6 +40,7 @@ export class DashboardController {
     return this.dashboard.getFeesSummary(tenantId, { from, to }, user);
   }
 
+  @ApiOperation({ summary: 'Sum the money in and out by month, for the charts.' })
   @Get('cashflow-summary')
   @ApiQuery({ name: 'from', required: false, description: FROM_DESCRIPTION })
   @ApiQuery({ name: 'to', required: false, description: TO_DESCRIPTION })

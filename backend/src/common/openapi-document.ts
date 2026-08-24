@@ -16,12 +16,15 @@ const TENANT_HEADER = 'X-Tenant-Id';
 
 const DESCRIPTION = [
   'Multi-tenant API for trainers, clubs and schools: trainees, classes, weekly schedules,',
-  'sessions, attendance and fees.',
+  'sessions, attendance, fees, refunds, prepaid visit cards, per-session waiting lists and',
+  'customer self-booking.',
   '',
   '**Authentication.** Every route is guarded by default. Send the access token as',
-  '`Authorization: Bearer <token>`; obtain one from `POST /api/auth/login`. The routes under',
-  '`/api/health` and the login, refresh, logout and password-reset routes under `/api/auth` are the',
-  'only public ones; `GET /api/auth/memberships` needs a token like every other route. The access',
+  '`Authorization: Bearer <token>`; obtain one from `POST /api/auth/login`. Three groups are',
+  'public: the routes under `/api/health`, the login, refresh, logout and password-reset routes',
+  'under `/api/auth`, and `POST /api/waitlist/claim` — the link a waiting-list offer mail sends to',
+  'a customer, which carries its own single-use token. Everything else needs a token, including',
+  '`GET /api/auth/memberships`. The access',
   'token is short-lived — `POST /api/auth/refresh` rotates it using the opaque refresh token. A',
   'browser sends that token as an httpOnly cookie; any other client may send it in the request body',
   'instead, and then the rotated pair comes back in the response body.',
@@ -54,6 +57,13 @@ const TAGS: ReadonlyArray<readonly [string, string]> = [
   ['Fees', 'Charges raised against a trainee, including the bulk generators.'],
   ['CustomerFees', "A customer's own fees, for the portal."],
   ['Payments', 'The manual payment ledger recorded against a fee.'],
+  ['Refunds', 'Money given back on a fee. Same manual ledger, opposite direction.'],
+  ['Cards', 'Prepaid visit cards: the sale, the remaining visits, and cancellation with a refund.'],
+  ['CustomerCards', "A customer's own visit cards, for the portal."],
+  ['Waitlists', 'The queue on a full session, as staff see it: add a trainee, or remove one.'],
+  ['MeWaitlist', "A customer's own queue positions: join a full session, or leave it."],
+  ['WaitlistClaim', 'The single-use link from a waiting-list offer mail. Public.'],
+  ['WaitlistSweep', 'Platform housekeeping for dead queue entries. SUPER_ADMIN only.'],
   ['Dashboard', 'Aggregated fee and cash-flow figures for the charts.'],
   ['Health', 'Liveness probe. Public.'],
 ];
@@ -66,7 +76,7 @@ const TAGS: ReadonlyArray<readonly [string, string]> = [
  * Operations are matched by operationId, which @nestjs/swagger emits as
  * `<ControllerClass>_<method>` — exactly the key the decorator registers under.
  */
-export function attachResponseSchemas(document: OpenAPIObject): string[] {
+function attachResponseSchemas(document: OpenAPIObject): string[] {
   document.components ??= {};
   document.components.schemas ??= {};
   const schemas = document.components.schemas;

@@ -104,4 +104,57 @@
     );
     background-repeat: no-repeat;
   }
+
+  /* Card mode: below `md` a table row reads as one labelled block instead of a row whose
+     later columns are off-screen. Opt-in via `.pd-card-table` on the table's wrapper, so a
+     table that should stay a table — the sr-only backing table in fees-chart.tsx — cannot be
+     caught by it. 767px is the complement of Tailwind's `md`, the breakpoint the shell uses. */
+  @media (max-width: 767px) {
+    .pd-card-table table,
+    .pd-card-table thead,
+    .pd-card-table tbody,
+    .pd-card-table tr,
+    .pd-card-table td {
+      display: block;
+      width: 100%;
+    }
+
+    /* Out of the viewport, still in the accessibility tree — each cell carries its own visible
+       caption below, but the header row remains the row's programmatic header. */
+    .pd-card-table thead tr {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip: rect(0 0 0 0);
+      white-space: nowrap;
+    }
+
+    .pd-card-table tbody tr {
+      padding: 0.5rem 0;
+    }
+
+    .pd-card-table tbody td {
+      padding-top: 0.375rem;
+      padding-bottom: 0.375rem;
+    }
+
+    /* Only a cell that carries a label grows one. That is what keeps the colSpan empty state and
+       the skeleton placeholders caption-free without needing exclusions of their own. */
+    .pd-card-table tbody td[data-label]::before {
+      content: attr(data-label);
+      display: block;
+      margin-bottom: 0.125rem;
+      font-size: 0.6875rem;
+      font-weight: 500;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: hsl(var(--muted-foreground));
+    }
+
+    /* Actions sit under the fields they act on, not flushed right against nothing. */
+    .pd-card-table tbody td:not([data-label]) {
+      text-align: left;
+    }
+  }
 }

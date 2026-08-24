@@ -43,6 +43,26 @@ describe('buildCsp', () => {
     expect(connect).not.toContain('ws:');
   });
 
+  // TKT-0098 (authorized spec change, PRD-0013): with a Sentry DSN configured, connect-src
+  // carries exactly one additional origin — the ingest host — and nothing else moves.
+  // The exact-match case above stays verbatim: no DSN, no change.
+  it('adds exactly the Sentry ingest origin to connect-src when one is given', () => {
+    const SENTRY = 'https://o12345.ingest.de.sentry.io';
+    const connect = directive(buildCsp('abc', false, API, SENTRY), 'connect-src');
+    expect(connect).toBe(`connect-src 'self' ${API} ${SENTRY}`);
+  });
+
+  it('leaves every other directive byte-identical when the Sentry origin is added', () => {
+    const SENTRY = 'https://o12345.ingest.de.sentry.io';
+    const without = buildCsp('abc', false, API);
+    const withSentry = buildCsp('abc', false, API, SENTRY);
+    expect(withSentry.replace(` ${SENTRY}`, '')).toBe(without);
+  });
+
+  it('treats a null Sentry origin as absent', () => {
+    expect(buildCsp('abc', false, API, null)).toBe(buildCsp('abc', false, API));
+  });
+
   it('allows the HMR websocket in development', () => {
     expect(directive(buildCsp('abc', true, API), 'connect-src')).toContain('ws:');
   });

@@ -3,6 +3,11 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { DataTable, type DataTableColumn } from '@/components/data-table';
 import { I18nProvider } from '@/components/i18n-provider';
 
+// DataTable calls useRouter for the row navigation (TKT-0088); none of these tests navigate.
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ push: vi.fn(), replace: vi.fn(), back: vi.fn() }),
+}));
+
 interface Row {
   id: string;
   name: string;

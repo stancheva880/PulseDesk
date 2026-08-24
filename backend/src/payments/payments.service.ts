@@ -1,6 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma, type Payment } from '@prisma/client';
-import { LocationScopeService } from '@/auth/scope/location-scope.service';
 import type { AuthenticatedUser } from '@/auth/types/jwt-payload';
 import { resolveActorSnapshot } from '@/common/actor-snapshot';
 import { DEFAULT_LIST_TAKE } from '@/common/dto/paginated-result';
@@ -13,7 +12,6 @@ export class PaymentsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly feesService: FeesService,
-    private readonly scope: LocationScopeService,
   ) {}
 
   async listForFee(
@@ -21,7 +19,7 @@ export class PaymentsService {
     feeId: string,
     user: AuthenticatedUser,
   ): Promise<Payment[]> {
-    await this.assertFeeAccessible(tenantId, feeId, user);
+    await this.feesService.assertFeeAccessible(tenantId, feeId, user);
     return this.prisma.payment.findMany({
       where: { tenantId, feeId },
       orderBy: { paidAt: 'desc' },
@@ -35,7 +33,7 @@ export class PaymentsService {
     viewer: AuthenticatedUser,
     dto: CreatePaymentDto,
   ): Promise<Payment> {
-    await this.assertFeeAccessible(tenantId, feeId, viewer);
+    await this.feesService.assertFeeAccessible(tenantId, feeId, viewer);
 
     // Resolve audit-snapshot fields once.
     const recorder = await resolveActorSnapshot(
@@ -86,27 +84,27 @@ export class PaymentsService {
     paymentId: string,
     user: AuthenticatedUser,
   ): Promise<void> {
-    await this.assertFeeAccessible(tenantId, feeId, user);
-    const found = await this.prisma.payment.count({
+    await this.feesService.assertFeeAccessible(tenantId, feeId, user);
+    const payment = await this.prisma.payment.findFirst({
       where: { id: paymentId, feeId, tenantId },
     });
-    if (!found) throw new NotFoundException(`Payment ${paymentId} not found`);
+    if (!payment) throw new NotFoundException(`Payment ${paymentId} not found`);
     await this.prisma.$transaction(async (tx) => {
+      // TKT-0105: net paid (payments − refunds) may never go negative — a payment whose
+      // removal would leave more refunded than collected must not be deletable. The fix
+      // path for the operator is to delete the offending refund first.
+      const netAfter = (
+        await this.feesService.paidTotalInTransaction(tx, feeId)
+      ).minus(payment.amount);
+      if (netAfter.lt(0)) {
+        throw new BadRequestException({
+          message: `Deleting this payment of ${payment.amount} would leave the fee refunded ${netAfter.neg()} more than was paid`,
+          code: 'PAYMENT_DELETE_BELOW_REFUNDED',
+          params: { amount: payment.amount.toString(), shortfall: netAfter.neg().toString() },
+        });
+      }
       await tx.payment.delete({ where: { id: paymentId } });
       await this.feesService.recomputeStatusInTransaction(tx, feeId);
     });
-  }
-
-  // Tenant-bound + ADMIN-location-scoped via the fee's class. SUPER_ADMIN passes through.
-  private async assertFeeAccessible(
-    tenantId: string,
-    feeId: string,
-    user: AuthenticatedUser,
-  ): Promise<void> {
-    const where: Prisma.FeeWhereInput = { id: feeId, tenantId };
-    const scoped = await this.scope.locationsWhere(user, tenantId);
-    if (scoped.locations) where.class = scoped;
-    const found = await this.prisma.fee.count({ where });
-    if (!found) throw new NotFoundException(`Fee ${feeId} not found`);
   }
 }

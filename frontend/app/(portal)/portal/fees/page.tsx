@@ -87,7 +87,7 @@ function FeeCard({ fee }: { fee: CustomerFeeEntry }) {
         <CardHeader>
           <div className="flex flex-wrap items-center justify-between gap-2">
             <CardTitle className="text-base">
-              {fee.class.name} · {periodStart} → {periodEnd}
+              {fee.class?.name ?? '—'} · {periodStart} → {periodEnd}
             </CardTitle>
             <span
               className={cn(

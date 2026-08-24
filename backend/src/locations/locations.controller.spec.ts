@@ -6,7 +6,7 @@ import { Test, type TestingModule } from '@nestjs/testing';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { randomUUID } from 'node:crypto';
 import request from 'supertest';
-import { UserRole } from '@prisma/client';
+import { BillingMode, DayOfWeek, SessionStatus, UserRole } from '@prisma/client';
 import { AuthModule } from '@/auth/auth.module';
 import { MailModule } from '@/mail/mail.module';
 import { AuthService } from '@/auth/auth.service';
@@ -359,6 +359,117 @@ describe('LocationsController (e2e-ish)', () => {
         .send({ name: 'Hijacked' })
         .expect(404);
     });
+
+    // TKT-0126: retiring a hall has to stop its recurring generation, or a hall the club no
+    // longer rents keeps minting bookable sessions. Flipping the schedules rather than
+    // filtering the generate query keeps the state visible on the schedules screen.
+    describe('deactivating switches off the hall schedules', () => {
+      async function hallWithSchedule(tenantId: string, opts?: { locationActive?: boolean }) {
+        const location = await prisma.location.create({
+          data: {
+            tenantId,
+            name: `Hall-${randomUUID()}`,
+            isActive: opts?.locationActive ?? true,
+          },
+        });
+        const cls = await prisma.class.create({
+          data: {
+            tenantId,
+            name: `Class-${randomUUID()}`,
+            billingMode: BillingMode.PER_SESSION,
+            sessionPrice: 20,
+          },
+        });
+        const schedule = await prisma.classSchedule.create({
+          data: {
+            tenantId,
+            classId: cls.id,
+            locationId: location.id,
+            dayOfWeek: DayOfWeek.MON,
+            startTime: '18:00',
+            endTime: '19:00',
+          },
+        });
+        return { location, schedule };
+      }
+
+      const isActive = (scheduleId: string) =>
+        prisma.classSchedule
+          .findUniqueOrThrow({ where: { id: scheduleId } })
+          .then((s) => s.isActive);
+
+      it('flips its own schedules and leaves another hall alone', async () => {
+        const tenant = await newTenant();
+        const su = await setupSuperAdmin();
+        const retiring = await hallWithSchedule(tenant.id);
+        const keeping = await hallWithSchedule(tenant.id);
+
+        await request(server)
+          .patch(`/locations/${retiring.location.id}`)
+          .set('Authorization', `Bearer ${su.accessToken}`)
+          .set('X-Tenant-Id', tenant.id)
+          .send({ isActive: false })
+          .expect(200);
+
+        expect(await isActive(retiring.schedule.id)).toBe(false);
+        expect(await isActive(keeping.schedule.id)).toBe(true);
+      });
+
+      // The falsy-vs-`false` trap: an absent isActive must not touch anything.
+      it('a PATCH that does not carry isActive leaves schedules alone', async () => {
+        const tenant = await newTenant();
+        const su = await setupSuperAdmin();
+        const { location, schedule } = await hallWithSchedule(tenant.id);
+
+        await request(server)
+          .patch(`/locations/${location.id}`)
+          .set('Authorization', `Bearer ${su.accessToken}`)
+          .set('X-Tenant-Id', tenant.id)
+          .send({ name: `Renamed-${randomUUID()}` })
+          .expect(200);
+
+        expect(await isActive(schedule.id)).toBe(true);
+      });
+
+      // Fires on the request body, not on a transition — so re-saving repairs a hall that was
+      // already inactive before this shipped, with its schedules still live.
+      it('re-deactivating an already-inactive hall still switches off its schedules', async () => {
+        const tenant = await newTenant();
+        const su = await setupSuperAdmin();
+        const { location, schedule } = await hallWithSchedule(tenant.id, {
+          locationActive: false,
+        });
+        expect(await isActive(schedule.id)).toBe(true);
+
+        await request(server)
+          .patch(`/locations/${location.id}`)
+          .set('Authorization', `Bearer ${su.accessToken}`)
+          .set('X-Tenant-Id', tenant.id)
+          .send({ isActive: false })
+          .expect(200);
+
+        expect(await isActive(schedule.id)).toBe(false);
+      });
+
+      // One-way by design: a club returning to a hall after months should re-check each
+      // schedule rather than have last season timetable resume on its own.
+      it('reactivating the hall does not switch its schedules back on', async () => {
+        const tenant = await newTenant();
+        const su = await setupSuperAdmin();
+        const { location, schedule } = await hallWithSchedule(tenant.id);
+
+        for (const isActiveValue of [false, true]) {
+          await request(server)
+            .patch(`/locations/${location.id}`)
+            .set('Authorization', `Bearer ${su.accessToken}`)
+            .set('X-Tenant-Id', tenant.id)
+            .send({ isActive: isActiveValue })
+            .expect(200);
+        }
+
+        expect(await isActive(schedule.id)).toBe(false);
+      });
+    });
   });
 
   describe('DELETE /locations/:id', () => {
@@ -393,6 +504,115 @@ describe('LocationsController (e2e-ish)', () => {
         .set('Authorization', `Bearer ${actor.accessToken}`)
         .set('X-Tenant-Id', actor.tenantId!)
         .expect(403);
+    });
+
+    // TKT-0124: Session.location and ClassSchedule.location both cascade, and Attendance and
+    // CardConsumption cascade from Session — so this delete used to erase the club's whole
+    // attendance history at a hall and hand back every card visit spent there.
+    describe('the history guard', () => {
+      async function hallWithClass(tenantId: string) {
+        const location = await prisma.location.create({
+          data: { tenantId, name: `Hall-${randomUUID()}` },
+        });
+        const cls = await prisma.class.create({
+          data: {
+            tenantId,
+            name: `Class-${randomUUID()}`,
+            billingMode: BillingMode.PER_SESSION,
+            sessionPrice: 20,
+            locations: { connect: [{ id: location.id }] },
+          },
+        });
+        return { location, cls };
+      }
+
+      it('refuses when the location has a session (409) and the whole chain survives', async () => {
+        const tenant = await newTenant();
+        const su = await setupSuperAdmin();
+        const { location, cls } = await hallWithClass(tenant.id);
+        const session = await prisma.session.create({
+          data: {
+            tenantId: tenant.id,
+            classId: cls.id,
+            locationId: location.id,
+            startsAt: new Date('2026-09-01T10:00:00Z'),
+            endsAt: new Date('2026-09-01T11:00:00Z'),
+          },
+        });
+        const trainee = await prisma.trainee.create({
+          data: {
+            tenantId: tenant.id,
+            firstName: 'H',
+            lastName: randomUUID().slice(0, 8),
+            dateOfBirth: new Date('2000-01-01'),
+          },
+        });
+        const attendance = await prisma.attendance.create({
+          data: { tenantId: tenant.id, sessionId: session.id, traineeId: trainee.id },
+        });
+
+        const res = await request(server)
+          .delete(`/locations/${location.id}`)
+          .set('Authorization', `Bearer ${su.accessToken}`)
+          .set('X-Tenant-Id', tenant.id)
+          .expect(409);
+        expect(res.body.code).toBe('LOCATION_IN_USE');
+        expect(res.body.params).toEqual({ sessions: 1, schedules: 0 });
+
+        expect(await prisma.location.count({ where: { id: location.id } })).toBe(1);
+        expect(await prisma.session.count({ where: { id: session.id } })).toBe(1);
+        expect(await prisma.attendance.count({ where: { id: attendance.id } })).toBe(1);
+      });
+
+      it('refuses when the location has only a schedule (409)', async () => {
+        const tenant = await newTenant();
+        const su = await setupSuperAdmin();
+        const { location, cls } = await hallWithClass(tenant.id);
+        const schedule = await prisma.classSchedule.create({
+          data: {
+            tenantId: tenant.id,
+            classId: cls.id,
+            locationId: location.id,
+            dayOfWeek: DayOfWeek.MON,
+            startTime: '18:00',
+            endTime: '19:00',
+          },
+        });
+
+        const res = await request(server)
+          .delete(`/locations/${location.id}`)
+          .set('Authorization', `Bearer ${su.accessToken}`)
+          .set('X-Tenant-Id', tenant.id)
+          .expect(409);
+        expect(res.body.code).toBe('LOCATION_IN_USE');
+        expect(res.body.params).toEqual({ sessions: 0, schedules: 1 });
+        expect(await prisma.classSchedule.count({ where: { id: schedule.id } })).toBe(1);
+      });
+
+      // "Any date, any status" — a hall the club stopped using years ago is exactly the one
+      // someone reaches for the delete button on, and its history is the most irreplaceable.
+      it('refuses for a past, cancelled session too (409)', async () => {
+        const tenant = await newTenant();
+        const su = await setupSuperAdmin();
+        const { location, cls } = await hallWithClass(tenant.id);
+        await prisma.session.create({
+          data: {
+            tenantId: tenant.id,
+            classId: cls.id,
+            locationId: location.id,
+            startsAt: new Date('2020-01-06T10:00:00Z'),
+            endsAt: new Date('2020-01-06T11:00:00Z'),
+            status: SessionStatus.CANCELLED,
+          },
+        });
+
+        const res = await request(server)
+          .delete(`/locations/${location.id}`)
+          .set('Authorization', `Bearer ${su.accessToken}`)
+          .set('X-Tenant-Id', tenant.id)
+          .expect(409);
+        expect(res.body.code).toBe('LOCATION_IN_USE');
+      });
     });
   });
 });

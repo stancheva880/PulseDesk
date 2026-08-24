@@ -1,7 +1,7 @@
 'use client';
 
+import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
-import { X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import {
   Bar,
@@ -15,7 +15,7 @@ import {
 } from 'recharts';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
+import { ClearableDateInput } from '@/components/ui/clearable-date-input';
 import { Label } from '@/components/ui/label';
 import { apiErrorMessage } from '@/lib/api';
 import {
@@ -49,46 +49,8 @@ function rangeProblem(from: string, to: string, today: string): 'order' | 'tooLo
   return null;
 }
 
-// A date filter that can be emptied again. No browser offers a dependable clear control for
-// type="date" — Chrome shows only the calendar indicator — and '' is exactly what the effect
-// above treats as "bound omitted". Owns its own `relative` wrapper, unlike PasswordInput,
-// which delegates that to the caller: here the Label sits in the same block and the ✕ would
-// centre against the pair.
-function ClearableDateInput({
-  id,
-  value,
-  onChange,
-  clearLabel,
-}: {
-  id: string;
-  value: string;
-  onChange: (value: string) => void;
-  clearLabel: string;
-}) {
-  return (
-    <div className="relative">
-      {/* pr-14 keeps a typed date clear of both controls; the ✕ sits at right-7 so the
-          browser's own calendar indicator keeps the edge it reserves. */}
-      <Input
-        id={id}
-        type="date"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="pr-14"
-      />
-      {value ? (
-        <button
-          type="button"
-          onClick={() => onChange('')}
-          aria-label={clearLabel}
-          className="absolute right-7 top-1/2 grid h-7 w-7 -translate-y-1/2 place-items-center rounded-md text-muted-foreground transition-colors hover:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        >
-          <X className="h-4 w-4" />
-        </button>
-      ) : null}
-    </div>
-  );
-}
+// ClearableDateInput lived here until TKT-0094 moved it to components/ui/ so the sessions
+// filter could reuse it without pulling Recharts into its bundle.
 
 export function FeesChart() {
   const { t } = useTranslation();
@@ -206,7 +168,23 @@ export function FeesChart() {
         {/* Read off the response, not re-derived from the inputs: an empty bound resolves
             server-side, so the returned months are the only honest answer to "what am I
             looking at". */}
-        {caption ? <p className="mb-4 text-xs text-muted-foreground">{caption}</p> : null}
+        {/* TKT-0096: the way into /fees for the period in view. The fees page's month filter
+            holds exactly one month, so only a single-month view links filtered; a wider view
+            opens the unfiltered list. No link while loading, failed, or empty — a link must
+            never be built from a missing answer. */}
+        {caption ? (
+          <div className="mb-4 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+            <p>{caption}</p>
+            {error ? null : (
+              <Link
+                href={first === last ? `/fees?month=${first}` : '/fees'}
+                className="underline underline-offset-2 hover:text-foreground"
+              >
+                {t('chart.viewFees')}
+              </Link>
+            )}
+          </div>
+        ) : null}
 
         {error ? <p className="text-sm text-destructive">{error}</p> : null}
 

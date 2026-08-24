@@ -3,6 +3,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import EditClassPage from '@/app/(dashboard)/classes/[id]/edit/page';
 import { AuthProvider } from '@/components/auth-provider';
 import { I18nProvider } from '@/components/i18n-provider';
+import { ToastViewport } from '@/components/toast';
 import { setAccessToken } from '@/lib/auth-storage';
 
 const replace = vi.fn();
@@ -68,6 +69,7 @@ const USERS = [
 function renderPage() {
   return render(
     <I18nProvider>
+      <ToastViewport />
       <AuthProvider>
         <EditClassPage />
       </AuthProvider>
@@ -138,6 +140,42 @@ let usersUrl: string | null = null;
       expect(patchBody).not.toBeNull();
       expect((patchBody!.traineeIds as string[]).slice().sort()).toEqual(['tr-1', 'tr-2']);
     });
+  });
+
+  // TKT-0112: the waitlist mode is an ordinary editable class field.
+  it('shows the waitlist mode and sends the switched value', async () => {
+    const { container } = renderPage();
+
+    const select = await waitFor(() => {
+      const el = container.querySelector<HTMLSelectElement>('#waitlistMode');
+      if (!el) throw new Error('waitlistMode select not rendered');
+      return el;
+    });
+    expect(select.value).toBe('NONE');
+
+    fireEvent.change(select, { target: { value: 'CLAIM' } });
+    fireEvent.click(container.querySelector('button[type="submit"]')!);
+
+    await waitFor(() => {
+      expect(patchBody).not.toBeNull();
+      expect(patchBody!.waitlistMode).toBe('CLAIM');
+    });
+  });
+
+  // TKT-0113 interview decision: the form must say FIFO_AUTO can consume a card visit.
+  it('states the consumes-a-visit contract only for FIFO_AUTO', async () => {
+    const { container } = renderPage();
+    const select = await waitFor(() => {
+      const el = container.querySelector<HTMLSelectElement>('#waitlistMode');
+      if (!el) throw new Error('waitlistMode select not rendered');
+      return el;
+    });
+
+    expect(screen.queryByText(/посещение от карта/)).toBeNull();
+    fireEvent.change(select, { target: { value: 'FIFO_AUTO' } });
+    expect(screen.getByText(/посещение от карта/)).toBeInTheDocument();
+    fireEvent.change(select, { target: { value: 'CLAIM' } });
+    expect(screen.queryByText(/посещение от карта/)).toBeNull();
   });
 
   // TKT-0078 replaced the trainer checkbox list with the searchable chips combobox. The asserted
@@ -226,6 +264,97 @@ let usersUrl: string | null = null;
     await waitFor(() => {
       expect(patchBody).not.toBeNull();
       expect(patchBody!.sessionPrice).toBe(0.5);
+    });
+    // TKT-0092: edit stays put and confirms with a toast.
+    expect(await screen.findByText(/Запазено|^Saved$/)).toBeInTheDocument();
+    expect(replace).not.toHaveBeenCalled();
+  });
+
+  // TKT-0090: a failed field says what is wrong in words, wired for assistive tech.
+  it('says what is wrong and wires the a11y attributes when the name is cleared', async () => {
+    renderPage();
+    const name = await waitFor(() => {
+      const el = document.querySelector<HTMLInputElement>('#name');
+      if (!el || !el.value) throw new Error('not prefilled yet');
+      return el;
+    });
+
+    fireEvent.change(name, { target: { value: '' } });
+    fireEvent.click(document.querySelector('button[type="submit"]')!);
+
+    const message = await screen.findByText('Това поле е задължително.');
+    expect(message).toHaveAttribute('role', 'alert');
+    expect(message).toHaveAttribute('id', 'name-error');
+    expect(name).toHaveAttribute('aria-invalid', 'true');
+    expect(name).toHaveAttribute('aria-describedby', 'name-error');
+    expect(patchBody).toBeNull();
+  });
+
+  // TKT-0109 — the third billing mode. The mode select renders on edit too (the switch is
+  // allowed since PRD-0015), and choosing PER_COURSE swaps in its date + price inputs.
+  describe('course mode (TKT-0109)', () => {
+    async function switchToCourse(container: HTMLElement) {
+      const select = await waitFor(() => {
+        const el = container.querySelector<HTMLSelectElement>('#billingMode');
+        if (!el) throw new Error('billing mode select not rendered on edit');
+        return el;
+      });
+      fireEvent.change(select, { target: { value: 'PER_COURSE' } });
+      return waitFor(() => {
+        const price = container.querySelector<HTMLInputElement>('#coursePrice');
+        const start = container.querySelector<HTMLInputElement>('#courseStart');
+        const end = container.querySelector<HTMLInputElement>('#courseEnd');
+        if (!price || !start || !end) throw new Error('course inputs not rendered');
+        return { price, start, end };
+      });
+    }
+
+    it('switches to PER_COURSE and submits the mode with its three fields', async () => {
+      const { container } = renderPage();
+      const { price, start, end } = await switchToCourse(container);
+
+      fireEvent.change(price, { target: { value: '300' } });
+      fireEvent.change(start, { target: { value: '2026-03-01' } });
+      fireEvent.change(end, { target: { value: '2026-08-31' } });
+      fireEvent.click(container.querySelector('button[type="submit"]')!);
+
+      await waitFor(() => {
+        expect(patchBody).not.toBeNull();
+        expect(patchBody).toMatchObject({
+          billingMode: 'PER_COURSE',
+          coursePrice: 300,
+          courseStart: '2026-03-01',
+          courseEnd: '2026-08-31',
+        });
+        // Only the active mode's price fields travel; the server clears the rest.
+        expect(patchBody!.sessionPrice).toBeUndefined();
+        expect(patchBody!.monthlyAmount).toBeUndefined();
+      });
+    });
+
+    it('blocks save when the course end is not after its start', async () => {
+      const { container } = renderPage();
+      const { price, start, end } = await switchToCourse(container);
+
+      fireEvent.change(price, { target: { value: '300' } });
+      fireEvent.change(start, { target: { value: '2026-08-31' } });
+      fireEvent.change(end, { target: { value: '2026-03-01' } });
+      fireEvent.click(container.querySelector('button[type="submit"]')!);
+
+      expect(await screen.findByText(/Краят на курса|Course end/)).toBeInTheDocument();
+      expect(patchBody).toBeNull();
+    });
+
+    it('blocks save when the course price is missing', async () => {
+      const { container } = renderPage();
+      const { start, end } = await switchToCourse(container);
+
+      fireEvent.change(start, { target: { value: '2026-03-01' } });
+      fireEvent.change(end, { target: { value: '2026-08-31' } });
+      fireEvent.click(container.querySelector('button[type="submit"]')!);
+
+      expect(await screen.findByText(/Сумата трябва|Amount must/)).toBeInTheDocument();
+      expect(patchBody).toBeNull();
     });
   });
 });

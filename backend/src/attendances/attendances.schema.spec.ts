@@ -119,14 +119,37 @@ describe('CustomerSessionEntrySchema', () => {
       notes: null,
       createdAt: new Date('2026-05-01T09:00:00.000Z'),
       updatedAt: new Date('2026-05-01T09:00:00.000Z'),
-      class: { id: 'c1', name: 'Tennis', billingMode: 'PER_SESSION' },
+      class: {
+        id: 'c1',
+        name: 'Tennis',
+        billingMode: 'PER_SESSION',
+        allowSelfBooking: true,
+        bookingCutoffMin: 60,
+        waitlistMode: 'FIFO_AUTO',
+      },
       location: { id: 'l1', name: 'Main', address: 'leaked' },
       attendances: [{ ...markedRow, trainee }],
+      spotsLeft: 2,
+      myTrainees: [trainee],
+      myWaitlist: [trainee.id],
     });
     // The session half comes from SessionSchema, so the instants transform identically.
     expect(parsed.startsAt).toBe('2026-06-01T18:00:00.000Z');
-    // The portal gets the class name only — no billing mode.
-    expect(Object.keys(parsed.class).sort()).toEqual(['id', 'name']);
+    // Approved TEST CHANGE REQUEST, 2026-08-23: + 'allowSelfBooking', 'bookingCutoffMin' —
+    // TKT-0118's self-booking policy joins the portal's class subset (named in the approved
+    // tech plan). Billing fields stay excluded — the `billingMode` fed in above still drops.
+    // Approved TEST CHANGE REQUEST, 2026-08-23: + 'waitlistMode' — TKT-0121 needs the portal to
+    // tell a full-and-queueable class from a full one with no queue (named in its tech plan).
+    expect(Object.keys(parsed.class).sort()).toEqual([
+      'allowSelfBooking',
+      'bookingCutoffMin',
+      'id',
+      'name',
+      'waitlistMode',
+    ]);
+    expect(parsed.spotsLeft).toBe(2);
+    expect(parsed.myTrainees).toEqual([trainee]);
+    expect(parsed.myWaitlist).toEqual([trainee.id]);
     expect(Object.keys(parsed.location).sort()).toEqual(['id', 'name']);
     expect(parsed.attendances[0]!.trainee.firstName).toBe('Ivan');
     expect(parsed.attendances[0]!.markedAt).toBe('2026-06-01T19:05:00.000Z');

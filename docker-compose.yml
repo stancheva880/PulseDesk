@@ -43,6 +43,9 @@ services:
         #   NEXT_PUBLIC_API_URL=https://api.example.com docker compose -f docker-compose.yml build
         NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:4000}
         NEXT_PUBLIC_DEFAULT_LOCALE: ${NEXT_PUBLIC_DEFAULT_LOCALE:-bg}
+        # Inlined into the bundle, so it takes a rebuild to change — not a container restart.
+        # Empty = frontend error tracking off. The backend's SENTRY_DSN is a runtime variable.
+        NEXT_PUBLIC_SENTRY_DSN: ${NEXT_PUBLIC_SENTRY_DSN:-}
     image: pulsedesk-frontend
     environment:
       PORT: "3000"

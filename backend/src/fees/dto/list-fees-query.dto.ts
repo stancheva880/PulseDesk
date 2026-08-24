@@ -1,5 +1,5 @@
 import { FeeStatus } from '@prisma/client';
-import { IsDateString, IsIn, IsOptional, IsString } from 'class-validator';
+import { IsDateString, IsIn, IsOptional, IsString, MaxLength } from 'class-validator';
 import { PaginationQueryDto } from '@/common/dto/pagination-query.dto';
 
 /**
@@ -33,4 +33,14 @@ export class ListFeesQueryDto extends PaginationQueryDto {
   @IsOptional()
   @IsDateString()
   periodStartTo?: string;
+
+  /**
+   * Substring match over the fee's trainee — first name, last name and email — via
+   * searchVariants, same contract as `GET /trainees?search`. A fee row itself has no
+   * searchable text; the person who owes it is what an admin types. Bounded at 100 characters.
+   */
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  search?: string;
 }

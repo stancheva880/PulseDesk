@@ -17,6 +17,8 @@
  * the CORS allowlist and the production secret guard; a second copy would drift and the deployed
  * app would quietly lose one of them.
  */
+// Sentry must load before Nest — see src/instrument.ts. No-op when SENTRY_DSN is unset.
+import '../src/instrument';
 import 'reflect-metadata';
 import { NestFactory } from '@nestjs/core';
 import { ExpressAdapter } from '@nestjs/platform-express';

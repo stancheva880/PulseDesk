@@ -6,7 +6,9 @@ import {
 } from '@nestjs/common';
 import { Prisma, UserRole, type Trainee } from '@prisma/client';
 import { backfillFutureSessions } from '@/attendances/attendance-backfill';
+import { createCourseFees, deleteUnpaidCourseFees } from '@/fees/course-fee-sync';
 import { LocationScopeService } from '@/auth/scope/location-scope.service';
+import { assertTraineeLedgerEmpty } from '@/common/ledger-guards';
 import { connectMany, isUniqueConstraintError, setMany } from '@/common/prisma-relations';
 import { searchVariants } from '@/common/search-variants';
 import { assertClassIds, assertGuardianUserIds, assertLocationIds } from '@/common/tenant-guards';
@@ -144,6 +146,8 @@ export class TraineesService {
         // New enrolment must appear on each class's upcoming sessions.
         for (const classId of dto.classIds ?? []) {
           await backfillFutureSessions(tx, { tenantId, classId, traineeIds: [trainee.id] });
+          // TKT-0110: enrolling into a course class bills it in the same tx.
+          await createCourseFees(tx, { tenantId, classId, traineeIds: [trainee.id] });
         }
         return trainee;
       });
@@ -164,13 +168,43 @@ export class TraineesService {
     dto: UpdateTraineeDto,
     user: AuthenticatedUser,
   ): Promise<Trainee> {
-    await this.findById(tenantId, id, user);
+    const existing = await this.findById(tenantId, id, user);
 
     await assertLocationIds(this.prisma, tenantId, dto.locationIds);
     await this.scope.assertLocationsAllowed(user, tenantId, dto.locationIds ?? []);
     await assertClassIds(this.prisma, tenantId, dto.classIds);
     await assertGuardianUserIds(this.prisma, tenantId, dto.guardianUserIds);
     if (typeof dto.userId === 'string') await this.assertCustomerUserId(tenantId, dto.userId);
+
+    // TKT-0123: `set` replaces the whole relation, so what LEAVES needs checking too. Unenrolling
+    // from a class also runs deleteUnpaidCourseFees, so this is the other hall's money as well as
+    // its roster. Guardians are deliberately absent: they are scoped by ownership, not location.
+    if (dto.locationIds !== undefined) {
+      await this.scope.assertLocationRemovalsAllowed(
+        user,
+        tenantId,
+        existing.locations.map((l) => l.id),
+        dto.locationIds,
+      );
+    }
+    if (dto.classIds !== undefined) {
+      await this.scope.assertRemovalsAllowed(
+        user,
+        tenantId,
+        existing.classes.map((c) => c.id),
+        dto.classIds,
+        (removed, allowed) =>
+          this.prisma.class.count({
+            where: {
+              id: { in: removed },
+              tenantId,
+              locations: { some: {} },
+              NOT: { locations: { some: { id: { in: allowed } } } },
+            },
+          }),
+        'classes',
+      );
+    }
 
     const data: Prisma.TraineeUpdateInput = {};
     if (dto.firstName !== undefined) data.firstName = dto.firstName;
@@ -189,11 +223,29 @@ export class TraineesService {
 
     try {
       return await this.prisma.$transaction(async (tx) => {
+        // TKT-0110: the course-fee diff needs the pre-update class set.
+        const beforeClasses =
+          dto.classIds !== undefined
+            ? (
+                await tx.trainee.findUniqueOrThrow({
+                  where: { id },
+                  select: { classes: { select: { id: true } } },
+                })
+              ).classes.map((c) => c.id)
+            : [];
         const updated = await tx.trainee.update({ where: { id }, data });
         // A changed class set must put this trainee onto each class's upcoming sessions.
         if (dto.classIds !== undefined) {
+          const before = new Set(beforeClasses);
+          const after = new Set(dto.classIds);
           for (const classId of dto.classIds) {
             await backfillFutureSessions(tx, { tenantId, classId, traineeIds: [id] });
+            if (!before.has(classId)) {
+              await createCourseFees(tx, { tenantId, classId, traineeIds: [id] });
+            }
+          }
+          for (const classId of beforeClasses.filter((cid) => !after.has(cid))) {
+            await deleteUnpaidCourseFees(tx, { tenantId, classId, traineeIds: [id] });
           }
         }
         return updated;
@@ -211,6 +263,9 @@ export class TraineesService {
 
   async delete(tenantId: string, id: string, user: AuthenticatedUser): Promise<void> {
     await this.findById(tenantId, id, user);
+    // Fee.trainee cascades, and Payment/Refund cascade from the fee — so without this the delete
+    // takes everything the club collected from this person. `isActive: false` is the safe route.
+    await assertTraineeLedgerEmpty(this.prisma, tenantId, id);
     await this.prisma.trainee.delete({ where: { id } });
   }
 

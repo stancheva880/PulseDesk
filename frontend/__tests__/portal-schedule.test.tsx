@@ -4,12 +4,16 @@ import userEvent from '@testing-library/user-event';
 import PortalSchedulePage from '@/app/(portal)/portal/schedule/page';
 import { AuthProvider } from '@/components/auth-provider';
 import { I18nProvider } from '@/components/i18n-provider';
+import { ToastViewport } from '@/components/toast';
 import { setAccessToken } from '@/lib/auth-storage';
 
 const replace = vi.fn();
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ replace, push: vi.fn(), back: vi.fn() }),
   usePathname: () => '/portal/schedule',
+  // TKT-0102 (mechanical): the page now reads ?view/?mode/?date; bare URL = the list these
+  // tests exercise. No assertion changes.
+  useSearchParams: () => new URLSearchParams(''),
 }));
 
 function buildJwt(payload: Record<string, unknown>): string {
@@ -63,6 +67,7 @@ const ENTRIES = [
 function renderPage() {
   return render(
     <I18nProvider>
+      <ToastViewport />
       <AuthProvider>
         <PortalSchedulePage />
       </AuthProvider>

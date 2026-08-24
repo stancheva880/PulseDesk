@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { showToast } from '@/components/toast';
 import { apiErrorMessage } from '@/lib/api';
 import {
   ClassSchedules,
@@ -16,7 +17,6 @@ import {
   Locations,
   type ClassRow,
   type ClassSchedule,
-  type GenerateSessionsResult,
   type Location,
   listAll,
 } from '@/lib/api-resources';
@@ -25,6 +25,15 @@ import { NativeSelect } from '@/components/ui/native-select';
 
 export default function SchedulesListPage() {
   const { t } = useTranslation();
+  const [classes, setClasses] = useState<ClassRow[]>([]);
+  const [locations, setLocations] = useState<Location[]>([]);
+  // Declared before the hook call so the deletedName closure below never reads ahead of a
+  // declaration — the React Compiler refuses to memoize that shape.
+  const classNameById = useMemo(() => new Map(classes.map((c) => [c.id, c.name])), [classes]);
+  const locationNameById = useMemo(
+    () => new Map(locations.map((l) => [l.id, l.name])),
+    [locations],
+  );
   const {
     rows,
     setPage,
@@ -35,15 +44,15 @@ export default function SchedulesListPage() {
     setPendingDelete,
     busy,
     onDelete,
-  } = useCrudList(ClassSchedules);
-  const [classes, setClasses] = useState<ClassRow[]>([]);
-  const [locations, setLocations] = useState<Location[]>([]);
+  } = useCrudList(ClassSchedules, {
+    deletedName: (s) =>
+      `${classNameById.get(s.classId) ?? ''} ${t(`schedules.days.${s.dayOfWeek}`)} ${s.startTime}`.trim(),
+  });
 
   // Generate-sessions form state.
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
   const [classFilter, setClassFilter] = useState('');
-  const [genResult, setGenResult] = useState<GenerateSessionsResult | null>(null);
   const [genError, setGenError] = useState<string | null>(null);
   const [genBusy, setGenBusy] = useState(false);
 
@@ -56,16 +65,9 @@ export default function SchedulesListPage() {
       .catch((e: unknown) => setError(apiErrorMessage(e)));
   }, [setError]);
 
-  const classNameById = useMemo(() => new Map(classes.map((c) => [c.id, c.name])), [classes]);
-  const locationNameById = useMemo(
-    () => new Map(locations.map((l) => [l.id, l.name])),
-    [locations],
-  );
-
   const onGenerate = async (e: React.FormEvent) => {
     e.preventDefault();
     setGenError(null);
-    setGenResult(null);
     if (from && to && to < from) {
       setGenError(t('schedules.errors.dateRange'));
       return;
@@ -77,7 +79,7 @@ export default function SchedulesListPage() {
         to,
         classId: classFilter || undefined,
       });
-      setGenResult(result);
+      showToast({ text: t('schedules.generated', { created: result.created, skipped: result.skipped }), variant: 'success' });
     } catch (err) {
       setGenError(apiErrorMessage(err));
     } finally {
@@ -191,11 +193,6 @@ export default function SchedulesListPage() {
               </Button>
             </div>
           </form>
-          {genResult ? (
-            <p className="mt-3 text-sm text-success">
-              {t('schedules.generated', { created: genResult.created, skipped: genResult.skipped })}
-            </p>
-          ) : null}
           {genError ? <p className="mt-3 text-sm text-destructive">{genError}</p> : null}
         </CardContent>
       </Card>
@@ -205,6 +202,7 @@ export default function SchedulesListPage() {
         rows={rows}
         rowKey={(s) => s.id}
         emptyText={t('schedules.empty')}
+        rowHref={(s) => `/schedules/${s.id}/edit`}
         actions={(s) => (
           <>
             <Button asChild variant="ghost" size="sm">

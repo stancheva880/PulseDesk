@@ -13,6 +13,7 @@
       <a href="super-admin.html">Super Administrator</a>
       <a href="trainer.html">Employee</a>
       <a href="customer.html">Customer</a>
+      <a href="examples.html">Examples</a>
       <span class="spacer"></span>
       <a class="lang" href="../bg/admin.html">BG</a>
     </nav>
@@ -52,7 +53,11 @@
         </tr>
         <tr>
           <td>Classes</td>
-          <td>The kinds of training, their price and their default trainers.</td>
+          <td>
+            The kinds of training, their price and their default trainers.
+            <span class="ui">Search by name…</span> narrows the list, and
+            <span class="ui">Active classes only</span> hides the ones you have switched off.
+          </td>
           <td>full</td>
         </tr>
         <tr>
@@ -62,7 +67,17 @@
         </tr>
         <tr>
           <td>Sessions</td>
-          <td>The individual occurrences with date, time, trainer and attendance.</td>
+          <td>
+            The individual occurrences with date, time, trainer and attendance, each carrying a
+            <span class="ui">Status</span> of <span class="ui">Scheduled</span>,
+            <span class="ui">Completed</span> or <span class="ui">Cancelled</span>. Above the list,
+            <span class="ui">From</span>, <span class="ui">Before</span>,
+            <span class="ui">Class</span>, <span class="ui">Trainer</span> and
+            <span class="ui">Location</span> narrow it — each of the last three has an
+            <span class="ui">All</span> option to clear it. A <span class="ui">Calendar</span>
+            button switches the list to a month, week or day calendar, and
+            <span class="ui">Table</span> switches back.
+          </td>
           <td>full</td>
         </tr>
         <tr>
@@ -72,7 +87,12 @@
         </tr>
         <tr>
           <td>Fees</td>
-          <td>Per-trainee charges and the payments recorded against them.</td>
+          <td>Per-trainee charges, with the payments and refunds recorded against them.</td>
+          <td>full</td>
+        </tr>
+        <tr>
+          <td>Cards</td>
+          <td>Prepaid visit cards — sale, remaining visits, cancellation with a refund.</td>
           <td>full</td>
         </tr>
         <tr>
@@ -82,6 +102,18 @@
         </tr>
       </tbody>
     </table>
+
+    <div class="note">
+      <strong>The chart answers two different questions.</strong>
+      Two buttons above it choose which. <span class="ui">Billing</span> shows
+      <span class="ui">Collected vs Pending fees</span> — for the fees of each month, how much came
+      in and how much is still owed. <span class="ui">Cash-flow</span> shows
+      <span class="ui">Cash-flow vs Billed</span> — money counted by the day it was paid, against
+      what was charged for that month. The same month can differ between the two, and that is the
+      point: one follows the debt, the other follows the cash. Under the chart,
+      <span class="ui">View in fees list</span> opens <span class="ui">Fees</span> — with the month
+      already selected when you are looking at a single month, and unfiltered over a longer period.
+    </div>
 
     <div class="note">
       <strong>The chart period.</strong>
@@ -98,9 +130,19 @@
     <ul>
       <li>Create, edit and delete trainees, classes, schedules, sessions and fees.</li>
       <li>Mark attendance and add a trainee to a session.</li>
-      <li>Generate monthly or per-session fees for a whole class at once.</li>
-      <li>Record payments and remove a payment entered by mistake.</li>
+      <li>Put a trainee on the waitlist of a full session, and take them off it.</li>
+      <li>
+        Let customers book, cancel and queue their own trainees on a class — off by default, one
+        switch per class, with a deadline you choose.
+      </li>
+      <li>Generate monthly, per-session or course fees for a whole class at once.</li>
+      <li>Record payments and refunds, and remove one entered by mistake.</li>
+      <li>Sell a prepaid visit card and cancel one with a refund.</li>
       <li>Add trainers and customers to the club, and remove them from it.</li>
+      <li>
+        Set a new password for someone in your club who cannot receive their invitation — see
+        story 9.
+      </li>
       <li>Link a trainee to a customer account so a parent can see their information.</li>
     </ul>
 
@@ -131,8 +173,18 @@
         shown.
       </li>
       <li>
-        <strong>There are no card payments.</strong> Payments are entered by hand once the money
-        has arrived.
+        <strong>There are no online payments.</strong> PulseDesk charges no bank card. Payments and
+        refunds are entered by hand once the money has moved. (The <span class="ui">Cards</span>
+        menu is something else — prepaid visit cards, paid for like any other fee.)
+      </li>
+      <li>
+        <strong>You cannot delete a class or a trainee once money is recorded.</strong>
+        <span class="ui">Delete</span> is refused with
+        <span class="ui">This class has fees with recorded payments or refunds. Deactivate it
+        instead, or remove the payments first.</span> — and the same message for a trainee. The
+        deletion would take the fees with it, and the payment history with them. Clear the
+        <span class="ui">Active</span> tick in <span class="ui">Edit</span> instead: the class or
+        the trainee stops appearing in new work and every past record is kept.
       </li>
     </ul>
 
@@ -178,7 +230,7 @@
       <ol>
         <li>
           Make sure the parent has an account in the club with the
-          <span class="ui">Customer</span> role. If not, create it first — see story 7.
+          <span class="ui">Customer</span> role. If not, create it first — see story 8.
         </li>
         <li>Open <span class="ui">Trainees</span> and press <span class="ui">Edit</span> on the child.</li>
         <li>
@@ -196,8 +248,9 @@
         <span class="ui">That account is already linked to another trainee</span>.
       </p>
       <p>
-        After saving, the parent sees the child in <span class="ui">My schedule</span> and
-        <span class="ui">My fees</span>, and can answer session invitations on their behalf.
+        After saving, the parent sees the child in <span class="ui">My schedule</span>,
+        <span class="ui">My fees</span> and <span class="ui">My cards</span>, and can answer
+        session invitations on their behalf.
       </p>
     </div>
 
@@ -209,7 +262,25 @@
         <li>
           Choose the <span class="ui">Billing mode</span>:
           <span class="ui">Per month</span> with <span class="ui">Monthly amount per trainee</span>,
-          or <span class="ui">Per session</span> with <span class="ui">Price per session</span>.
+          <span class="ui">Per session</span> with <span class="ui">Price per session</span>, or
+          <span class="ui">Course</span> with <span class="ui">Course price</span>,
+          <span class="ui">Course start</span> and <span class="ui">Course end</span> — one price
+          for the whole run, and the end must be after the start.
+        </li>
+        <li>
+          Optionally set <span class="ui">Capacity (spots)</span> — the number of places in a
+          session. Leave it empty for no limit.
+        </li>
+        <li>
+          Optionally choose a <span class="ui">Waitlist</span> mode for full sessions:
+          <span class="ui">None</span>, <span class="ui">Automatic (first come)</span> or
+          <span class="ui">Email claim</span> — see the attendance story below for what each does.
+        </li>
+        <li>
+          Optionally tick <span class="ui">Customer self-booking</span>. A
+          <span class="ui">Booking closes (minutes before start)</span> field then appears — for
+          example 120 to close two hours before the session. Leave it empty and it says
+          <span class="ui">Empty = bookable until the session starts</span>.
         </li>
         <li>Choose the <span class="ui">Locations</span> where the class runs.</li>
         <li>
@@ -218,10 +289,28 @@
         </li>
         <li>Press <span class="ui">Save</span>.</li>
       </ol>
-      <div class="warn">
-        <strong>The billing mode cannot be changed later.</strong>
-        The field is marked <span class="ui">(immutable after creation)</span>. If you pick the
-        wrong one, create a new class and move the trainees across.
+      <div class="note">
+        <strong>Changing the billing mode later is allowed.</strong>
+        Switching the mode clears the price fields of the old mode, so you enter the new price
+        deliberately. Fees that already exist are not touched — see the fees story for how prices
+        are snapshotted.
+      </div>
+      <div class="note">
+        <strong>What self-booking actually opens.</strong>
+        With the tick on, a customer may — for their own trainees, and only for trainees already
+        enrolled in this class — put them on a session, take them off again, and join or leave the
+        waitlist of a full one. The deadline closes all of that at once: after it the buttons are
+        gone and the portal says to contact the club. Everything else stays as it was — customers
+        still cannot move a session, and a booking they make consumes a card visit exactly like one
+        you make. Untick it later and nothing already booked changes — the buttons simply disappear
+        from the portal. The deadline is cleared along with the tick, so set it again if you switch
+        self-booking back on.
+      </div>
+      <div class="note">
+        <strong>Capacity warns, it does not block.</strong>
+        The form shows <span class="ui">Enrolled 12 / capacity 10</span>, and when enrollment
+        exceeds capacity an amber warning says new sessions will be generated over-full. You may
+        still save — the number is yours to manage.
       </div>
       <p>
         If there are no locations or employees yet, the form says so plainly — for example
@@ -280,7 +369,46 @@
         portal: <span class="ui">Confirmed</span>, <span class="ui">Declined</span> or
         <span class="ui">Wants to reschedule</span>. That is information for you — the real
         attendance is what you mark. <span class="ui">Last marked by</span> shows who marked it
-        most recently.
+        most recently. A row the customer booked themselves arrives with
+        <span class="ui">Confirmed</span> already set — booking yourself is the clearest answer
+        there is.
+      </p>
+      <p>
+        <span class="ui">Remove from session</span> on a row takes the trainee off the session
+        entirely — use it for a booking made by mistake. If a card visit was used for that booking,
+        the visit returns to the card by itself.
+      </p>
+      <div class="note">
+        <strong>Adding never gets blocked by a card.</strong>
+        A trainee whose visit card has no visits left is marked
+        <span class="ui">no visits left</span> in the list, and adding them shows a warning that
+        suggests a new card or a fee. The add still works — a full class should never turn a
+        trainee away at the door.
+      </div>
+      <div class="note">
+        <strong>A full session offers the waitlist.</strong>
+        When the class has a capacity and the session is full, the add control is replaced by
+        <span class="ui">No spots left</span> and — if the class has a waitlist mode — an
+        <span class="ui">Add to waitlist</span> control with the queue below it. When a spot frees
+        up (someone is removed), what happens next depends on the class's
+        <span class="ui">Waitlist</span> mode:
+        <span class="ui">Automatic (first come)</span> books the first trainee in the queue at once
+        and emails the customer — this may consume a card visit without staff action;
+        <span class="ui">Email claim</span> emails every queued customer a one-time link, and the
+        first one to open it takes the spot.
+      </div>
+      <div class="warn">
+        <strong>A spot freed too late is not filled automatically.</strong>
+        Once the class's booking deadline has passed — and on a session that has already started —
+        freeing a spot promotes nobody and sends no claim email. The queue stays as it is and the
+        place is yours to fill with <span class="ui">Add a trainee…</span>. Without self-booking
+        the class has no deadline, so this only affects a session that has already begun.
+      </div>
+      <p>
+        If the class allows <span class="ui">Customer self-booking</span> (story 3), the queue can
+        also fill itself: customers add and remove their own trainees from it until the deadline.
+        Those entries are ordinary queue entries — they promote and are emailed exactly like the
+        ones you add.
       </p>
     </div>
 
@@ -296,6 +424,12 @@
         <li>
           For classes billed per session use
           <span class="ui">Generate per-session fees</span> for a date range.
+        </li>
+        <li>
+          For classes billed as a course use <span class="ui">Generate course fees</span> — one fee
+          per enrolled trainee, with the period and the price taken from the class. A trainee who
+          enrols later gets their fee on the next run; trainees who already have one are skipped as
+          duplicates.
         </li>
         <li>
           A result appears, for example
@@ -315,12 +449,22 @@
       </ol>
       <div class="note">
         <strong>The status works itself out.</strong>
-        The sum of the recorded payments is compared with the fee's
+        The recorded payments minus the recorded refunds are compared with the fee's
         <span class="ui">Amount</span>: equal amounts give <span class="ui">Paid</span>, a smaller
-        sum gives <span class="ui">Partial</span>, and no payment leaves it
-        <span class="ui">Unpaid</span>. The <span class="ui">Outstanding</span> column shows what is
-        left. The status is never typed in by hand.
+        sum gives <span class="ui">Partial</span>, and nothing paid leaves it
+        <span class="ui">Unpaid</span>. That difference is shown on the fee as
+        <span class="ui">Net paid</span>, and the <span class="ui">Outstanding</span> column shows
+        what is left. The status is never typed in by hand.
       </div>
+      <p>
+        <strong>Giving money back.</strong> The fee's edit screen lists every entry under
+        <span class="ui">Payment ledger</span>, each with the <span class="ui">Recorded by</span>
+        name, and holds a <span class="ui">Refund ledger</span> below it.
+        <span class="ui">Record a refund</span> works like
+        recording a payment — amount, date, method, notes — and the status is recomputed the same
+        way. A refund larger than what has actually been paid in is refused, and removing a refund
+        asks for confirmation, exactly like removing a payment.
+      </p>
       <p>
         To settle a fee in full, press <span class="ui">Pay the rest</span> next to the
         <span class="ui">Amount</span> field. It fills in the remaining balance; you add the date
@@ -349,7 +493,7 @@
         <span class="ui">Month</span>, and set <span class="ui">Status</span> to
         <span class="ui">Outstanding</span>. That shows the unpaid fees and the partly paid ones
         together, because both still owe money. Change the month to look at an earlier period.
-        <span class="ui">Search trainee or class…</span> finds one record.
+        <span class="ui">Search by trainee name or email…</span> finds one record.
       </p>
       <div class="note">
         <strong>Trainees with no fee.</strong>
@@ -367,7 +511,45 @@
     </div>
 
     <div class="story">
-      <h3>7. As an administrator I want to add a trainer or a customer</h3>
+      <h3>7. As an administrator I want to sell a visit card</h3>
+      <ol>
+        <li>Open <span class="ui">Cards</span> and press <span class="ui">New card</span>.</li>
+        <li>Pick the <span class="ui">Trainee</span>.</li>
+        <li>
+          Pick the <span class="ui">Scope</span>: one class, or <span class="ui">Whole club</span>
+          — a whole-club card is spent on any class's sessions.
+        </li>
+        <li>
+          Fill in the <span class="ui">Number of visits</span> and the <span class="ui">Price</span>
+          of the card.
+        </li>
+        <li>
+          Optionally set <span class="ui">Valid until</span>. Left empty, the card never expires.
+        </li>
+        <li>Press <span class="ui">Save</span>.</li>
+      </ol>
+      <p>
+        The sale also creates a fee for the card's price, so the money is collected and reported
+        like any other fee — record the payment there. The card list shows
+        <span class="ui">Remaining</span> visits and the <span class="ui">State</span>:
+        <span class="ui">Active</span>, <span class="ui">Used up</span>,
+        <span class="ui">Expired</span> or <span class="ui">Cancelled</span>.
+      </p>
+      <div class="note">
+        <strong>Visits spend themselves.</strong>
+        Adding the trainee to a session takes one visit from their oldest usable card; removing
+        them from the session gives it back. Nobody types visit counts by hand.
+      </div>
+      <p>
+        <strong>Cancelling a card.</strong> Press <span class="ui">Cancel card</span> on its row.
+        The dialog suggests a <span class="ui">Refund amount</span> — price ÷ total visits ×
+        remaining — which you may edit, down to 0. The refund is recorded on the card's fee, and
+        the card stops being usable.
+      </p>
+    </div>
+
+    <div class="story">
+      <h3>8. As an administrator I want to add a trainer or a customer</h3>
       <ol>
         <li>Open <span class="ui">Users</span> and press <span class="ui">New user</span>.</li>
         <li>Fill in <span class="ui">Email</span>. You do not choose a password — the person sets their own.</li>
@@ -398,7 +580,8 @@
         <strong>The person receives an invitation by email.</strong>
         On save, a link is sent to that address which lets them choose their own password. The link
         is valid for 48 hours and works once. Until then the account exists but cannot be signed
-        into. You never learn anyone else’s password.
+        into. Nobody types a password on their behalf, so it stays known only to them — story 9
+        covers the one case where that is not enough.
       </div>
       <p>
         If the email does not arrive, the person can request a fresh link themselves with
@@ -407,7 +590,39 @@
     </div>
 
     <div class="story">
-      <h3>8. As an administrator I want to take someone off the club</h3>
+      <h3>9. As an administrator I want to set a password for someone who cannot sign in</h3>
+      <ol>
+        <li>Open <span class="ui">Users</span> and press <span class="ui">Edit</span> on their row.</li>
+        <li>
+          Fill in <span class="ui">New password (leave blank to keep)</span> — at least 8
+          characters. Left empty it changes nothing, so editing a name or a phone number never
+          touches the password.
+        </li>
+        <li>Press <span class="ui">Save</span>.</li>
+        <li>Tell the person the password you chose, and ask them to change it themselves.</li>
+      </ol>
+      <div class="warn">
+        <strong>Saving a password signs that person out everywhere.</strong>
+        Every device they were signed in on is logged out at once, deliberately: if an account had
+        to be taken back, sessions left open would defeat the point. They sign in again with the new
+        password.
+      </div>
+      <div class="note">
+        <strong>Prefer the invitation or the reset link whenever you can.</strong>
+        A new account gets an invitation, and anybody who forgot their password can ask for their
+        own link with <span class="ui">Forgot your password?</span> on the sign-in screen. Both
+        leave the password known only to them. Type one in here when mail is not reaching the person
+        at all — you then know their password, which is the very thing the other two routes avoid.
+      </div>
+      <p>
+        This works for the trainers, the customers and the other administrators of your club.
+        Somebody's <span class="ui">Role</span> is a different matter: only a super administrator
+        changes that, so the field is not shown to you.
+      </p>
+    </div>
+
+    <div class="story">
+      <h3>10. As an administrator I want to take someone off the club</h3>
       <ol>
         <li>Open <span class="ui">Users</span>.</li>
         <li>Press <span class="ui">Delete</span> on their row.</li>

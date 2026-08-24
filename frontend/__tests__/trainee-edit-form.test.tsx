@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event';
 import EditTraineePage from '@/app/(dashboard)/trainees/[id]/edit/page';
 import { AuthProvider } from '@/components/auth-provider';
 import { I18nProvider } from '@/components/i18n-provider';
+import { ToastViewport } from '@/components/toast';
 import { setAccessToken } from '@/lib/auth-storage';
 
 const replace = vi.fn();
@@ -96,12 +97,61 @@ describe('EditTraineePage — customer linking (TKT-0009)', () => {
   function renderForm() {
     return render(
       <I18nProvider>
+        <ToastViewport />
         <AuthProvider>
           <EditTraineePage />
         </AuthProvider>
       </I18nProvider>,
     );
   }
+
+  // TKT-0092 AC — removing a guardian contact confirms itself with a toast naming the person.
+  it('confirms a deleted contact with a toast naming the contact', async () => {
+    const user = userEvent.setup();
+    const contact = {
+      id: 'c-1',
+      tenantId: 't',
+      traineeId: 't-1',
+      firstName: 'Maria',
+      lastName: 'Lovelace',
+      relationship: 'PARENT',
+      phone: null,
+      email: null,
+      isPrimary: false,
+      createdAt: '',
+      updatedAt: '',
+    };
+    let contactDeleted = false;
+    vi.spyOn(globalThis, 'fetch').mockImplementation((input, init) => {
+      const url = typeof input === 'string' ? input : (input as Request).url;
+      if (url.includes('/trainees/t-1/contacts/c-1') && init?.method === 'DELETE') {
+        contactDeleted = true;
+        return Promise.resolve(jsonResponse(200, null));
+      }
+      if (url.includes('/users')) return Promise.resolve(jsonResponse(200, paged(users)));
+      if (url.includes('/locations')) return Promise.resolve(jsonResponse(200, paged([])));
+      if (url.includes('/classes')) return Promise.resolve(jsonResponse(200, paged([])));
+      if (url.includes('/trainees/t-1')) {
+        return Promise.resolve(
+          jsonResponse(200, { ...detail, contacts: contactDeleted ? [] : [contact] }),
+        );
+      }
+      return Promise.resolve(jsonResponse(200, {}));
+    });
+
+    renderForm();
+    await screen.findByText(/Maria Lovelace/);
+    await user.click(screen.getByRole('button', { name: /^Delete$|^Изтриване$/ }));
+    const confirmButtons = await screen.findAllByRole('button', { name: /^Delete$|^Изтриване$/ });
+    const lastButton = confirmButtons[confirmButtons.length - 1];
+    if (!lastButton) throw new Error('expected the confirm button');
+    await user.click(lastButton);
+
+    expect(
+      await screen.findByText(/Removed: Maria Lovelace|Премахнато: Maria Lovelace/),
+    ).toBeInTheDocument();
+    expect(contactDeleted).toBe(true);
+  });
 
   it('prefills linked account and guardians from the trainee detail', async () => {
     renderForm();

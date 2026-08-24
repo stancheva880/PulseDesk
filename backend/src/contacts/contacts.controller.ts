@@ -9,7 +9,7 @@ import {
   Patch,
   Post,
 } from '@nestjs/common';
-import { ApiBearerAuth } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { UserRole } from '@prisma/client';
 import { CurrentUser } from '@/auth/decorators/current-user.decorator';
 import { Roles } from '@/auth/decorators/roles.decorator';
@@ -27,6 +27,7 @@ import { UpdateContactDto } from './dto/update-contact.dto';
 export class ContactsController {
   constructor(private readonly contacts: ContactsService) {}
 
+  @ApiOperation({ summary: 'List the contacts of one trainee.' })
   @Get()
   @ResponseSchema('ContactPersonList', ContactPersonListSchema)
   list(
@@ -37,6 +38,7 @@ export class ContactsController {
     return this.contacts.list(tenantId, traineeId, user);
   }
 
+  @ApiOperation({ summary: 'Add a contact to one trainee.' })
   @Post()
   @Roles(UserRole.ADMIN)
   @ResponseSchema('ContactPerson', ContactPersonSchema)
@@ -49,6 +51,7 @@ export class ContactsController {
     return this.contacts.create(tenantId, traineeId, dto, user);
   }
 
+  @ApiOperation({ summary: 'Change one contact of one trainee.' })
   @Patch(':id')
   @Roles(UserRole.ADMIN)
   @ResponseSchema('ContactPerson', ContactPersonSchema)
@@ -62,6 +65,7 @@ export class ContactsController {
     return this.contacts.update(tenantId, traineeId, id, dto, user);
   }
 
+  @ApiOperation({ summary: 'Delete one contact of one trainee.' })
   @Delete(':id')
   @Roles(UserRole.ADMIN)
   @HttpCode(HttpStatus.NO_CONTENT)

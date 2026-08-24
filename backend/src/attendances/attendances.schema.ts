@@ -1,8 +1,10 @@
 import { AttendanceRsvp, AttendanceStatus } from '@prisma/client';
 import { z } from 'zod';
-import { isoDate, nullableIsoDate } from '@/common/response-schema';
+import { WaitlistModeSchema } from '@/classes/classes.schema';
+import { isoDate, nullableIsoDate, paginatedSchema } from '@/common/response-schema';
 import { LocationRefSchema } from '@/locations/locations.schema';
 import { SessionSchema } from '@/sessions/sessions.schema';
+import { TraineeSchema } from '@/trainees/trainees.schema';
 
 // The attendance contract. TKT-0038 widened the list response to carry the trainee's name
 // because the page could not resolve names past the first 100 trainees; that subset had
@@ -48,15 +50,52 @@ export const AttendanceWithTraineeListSchema = z.array(AttendanceWithTraineeSche
 
 export const BulkMarkResultSchema = z.object({ updated: z.number() });
 
+// TKT-0108: each candidate carries the card a booking would consume (same rule as
+// consumption — null when none usable) and whether the trainee holds any card at all,
+// so the picker warns ex-card-holders and only them.
+export const CandidateTraineeSchema = TraineeSchema.extend({
+  card: z
+    .object({
+      id: z.string(),
+      visitsRemaining: z.number().int(),
+      expiresAt: nullableIsoDate,
+      classScoped: z.boolean(),
+    })
+    .nullable(),
+  hasCards: z.boolean(),
+});
+
+// TKT-0103: the candidates page envelope plus how many spots the session still has —
+// null when the class has no capacity.
+export const AttendanceCandidatesSchema = paginatedSchema(CandidateTraineeSchema).extend({
+  spotsLeft: z.number().int().nullable(),
+});
+
 // listCustomerSessions returns whole Session rows, so this extends the sessions contract rather
 // than restating it — the portal cannot describe a session differently from GET /sessions.
 export const CustomerSessionEntrySchema = SessionSchema.extend({
-  // The portal gets the class name only — no billing mode.
-  class: z.object({ id: z.string(), name: z.string() }),
+  // The portal gets the class name plus its self-booking policy (TKT-0118) and its waitlist mode
+  // (TKT-0121) — no billing fields.
+  class: z.object({
+    id: z.string(),
+    name: z.string(),
+    allowSelfBooking: z.boolean(),
+    bookingCutoffMin: z.number().int().nullable(),
+    waitlistMode: WaitlistModeSchema,
+  }),
   location: LocationRefSchema,
   // Server-side filtered to the customer's own trainees; the schema describes the result, not
   // the filter.
   attendances: z.array(AttendanceWithTraineeSchema),
+  // TKT-0118: eligibility for the Book button. spotsLeft is computed server-side from the
+  // class capacity (null = no limit); myTrainees = the customer's trainees enrolled in the class.
+  spotsLeft: z.number().int().nullable(),
+  myTrainees: z.array(
+    z.object({ id: z.string(), firstName: z.string(), lastName: z.string() }),
+  ),
+  // TKT-0121: which of them are queued on this session. Ids only — names come from myTrainees,
+  // so a staff-queued off-roster trainee simply has no row to render.
+  myWaitlist: z.array(z.string()),
 });
 
 export const CustomerSessionEntryListSchema = z.array(CustomerSessionEntrySchema);

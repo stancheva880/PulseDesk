@@ -5,6 +5,7 @@ import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { ResponseSchemaInterceptor } from './common/response-schema.interceptor';
 import { AttendancesModule } from './attendances/attendances.module';
 import { AuthModule } from './auth/auth.module';
+import { CardsModule } from './cards/cards.module';
 import { LocationScopeModule } from './auth/scope/location-scope.module';
 import { ClassSchedulesModule } from './class-schedules/class-schedules.module';
 import { ClassesModule } from './classes/classes.module';
@@ -16,6 +17,8 @@ import { LocationsModule } from './locations/locations.module';
 import { MailModule } from './mail/mail.module';
 import { PaymentsModule } from './payments/payments.module';
 import { PrismaModule } from './prisma/prisma.module';
+import { RefundsModule } from './refunds/refunds.module';
+import { WaitlistsModule } from './waitlists/waitlists.module';
 import { SessionsModule } from './sessions/sessions.module';
 import { TenantsModule } from './tenants/tenants.module';
 import { TraineesModule } from './trainees/trainees.module';
@@ -45,6 +48,9 @@ import { UsersModule } from './users/users.module';
     AttendancesModule,
     FeesModule,
     PaymentsModule,
+    RefundsModule,
+    WaitlistsModule,
+    CardsModule,
     DashboardModule,
     TenantsModule,
   ],

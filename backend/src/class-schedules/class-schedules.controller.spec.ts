@@ -21,6 +21,7 @@ const PASSWORD = 'TestPass123!';
 
 interface TestActor {
   tenantId: string;
+  userId: string;
   locationId: string;
   accessToken: string;
 }
@@ -80,7 +81,12 @@ describe('ClassSchedulesController (e2e-ish)', () => {
       ...(role === UserRole.ADMIN ? { locations: { connect: [{ id: location.id }] } } : {}),
     });
     const tokens = await auth.login(user);
-    return { tenantId: tenant.id, locationId: location.id, accessToken: tokens.accessToken };
+    return {
+      tenantId: tenant.id,
+      userId: user.id,
+      locationId: location.id,
+      accessToken: tokens.accessToken,
+    };
   }
 
   async function newClass(tenantId: string) {
@@ -266,6 +272,145 @@ describe('ClassSchedulesController (e2e-ish)', () => {
         .set('X-Tenant-Id', a.tenantId)
         .send({ from: '2026-06-01', to: '2026-06-28' })
         .expect(403);
+    });
+
+    // TKT-0123: every candidate day is created inside ONE interactive transaction, each session
+    // writing an attendance row per enrolled trainee plus its card consumption. Only `from <= to`
+    // was checked, so a mistyped year was an outage against SQLite's single writer rather than a
+    // rejected request. DashboardService already bounds its range the same way.
+    it('rejects a range longer than the cap → 400', async () => {
+      const a = await setupActor(UserRole.ADMIN);
+      const res = await request(server)
+        .post('/class-schedules/generate-sessions')
+        .set('Authorization', `Bearer ${a.accessToken}`)
+        .set('X-Tenant-Id', a.tenantId)
+        .send({ from: '2026-01-01', to: '2036-01-01' })
+        .expect(400);
+      expect(res.body.code).toBe('SCHEDULE_RANGE_TOO_LARGE');
+    });
+
+    it('accepts a full year, which is the realistic maximum a club plans ahead', async () => {
+      const a = await setupActor(UserRole.ADMIN);
+      await request(server)
+        .post('/class-schedules/generate-sessions')
+        .set('Authorization', `Bearer ${a.accessToken}`)
+        .set('X-Tenant-Id', a.tenantId)
+        .send({ from: '2026-01-01', to: '2026-12-31' })
+        .expect(200);
+    });
+
+    // TKT-0126: the mechanism that stops a retired hall generating. Deactivating a location
+    // flips its schedules (locations.controller.spec.ts) and an inactive schedule generates
+    // nothing (here) — the two compose, joined by ClassSchedule.isActive. Untested before this
+    // ticket, despite the filter existing since the endpoint shipped.
+    it('skips an inactive schedule', async () => {
+      const a = await setupActor(UserRole.ADMIN);
+      const cls = await newClass(a.tenantId);
+      const schedule = await prisma.classSchedule.create({
+        data: {
+          tenantId: a.tenantId,
+          classId: cls.id,
+          locationId: a.locationId,
+          dayOfWeek: 'MON',
+          startTime: '18:00',
+          endTime: '19:00',
+        },
+      });
+      await prisma.classSchedule.update({
+        where: { id: schedule.id },
+        data: { isActive: false },
+      });
+
+      const res = await request(server)
+        .post('/class-schedules/generate-sessions')
+        .set('Authorization', `Bearer ${a.accessToken}`)
+        .set('X-Tenant-Id', a.tenantId)
+        .send({ from: '2026-01-01', to: '2026-03-31' })
+        .expect(200);
+      expect(res.body.created).toBe(0);
+      expect(await prisma.session.count({ where: { tenantId: a.tenantId } })).toBe(0);
+    });
+  });
+
+  // TKT-0125: the schedules half of the same rule the sessions spec covers — a deactivated
+  // hall takes no new recurring slot either. First PATCH tests in this file.
+  describe('a deactivated location (TKT-0125)', () => {
+    /** A second hall the actor is also assigned to, so only `isActive` can be what refuses. */
+    async function secondHall(a: TestActor, opts: { active: boolean }) {
+      const loc = await prisma.location.create({
+        data: { tenantId: a.tenantId, name: `Retired-${randomUUID()}`, isActive: opts.active },
+      });
+      await prisma.user.update({
+        where: { id: a.userId },
+        data: { locations: { connect: [{ id: loc.id }] } },
+      });
+      return loc;
+    }
+
+    async function postSchedule(a: TestActor, classId: string, locationId: string) {
+      const res = await request(server)
+        .post('/class-schedules')
+        .set('Authorization', `Bearer ${a.accessToken}`)
+        .set('X-Tenant-Id', a.tenantId)
+        .send({ classId, locationId, dayOfWeek: 'MON', startTime: '18:00', endTime: '19:00' })
+        .expect(201);
+      return res.body as { id: string; locationId: string };
+    }
+
+    it('POST /class-schedules refuses it (400 LOCATION_INACTIVE)', async () => {
+      const a = await setupActor(UserRole.ADMIN);
+      const cls = await newClass(a.tenantId);
+      const retired = await secondHall(a, { active: false });
+
+      const res = await request(server)
+        .post('/class-schedules')
+        .set('Authorization', `Bearer ${a.accessToken}`)
+        .set('X-Tenant-Id', a.tenantId)
+        .send({
+          classId: cls.id,
+          locationId: retired.id,
+          dayOfWeek: 'MON',
+          startTime: '18:00',
+          endTime: '19:00',
+        })
+        .expect(400);
+      expect(res.body.code).toBe('LOCATION_INACTIVE');
+      expect(await prisma.classSchedule.count({ where: { locationId: retired.id } })).toBe(0);
+    });
+
+    it('PATCH /class-schedules/:id refuses a move onto it (400 LOCATION_INACTIVE)', async () => {
+      const a = await setupActor(UserRole.ADMIN);
+      const cls = await newClass(a.tenantId);
+      const schedule = await postSchedule(a, cls.id, a.locationId);
+      const retired = await secondHall(a, { active: false });
+
+      const res = await request(server)
+        .patch(`/class-schedules/${schedule.id}`)
+        .set('Authorization', `Bearer ${a.accessToken}`)
+        .set('X-Tenant-Id', a.tenantId)
+        .send({ locationId: retired.id })
+        .expect(400);
+      expect(res.body.code).toBe('LOCATION_INACTIVE');
+
+      const after = await prisma.classSchedule.findUniqueOrThrow({ where: { id: schedule.id } });
+      expect(after.locationId).toBe(a.locationId);
+    });
+
+    it('PATCH /class-schedules/:id allows a resend of the row own deactivated location (200)', async () => {
+      const a = await setupActor(UserRole.ADMIN);
+      const cls = await newClass(a.tenantId);
+      const hall = await secondHall(a, { active: true });
+      const schedule = await postSchedule(a, cls.id, hall.id);
+      await prisma.location.update({ where: { id: hall.id }, data: { isActive: false } });
+
+      const res = await request(server)
+        .patch(`/class-schedules/${schedule.id}`)
+        .set('Authorization', `Bearer ${a.accessToken}`)
+        .set('X-Tenant-Id', a.tenantId)
+        .send({ locationId: hall.id, startTime: '17:00' })
+        .expect(200);
+      expect(res.body.locationId).toBe(hall.id);
+      expect(res.body.startTime).toBe('17:00');
     });
   });
 });

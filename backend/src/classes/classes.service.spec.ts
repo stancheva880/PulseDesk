@@ -119,6 +119,94 @@ describe('ClassesService', () => {
         }, su),
       ).rejects.toBeInstanceOf(BadRequestException);
     });
+
+    // TKT-0109: third mode — a time-bounded course with one price.
+    const COURSE = {
+      courseStart: '2026-03-01',
+      courseEnd: '2026-08-31',
+      coursePrice: 300,
+    };
+
+    it('creates a PER_COURSE class with dates and price', async () => {
+      const t = await newTenant();
+      const cls = await service.create(t.id, {
+        name: 'English Spring',
+        billingMode: BillingMode.PER_COURSE,
+        ...COURSE,
+      }, su);
+      expect(cls.billingMode).toBe(BillingMode.PER_COURSE);
+      expect(Number(cls.coursePrice)).toBe(300);
+      expect(cls.courseStart?.toISOString()).toBe('2026-03-01T00:00:00.000Z');
+      expect(cls.courseEnd?.toISOString()).toBe('2026-08-31T00:00:00.000Z');
+      expect(cls.monthlyAmount).toBeNull();
+      expect(cls.sessionPrice).toBeNull();
+    });
+
+    it.each(['courseStart', 'courseEnd', 'coursePrice'] as const)(
+      'rejects PER_COURSE without %s (CLASS_COURSE_FIELDS_REQUIRED)',
+      async (missing) => {
+        const t = await newTenant();
+        const full = { name: 'X', billingMode: BillingMode.PER_COURSE, ...COURSE };
+        const dto = Object.fromEntries(
+          Object.entries(full).filter(([key]) => key !== missing),
+        ) as typeof full;
+        await expect(service.create(t.id, dto, su)).rejects.toMatchObject({
+          response: { code: 'CLASS_COURSE_FIELDS_REQUIRED' },
+        });
+      },
+    );
+
+    it.each([
+      ['equal', '2026-03-01', '2026-03-01'],
+      ['inverted', '2026-08-31', '2026-03-01'],
+    ])('rejects PER_COURSE with %s dates (CLASS_COURSE_PERIOD_ORDER)', async (_, start, end) => {
+      const t = await newTenant();
+      await expect(
+        service.create(t.id, {
+          name: 'X',
+          billingMode: BillingMode.PER_COURSE,
+          courseStart: start,
+          courseEnd: end,
+          coursePrice: 300,
+        }, su),
+      ).rejects.toMatchObject({ response: { code: 'CLASS_COURSE_PERIOD_ORDER' } });
+    });
+
+    it.each([BillingMode.PER_MONTH, BillingMode.PER_SESSION])(
+      'rejects course fields on a %s class (CLASS_COURSE_FIELDS_FORBIDDEN)',
+      async (billingMode) => {
+        const t = await newTenant();
+        await expect(
+          service.create(t.id, {
+            name: 'X',
+            billingMode,
+            monthlyAmount: billingMode === BillingMode.PER_MONTH ? 100 : undefined,
+            sessionPrice: billingMode === BillingMode.PER_SESSION ? 10 : undefined,
+            coursePrice: 300,
+          }, su),
+        ).rejects.toMatchObject({ response: { code: 'CLASS_COURSE_FIELDS_FORBIDDEN' } });
+      },
+    );
+
+    it('rejects monthlyAmount and sessionPrice on a PER_COURSE class', async () => {
+      const t = await newTenant();
+      await expect(
+        service.create(t.id, {
+          name: 'X',
+          billingMode: BillingMode.PER_COURSE,
+          ...COURSE,
+          monthlyAmount: 100,
+        }, su),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      await expect(
+        service.create(t.id, {
+          name: 'X',
+          billingMode: BillingMode.PER_COURSE,
+          ...COURSE,
+          sessionPrice: 10,
+        }, su),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    });
   });
 
   describe('update — roster backfill', () => {
@@ -301,9 +389,9 @@ describe('ClassesService', () => {
       expect(updated.isActive).toBe(false);
     });
 
-    // 'rejects changing billingMode after creation' deleted in TKT-0010 (PRD-0003):
-    // billingMode is no longer an UpdateClassDto field, so the change is rejected at the
-    // HTTP validation layer — covered by classes.controller.spec 'rejects billingMode change'.
+    // 'rejects changing billingMode after creation' deleted in TKT-0010 (PRD-0003).
+    // TKT-0109 (PRD-0015) made the mode editable again — the switch rules are pinned by
+    // classes.controller.spec 'billingMode switch (TKT-0109)'.
 
     it('rejects setting sessionPrice on a PER_MONTH class', async () => {
       const t = await newTenant();

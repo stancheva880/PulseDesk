@@ -7,6 +7,7 @@ import {
 } from '@prisma/client';
 import { LocationScopeService } from '@/auth/scope/location-scope.service';
 import type { AuthenticatedUser } from '@/auth/types/jwt-payload';
+import { consumeCardVisits } from '@/cards/card-consumption';
 import { assertDateOrder } from '@/common/dates';
 import {
   buildPaginatedResult,
@@ -17,6 +18,7 @@ import {
 import { PrismaService } from '@/prisma/prisma.service';
 import {
   assertClassInTenant,
+  assertLocationActive,
   assertLocationInTenant,
   assertTrainerIds,
 } from '@/common/tenant-guards';
@@ -28,6 +30,9 @@ export interface SessionListFilters {
   startsAtFrom?: string;
   /** Exclusive — see ListSessionsQueryDto. */
   startsAtBefore?: string;
+  classId?: string;
+  trainerId?: string;
+  locationId?: string;
 }
 
 // Internal shape for callers (e.g., ClassSchedulesService) that have already validated FKs
@@ -70,10 +75,22 @@ export class SessionsService {
         ...(filters.startsAtBefore === undefined ? {} : { lt: new Date(filters.startsAtBefore) }),
       };
     }
+    // TKT-0100: id filters AND into the where — never direct key assignment. `locationId`
+    // would overwrite the `{ locationId: { in } }` a location-scoped admin gets from
+    // locationWhere, and `trainers` would replace an EMPLOYEE's own narrowing; AND
+    // intersects with both, so a filter can only ever narrow what the viewer may see.
+    const and: Prisma.SessionWhereInput[] = [];
+    if (filters?.classId) and.push({ classId: filters.classId });
+    if (filters?.locationId) and.push({ locationId: filters.locationId });
+    if (filters?.trainerId) and.push({ trainers: { some: { id: filters.trainerId } } });
+    if (and.length) where.AND = and;
     const p = normalizePagination(pagination);
     const [items, total] = await this.prisma.$transaction([
       this.prisma.session.findMany({
         where,
+        // TKT-0103: occupancy for the calendar's X/Y chips; capacity itself comes from the
+        // class lookup the page already holds.
+        include: { _count: { select: { attendances: true } } },
         orderBy: { startsAt: 'asc' },
         skip: p.skip,
         take: p.take,
@@ -93,7 +110,9 @@ export class SessionsService {
     const session = await this.prisma.session.findFirst({
       where,
       include: {
-        class: { select: { id: true, name: true, billingMode: true } },
+        class: {
+          select: { id: true, name: true, billingMode: true, capacity: true, waitlistMode: true },
+        },
         location: { select: { id: true, name: true } },
         trainers: { select: { id: true, firstName: true, lastName: true, email: true } },
       },
@@ -114,6 +133,7 @@ export class SessionsService {
     // Validate FK references in the same tenant + check trainer roles in one go.
     await assertClassInTenant(this.prisma, tenantId, dto.classId);
     await assertLocationInTenant(this.prisma, tenantId, dto.locationId);
+    await assertLocationActive(this.prisma, tenantId, dto.locationId);
     await this.scope.assertLocationsAllowed(user, tenantId, [dto.locationId]);
     if (dto.trainerIds) await assertTrainerIds(this.prisma, tenantId, dto.trainerIds);
 
@@ -164,8 +184,12 @@ export class SessionsService {
     });
 
     // Auto-attendance — one PENDING row per current class trainee.
+    //
+    // TKT-0123: active ones only. An archived trainee stays on the roster, so without this every
+    // new session booked them and drew a visit off their card. `listCandidates` and `addTrainee`
+    // have always required isActive; this is the same rule on the automatic door.
     const enrolled = await tx.trainee.findMany({
-      where: { classes: { some: { id: data.classId } } },
+      where: { classes: { some: { id: data.classId } }, isActive: true },
       select: { id: true },
     });
     if (enrolled.length) {
@@ -176,6 +200,17 @@ export class SessionsService {
           traineeId: t.id,
           status: AttendanceStatus.PENDING,
         })),
+      });
+      // TKT-0107: each auto-booking draws down the trainee's card. createMany returns no
+      // ids (createManyAndReturn is not MySQL-portable), so fetch the new rows once.
+      const created = await tx.attendance.findMany({
+        where: { sessionId: session.id },
+        select: { id: true, traineeId: true },
+      });
+      await consumeCardVisits(tx, {
+        tenantId: data.tenantId,
+        classId: data.classId,
+        bookings: created.map((a) => ({ attendanceId: a.id, traineeId: a.traineeId })),
       });
     }
 
@@ -198,6 +233,11 @@ export class SessionsService {
 
     if (dto.locationId !== undefined) {
       await assertLocationInTenant(this.prisma, tenantId, dto.locationId);
+      // Only when the location actually changes: both edit forms always send locationId, so a
+      // blanket check would make every session at a deactivated hall un-editable.
+      if (dto.locationId !== existing.locationId) {
+        await assertLocationActive(this.prisma, tenantId, dto.locationId);
+      }
       await this.scope.assertLocationsAllowed(user, tenantId, [dto.locationId]);
     }
     if (dto.trainerIds !== undefined) {

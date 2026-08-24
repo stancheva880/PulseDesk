@@ -5,6 +5,7 @@ import type { NestExpressApplication } from '@nestjs/platform-express';
 import helmet from 'helmet';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { looksLikePlaceholder } from './common/credential-guards';
+import { parseSentryDsn } from './common/sentry-dsn';
 import { buildOpenApiDocument } from './common/openapi-document';
 
 // `openssl rand -base64 32` (what .env.example prescribes) yields 44 chars; 32 is
@@ -15,7 +16,12 @@ const MIN_SECRET_LENGTH = 32;
 // replied to and most receivers drop it, so smtp-mail.service.ts's noreply@pulsedesk.local
 // fallback is exactly the value production must never ship. Matches both `user@host` and the
 // `Display Name <user@host>` form.
-const UNROUTABLE_MAIL_DOMAIN = /.(local|localhost|invalid|test|example)>?s*$/i;
+//
+// Both escapes are load-bearing and were missing until TKT-0123. `\.` pins the reserved name to
+// a whole DNS label — unescaped it matched any character, so a real host like club.contest was
+// refused. `\s*` tolerates a stray space in the .env; as a literal `s*` it did not, and
+// "noreply@pulsedesk.local " booted production with the undeliverable address this exists to stop.
+const UNROUTABLE_MAIL_DOMAIN = /\.(local|localhost|invalid|test|example)>?\s*$/i;
 
 export function assertProductionSecrets(config: ConfigService): void {
   const env = (config.get<string>('NODE_ENV') ?? '').toLowerCase();
@@ -51,6 +57,15 @@ export function assertProductionSecrets(config: ConfigService): void {
         `MAIL_TRANSPORT=smtp but MAIL_FROM is unset, a placeholder, or on a reserved domain that cannot deliver ("${mailFrom}"); refusing to boot in production.`,
       );
     }
+  }
+  // Sentry.init swallows a malformed DSN silently, so a typo would deploy healthy with
+  // error tracking off. Unset/empty stays the off-switch (TKT-0097). The value embeds
+  // the project key — never echo it here.
+  const sentryDsn = config.get<string>('SENTRY_DSN');
+  if (sentryDsn?.trim() && !parseSentryDsn(sentryDsn)) {
+    throw new Error(
+      'SENTRY_DSN is set but not a valid Sentry DSN (expected https://<key>@<host>/<project>); refusing to boot in production.',
+    );
   }
 }
 

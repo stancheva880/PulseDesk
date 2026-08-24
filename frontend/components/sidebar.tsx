@@ -3,12 +3,14 @@
 import {
   CalendarDays,
   Clock,
+  CreditCard,
   Dumbbell,
   LayoutDashboard,
   MapPin,
   Receipt,
   UserCog,
   Users,
+  Wrench,
   type LucideIcon,
 } from 'lucide-react';
 import Link from 'next/link';
@@ -19,7 +21,7 @@ import { useAuth } from '@/components/auth-provider';
 import type { UserRole } from '@/lib/auth-storage';
 import { cn } from '@/lib/utils';
 
-interface NavItem {
+export interface NavItem {
   href: string;
   labelKey: string;
   icon: LucideIcon;
@@ -27,7 +29,7 @@ interface NavItem {
   roles?: UserRole[];
 }
 
-const NAV_ITEMS: NavItem[] = [
+export const NAV_ITEMS: NavItem[] = [
   { href: '/dashboard', labelKey: 'nav.dashboard', icon: LayoutDashboard },
   { href: '/locations', labelKey: 'nav.locations', icon: MapPin },
   { href: '/classes', labelKey: 'nav.classes', icon: Dumbbell },
@@ -35,36 +37,45 @@ const NAV_ITEMS: NavItem[] = [
   { href: '/sessions', labelKey: 'nav.sessions', icon: Clock },
   { href: '/trainees', labelKey: 'nav.trainees', icon: Users },
   { href: '/fees', labelKey: 'nav.fees', icon: Receipt },
+  { href: '/cards', labelKey: 'nav.cards', icon: CreditCard },
   { href: '/users', labelKey: 'nav.users', icon: UserCog, roles: ['SUPER_ADMIN', 'ADMIN'] },
+  // TKT-0122: platform maintenance actions. SUPER_ADMIN-only, and layout.tsx DENY_RULES
+  // bounces anyone else who deep-links the route.
+  { href: '/maintenance', labelKey: 'nav.maintenance', icon: Wrench, roles: ['SUPER_ADMIN'] },
 ];
 
-export function Sidebar() {
-  const { t } = useTranslation();
-  const pathname = usePathname();
+/**
+ * The destinations the current user may see. Shared by the desktop sidebar and the mobile drawer so
+ * one role predicate serves both — a second copy would drift the first time NAV_ITEMS changes.
+ */
+function useVisibleNavItems(): NavItem[] {
   const { user } = useAuth();
-  const navItems = NAV_ITEMS.filter(
+  return NAV_ITEMS.filter(
     (item) => !item.roles || (user != null && item.roles.includes(user.role)),
   );
+}
+
+interface NavListProps {
+  /** Called after a destination is activated. The drawer uses it to close itself. */
+  onNavigate?: () => void;
+}
+
+/** The nav destinations as a list. Rendered identically by the sidebar and the mobile drawer. */
+export function NavList({ onNavigate }: NavListProps) {
+  const { t } = useTranslation();
+  const pathname = usePathname();
+  const navItems = useVisibleNavItems();
 
   return (
-    <nav
-      aria-label={t('nav.aria')}
-      className="hidden w-64 shrink-0 flex-col border-r bg-card md:flex"
-    >
-      <div className="flex h-14 items-center gap-2.5 border-b px-5">
-        <Link href="/dashboard" className="flex items-center gap-2.5">
-          <BrandMark className="h-8 w-8" />
-          <span className="font-semibold tracking-tight">{t('app.name')}</span>
-        </Link>
-      </div>
-      <ul className="flex flex-1 flex-col gap-0.5 p-3">
-        {navItems.map((item) => {
+    <ul className="flex flex-1 flex-col gap-0.5 p-3">
+      {navItems.map((item) => {
           const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
           const Icon = item.icon;
           return (
             <li key={item.href}>
               <Link
                 href={item.href}
+                onClick={onNavigate}
                 aria-current={isActive ? 'page' : undefined}
                 data-active={isActive ? 'true' : undefined}
                 className={cn(
@@ -92,7 +103,33 @@ export function Sidebar() {
             </li>
           );
         })}
-      </ul>
+    </ul>
+  );
+}
+
+/** Brand header shared by the sidebar and the mobile drawer. */
+export function NavBrand({ onNavigate }: NavListProps) {
+  const { t } = useTranslation();
+  return (
+    <div className="flex h-14 items-center gap-2.5 border-b px-5">
+      <Link href="/dashboard" onClick={onNavigate} className="flex items-center gap-2.5">
+        <BrandMark className="h-8 w-8" />
+        <span className="font-semibold tracking-tight">{t('app.name')}</span>
+      </Link>
+    </div>
+  );
+}
+
+export function Sidebar() {
+  const { t } = useTranslation();
+
+  return (
+    <nav
+      aria-label={t('nav.aria')}
+      className="hidden w-64 shrink-0 flex-col border-r bg-card md:flex"
+    >
+      <NavBrand />
+      <NavList />
     </nav>
   );
 }

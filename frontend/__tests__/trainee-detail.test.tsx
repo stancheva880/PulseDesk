@@ -140,4 +140,21 @@ describe('TraineeDetailPage', () => {
     expect(await screen.findByText('Ada Lovelace')).toBeInTheDocument();
     expect(container.querySelector('a[href="/trainees/tr-1/edit"]')).not.toBeNull();
   });
+
+  // TKT-0091: contextual create — the detail page links to the fee form with ?traineeId= carried.
+  it('offers a manager a new-fee link carrying the trainee id', async () => {
+    signIn('ADMIN');
+    const { container } = renderPage();
+
+    expect(await screen.findByText('Ada Lovelace')).toBeInTheDocument();
+    expect(container.querySelector('a[href="/fees/new?traineeId=tr-1"]')).not.toBeNull();
+  });
+
+  it('hides the new-fee link from an EMPLOYEE', async () => {
+    signIn('EMPLOYEE');
+    const { container } = renderPage();
+
+    expect(await screen.findByText('Ada Lovelace')).toBeInTheDocument();
+    expect(container.querySelector('a[href="/fees/new?traineeId=tr-1"]')).toBeNull();
+  });
 });

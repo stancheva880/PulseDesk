@@ -43,6 +43,21 @@ const runtimePayment = {
   createdAt: new Date('2026-08-05T09:00:00.000Z'),
 };
 
+// TKT-0105: money out mirrors money in — the refund's amount is a Decimal-as-string too.
+const runtimeRefund = {
+  id: 'r1',
+  tenantId: 't1',
+  feeId: 'f1',
+  amount: new Prisma.Decimal('20.00'),
+  refundedAt: new Date('2026-08-10T00:00:00.000Z'),
+  method: 'cash',
+  notes: null,
+  recordedById: 'u1',
+  recordedByEmailSnapshot: 'admin@test.local',
+  recordedByNameSnapshot: 'Admin One',
+  createdAt: new Date('2026-08-10T09:00:00.000Z'),
+};
+
 describe('FeeSchema', () => {
   it('declares every amount as a string, never a number', () => {
     const fee = FeeSchema.parse(runtimeFee);
@@ -58,9 +73,12 @@ describe('FeeSchema', () => {
       class: { id: 'c1', name: 'Tennis', billingMode: 'PER_MONTH' },
       trainee: { id: 'tr1', firstName: 'Ivan', lastName: 'Petrov' },
       payments: [runtimePayment],
+      refunds: [runtimeRefund],
     });
     expect(detail.payments[0]!.amount).toBe('50');
     expect(typeof detail.payments[0]!.amount).toBe('string');
+    expect(detail.refunds[0]!.amount).toBe('20');
+    expect(typeof detail.refunds[0]!.amount).toBe('string');
   });
 
   it('rejects a fee that lost its amount', () => {
@@ -71,6 +89,31 @@ describe('FeeSchema', () => {
   it('keeps sessionId, which generateSessionFees populates', () => {
     expect(FeeSchema.parse({ ...runtimeFee, sessionId: 's1' }).sessionId).toBe('s1');
     expect(FeeSchema.parse(runtimeFee).sessionId).toBeNull();
+  });
+
+  // TKT-0104: a fee may have no class (tenant-wide card purchase fees).
+  it('admits a fee without a class', () => {
+    const fee = FeeSchema.parse({ ...runtimeFee, classId: null });
+    expect(fee.classId).toBeNull();
+
+    const detail = FeeDetailSchema.parse({
+      ...runtimeFee,
+      classId: null,
+      class: null,
+      trainee: { id: 'tr1', firstName: 'Ivan', lastName: 'Petrov' },
+      payments: [],
+      refunds: [],
+    });
+    expect(detail.class).toBeNull();
+
+    const entry = CustomerFeeEntrySchema.parse({
+      ...runtimeFee,
+      classId: null,
+      class: null,
+      trainee: { id: 'tr1', firstName: 'Ivan', lastName: 'Petrov' },
+      payments: [],
+    });
+    expect(entry.class).toBeNull();
   });
 
   it('transforms every DateTime column to an ISO string', () => {
@@ -126,6 +169,8 @@ describe('list and generate shapes', () => {
       trainee: { id: 'tr1', firstName: 'Ivan', lastName: 'Petrov' },
       payments: [],
     });
-    expect(Object.keys(parsed.class).sort()).toEqual(['id', 'name']);
+    // Non-null assertion is type-only (class became nullable in TKT-0104); a null here
+    // would still fail the toEqual below.
+    expect(Object.keys(parsed.class!).sort()).toEqual(['id', 'name']);
   });
 });

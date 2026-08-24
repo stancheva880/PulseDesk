@@ -2,13 +2,14 @@
 
 import { Plus } from 'lucide-react';
 import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
-import { Suspense, useState } from 'react';
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '@/components/auth-provider';
+import { showToast } from '@/components/toast';
 import { DataTable, type DataTableColumn } from '@/components/data-table';
 import { Badge, type BadgeProps } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { DebouncedSearchInput } from '@/components/ui/debounced-search-input';
 import { Users, type UserRow } from '@/lib/api-resources';
 import { useCrudList } from '@/lib/use-crud-list';
 
@@ -20,45 +21,37 @@ const STATUS_BADGE: Record<UserRow['status'], { variant: BadgeProps['variant']; 
   INACTIVE: { variant: 'secondary', key: 'common.inactive' },
 };
 
-// Reads ?attached=1 (set by the new-user form when an existing account was attached).
-// Isolated + Suspense-wrapped so useSearchParams() doesn't force the page out of
-// static prerendering (Next.js CSR-bailout requirement).
-function AttachedBanner() {
-  const { t } = useTranslation();
-  const params = useSearchParams();
-  if (params.get('attached') !== '1') return null;
-  return (
-    <p
-      role="status"
-      className="rounded-lg border border-success/40 bg-success/10 px-3.5 py-2.5 text-sm text-success"
-    >
-      {t(
-        'users.attachedExisting',
-        'Existing account added to your club — their password is unchanged.',
-      )}
-    </p>
-  );
-}
+// The ?attached=1 banner lived here until TKT-0092: the create form no longer redirects, so the
+// attach outcome is a toast raised by user-form.tsx at the moment of creation.
 
 export default function UsersListPage() {
   const { t } = useTranslation();
   const { user } = useAuth();
+  // TKT-0093: server-side search via the DTO's existing `search` parameter.
+  const [query, setQuery] = useState('');
   const { rows, setPage, pageInfo, error, pendingDelete, setPendingDelete, busy, onDelete } =
-    useCrudList(Users);
+    useCrudList(Users, {
+      params: { search: query || undefined },
+      deps: [query],
+      deletedName: (row) => row.email,
+    });
 
   const isAdmin = user?.role === 'ADMIN';
   // inviteEmailSent: false comes back on a 200, so the outcome has to be reported either way.
-  const [resendNotice, setResendNotice] = useState<string | null>(null);
 
   const onResend = async (row: UserRow) => {
-    setResendNotice(null);
     try {
       const { inviteEmailSent } = await Users.resendInvite(row.id);
-      setResendNotice(
-        t(inviteEmailSent ? 'users.resendSent' : 'users.resendFailed', { email: row.email }),
-      );
+      // inviteEmailSent: false arrives on a 200 — the call worked, the mail did not. The page this
+      // replaced reported that neutrally rather than as an error, and moving it into a toast is not
+      // a licence to re-classify how severe it is, so the neutral variant is preserved.
+      showToast({
+        text: t(inviteEmailSent ? 'users.resendSent' : 'users.resendFailed', { email: row.email }),
+        variant: inviteEmailSent ? 'success' : 'info',
+      });
     } catch {
-      setResendNotice(t('users.resendFailed', { email: row.email }));
+      // A thrown request is a genuine failure, unlike the 200-with-no-mail case above.
+      showToast({ text: t('users.resendFailed', { email: row.email }), variant: 'error' });
     }
   };
 
@@ -129,22 +122,20 @@ export default function UsersListPage() {
         </Button>
       </div>
 
-      <Suspense fallback={null}>
-        <AttachedBanner />
-      </Suspense>
+      <div className="sm:max-w-xs">
+        <DebouncedSearchInput
+          value={query}
+          onApply={(q) => {
+            setQuery(q);
+            setPage(1); // a search from page 3 must not request page 3 of the filtered set
+          }}
+          placeholder={t('users.search')}
+        />
+      </div>
 
       {error ? (
         <p role="alert" className="text-sm text-destructive">
           {error}
-        </p>
-      ) : null}
-
-      {resendNotice ? (
-        <p
-          role="status"
-          className="rounded-lg border border-border bg-muted/40 px-3.5 py-2.5 text-sm text-muted-foreground"
-        >
-          {resendNotice}
         </p>
       ) : null}
 
@@ -153,6 +144,7 @@ export default function UsersListPage() {
         rows={rows}
         rowKey={(row) => row.id}
         emptyText={t('users.empty', 'No users yet.')}
+        rowHref={(row) => `/users/${row.id}/edit`}
         actions={(row) => {
           // Admin policy: hide DELETE for SUPER_ADMIN rows so the action surface
           // matches the backend's enforcement.

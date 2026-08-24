@@ -10,7 +10,7 @@ import {
   Patch,
   Post,
 } from '@nestjs/common';
-import { ApiBearerAuth } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { UserRole } from '@prisma/client';
 import { CurrentUser } from '@/auth/decorators/current-user.decorator';
 import { Roles } from '@/auth/decorators/roles.decorator';
@@ -34,6 +34,7 @@ import { UpdateClassScheduleDto } from './dto/update-class-schedule.dto';
 export class ClassSchedulesController {
   constructor(private readonly schedules: ClassSchedulesService) {}
 
+  @ApiOperation({ summary: 'List the weekly slots of the club. Paginated.' })
   @Get()
   @ResponseSchema('PaginatedClassSchedule', PaginatedClassScheduleSchema)
   list(
@@ -44,6 +45,7 @@ export class ClassSchedulesController {
     return this.schedules.list(tenantId, user, query);
   }
 
+  @ApiOperation({ summary: 'Read one weekly slot.' })
   @Get(':id')
   @ResponseSchema('ClassSchedule', ClassScheduleSchema)
   findOne(
@@ -54,6 +56,7 @@ export class ClassSchedulesController {
     return this.schedules.findById(tenantId, id, user);
   }
 
+  @ApiOperation({ summary: 'Create a weekly slot. Refused when the location is deactivated.' })
   @Post()
   @ResponseSchema('ClassSchedule', ClassScheduleSchema)
   create(
@@ -64,6 +67,7 @@ export class ClassSchedulesController {
     return this.schedules.create(tenantId, dto, user);
   }
 
+  @ApiOperation({ summary: 'Change a weekly slot.' })
   @Patch(':id')
   @ResponseSchema('ClassSchedule', ClassScheduleSchema)
   update(
@@ -75,6 +79,7 @@ export class ClassSchedulesController {
     return this.schedules.update(tenantId, id, dto, user);
   }
 
+  @ApiOperation({ summary: 'Delete a weekly slot. The sessions already made from it stay.' })
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ResponseSchema('ClassScheduleNoContent', NoContent)
@@ -86,6 +91,7 @@ export class ClassSchedulesController {
     await this.schedules.delete(tenantId, id, user);
   }
 
+  @ApiOperation({ summary: 'Make dated sessions from the active weekly slots, for a date range.' })
   @Post('generate-sessions')
   @HttpCode(HttpStatus.OK)
   @ResponseSchema('GenerateResult', GenerateResultSchema)

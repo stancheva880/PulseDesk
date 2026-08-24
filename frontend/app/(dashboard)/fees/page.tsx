@@ -1,7 +1,8 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
+import { Suspense, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Plus } from 'lucide-react';
 import { DataTable, type DataTableColumn } from '@/components/data-table';
@@ -9,8 +10,10 @@ import { useAuth } from '@/components/auth-provider';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { DebouncedSearchInput } from '@/components/ui/debounced-search-input';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { showToast } from '@/components/toast';
 import { apiErrorMessage } from '@/lib/api';
 import { isManager } from '@/lib/auth-storage';
 import {
@@ -21,7 +24,6 @@ import {
   type FeeRow,
   type FeeStatus,
   type FeeStatusFilter,
-  type GenerateFeesResult,
   type Trainee,
   type UnbilledEntry,
   listAll,
@@ -44,7 +46,7 @@ interface FeeRowVM {
 // Numeric columns start desc on first click (matches the previous react-table behavior).
 const DESC_FIRST = new Set(['amount', 'outstanding']);
 
-export default function FeesListPage() {
+function FeesList({ initialMonth }: { initialMonth: string }) {
   const { t } = useTranslation();
   const { user } = useAuth();
   const admin = isManager(user?.role);
@@ -55,14 +57,25 @@ export default function FeesListPage() {
   // One <input type="month"> in place of two date inputs. A fee period is a month, and the
   // question this page has to answer is "who owes for this month" — arbitrary ranges were
   // never what anyone typed. Native element, so no picker dependency.
-  const [month, setMonth] = useState('');
-  const [globalFilter, setGlobalFilter] = useState('');
+  const [month, setMonth] = useState(initialMonth);
+  // TKT-0095: the free-text search asks the server — a match on page 2 must be found, not
+  // silently missed by filtering the rows already loaded.
+  const [searchQuery, setSearchQuery] = useState('');
   // Bumped after a bulk generate, so the unbilled panel below re-reads with the list.
   const [generation, setGeneration] = useState(0);
   const [sort, setSort] = useState<{ key: string; desc: boolean }>({
     key: 'periodStart',
     desc: true,
   });
+
+  const [trainees, setTrainees] = useState<Trainee[]>([]);
+  const [classes, setClasses] = useState<ClassRow[]>([]);
+  // Declared before the hook call so the deletedName closure below never reads ahead of a
+  // declaration — the React Compiler refuses to memoize that shape.
+  const traineeNameById = useMemo(
+    () => new Map(trainees.map((tr) => [tr.id, `${tr.firstName} ${tr.lastName}`])),
+    [trainees],
+  );
 
   const {
     rows: fees,
@@ -81,12 +94,11 @@ export default function FeesListPage() {
       classId: classFilter || undefined,
       periodStartFrom: monthBounds(month)?.from,
       periodStartTo: monthBounds(month)?.to,
+      search: searchQuery || undefined,
     },
-    deps: [statusFilter, classFilter, month],
+    deps: [statusFilter, classFilter, month, searchQuery],
+    deletedName: (fee) => traineeNameById.get(fee.traineeId) ?? fee.periodStart.slice(0, 10),
   });
-
-  const [trainees, setTrainees] = useState<Trainee[]>([]);
-  const [classes, setClasses] = useState<ClassRow[]>([]);
 
   useEffect(() => {
     Promise.all([listAll(Trainees.list), listAll(Classes.list)])
@@ -126,10 +138,6 @@ export default function FeesListPage() {
     setGeneration((n) => n + 1);
   };
 
-  const traineeNameById = useMemo(
-    () => new Map(trainees.map((tr) => [tr.id, `${tr.firstName} ${tr.lastName}`])),
-    [trainees],
-  );
   const classNameById = useMemo(
     () => new Map(classes.map((c) => [c.id, c.name])),
     [classes],
@@ -145,7 +153,7 @@ export default function FeesListPage() {
             return {
               fee,
               traineeName: traineeNameById.get(fee.traineeId) ?? '—',
-              className: classNameById.get(fee.classId) ?? '—',
+              className: (fee.classId && classNameById.get(fee.classId)) || '—',
               amount,
               paid,
               outstanding: Math.max(0, amount - paid),
@@ -166,19 +174,14 @@ export default function FeesListPage() {
     [],
   );
 
-  // Client-side filter + sort over the current server page (parity with the
-  // removed react-table setup: includesString across the same accessor values).
+  // Client-side sort over the current server page (parity with the removed react-table
+  // setup). The free-text filter that lived here moved server-side (TKT-0095) — the sort
+  // deliberately stays: reordering 25 visible rows needs no round trip.
   const displayed: FeeRowVM[] | null = useMemo(() => {
     if (data === null) return null;
-    const q = globalFilter.toLowerCase();
-    const filtered = q
-      ? data.filter((row) =>
-          Object.values(sortValues).some((get) => String(get(row)).toLowerCase().includes(q)),
-        )
-      : data;
     const get = sortValues[sort.key];
-    if (!get) return filtered;
-    const sorted = [...filtered].sort((a, b) => {
+    if (!get) return data;
+    const sorted = [...data].sort((a, b) => {
       const va = get(a);
       const vb = get(b);
       const cmp =
@@ -188,7 +191,7 @@ export default function FeesListPage() {
       return sort.desc ? -cmp : cmp;
     });
     return sorted;
-  }, [data, globalFilter, sort, sortValues]);
+  }, [data, sort, sortValues]);
 
   const onSortToggle = (key: string) => {
     setSort((prev) =>
@@ -280,6 +283,7 @@ export default function FeesListPage() {
         <div className="grid gap-4 md:grid-cols-2">
           <GenerateMonthlyCard onGenerated={refreshAll} classes={classes} />
           <GenerateSessionCard onGenerated={refreshAll} classes={classes} />
+          <GenerateCourseCard onGenerated={refreshAll} classes={classes} />
         </div>
       ) : null}
 
@@ -331,10 +335,13 @@ export default function FeesListPage() {
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="search">{t('fees.search')}</Label>
-              <Input
+              <DebouncedSearchInput
                 id="search"
-                value={globalFilter}
-                onChange={(e) => setGlobalFilter(e.target.value)}
+                value={searchQuery}
+                onApply={(q) => {
+                  setSearchQuery(q);
+                  setPage(1); // a search from page 3 must not request page 3 of the filtered set
+                }}
                 placeholder={t('fees.search')}
               />
             </div>
@@ -370,6 +377,7 @@ export default function FeesListPage() {
         rows={displayed}
         rowKey={(row) => row.fee.id}
         emptyText={t('fees.empty')}
+        rowHref={(row) => `/fees/${row.fee.id}`}
         sort={sort}
         onSortToggle={onSortToggle}
         actions={
@@ -409,6 +417,24 @@ export default function FeesListPage() {
   );
 }
 
+// Reads ?month=YYYY-MM — the seam the fees chart links through (TKT-0096). Isolated +
+// Suspense-wrapped so useSearchParams() doesn't force the whole page out of static
+// prerendering (Next.js CSR-bailout requirement). The month lands in the visible filter
+// input, so indication and clearing come with it; garbage degrades to no filter.
+function FeesListFromParams() {
+  const params = useSearchParams();
+  const monthParam = params.get('month') ?? '';
+  return <FeesList initialMonth={/^\d{4}-\d{2}$/.test(monthParam) ? monthParam : ''} />;
+}
+
+export default function FeesListPage() {
+  return (
+    <Suspense fallback={null}>
+      <FeesListFromParams />
+    </Suspense>
+  );
+}
+
 // "2026-06" -> the inclusive day bounds the API filters on. Returns undefined for the
 // empty value the month input starts at, which is what leaves the filter off.
 function monthBounds(month: string): { from: string; to: string } | undefined {
@@ -436,14 +462,12 @@ function GenerateMonthlyCard({
   const [periodEnd, setPeriodEnd] = useState('');
   const [classId, setClassId] = useState('');
   const [busy, setBusy] = useState(false);
-  const [result, setResult] = useState<GenerateFeesResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const monthlyClasses = classes.filter((c) => c.billingMode === 'PER_MONTH');
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
-    setResult(null);
     if (periodStart && periodEnd && periodEnd < periodStart) {
       setError(t('fees.errors.endsBeforeStarts'));
       return;
@@ -455,7 +479,7 @@ function GenerateMonthlyCard({
         periodEnd,
         classId: classId || undefined,
       });
-      setResult(r);
+      showToast({ text: t('fees.generated', { created: r.created, skipped: r.skipped }), variant: 'success' });
       onGenerated();
     } catch (err) {
       setError(apiErrorMessage(err));
@@ -513,11 +537,70 @@ function GenerateMonthlyCard({
             </Button>
           </div>
         </form>
-        {result ? (
-          <p className="mt-3 text-sm text-green-700">
-            {t('fees.generated', { created: result.created, skipped: result.skipped })}
-          </p>
-        ) : null}
+        {error ? <p className="mt-3 text-sm text-destructive">{error}</p> : null}
+      </CardContent>
+    </Card>
+  );
+}
+
+// TKT-0110: no date inputs — a PER_COURSE class carries its own period and price.
+function GenerateCourseCard({
+  onGenerated,
+  classes,
+}: {
+  onGenerated: () => void;
+  classes: ClassRow[];
+}) {
+  const { t } = useTranslation();
+  const [classId, setClassId] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const courseClasses = classes.filter((c) => c.billingMode === 'PER_COURSE');
+
+  const onSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setBusy(true);
+    try {
+      const r = await Fees.generateCourse({ classId: classId || undefined });
+      showToast({ text: t('fees.generated', { created: r.created, skipped: r.skipped }), variant: 'success' });
+      onGenerated();
+    } catch (err) {
+      setError(apiErrorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">{t('fees.generateCourse.title')}</CardTitle>
+        <p className="text-sm text-muted-foreground">{t('fees.generateCourse.description')}</p>
+      </CardHeader>
+      <CardContent>
+        <form className="grid gap-3" onSubmit={onSubmit} noValidate>
+          <div className="space-y-1.5">
+            <Label htmlFor="c-class">{t('fees.fields.class')}</Label>
+            <NativeSelect
+              id="c-class"
+              value={classId}
+              onChange={(e) => setClassId(e.target.value)}
+            >
+              <option value="">{t('fees.filters.all')}</option>
+              {courseClasses.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </NativeSelect>
+          </div>
+          <div className="flex items-end">
+            <Button type="submit" disabled={busy}>
+              {busy ? t('common.saving') : t('fees.generateCourse.submit')}
+            </Button>
+          </div>
+        </form>
         {error ? <p className="mt-3 text-sm text-destructive">{error}</p> : null}
       </CardContent>
     </Card>
@@ -536,14 +619,12 @@ function GenerateSessionCard({
   const [to, setTo] = useState('');
   const [classId, setClassId] = useState('');
   const [busy, setBusy] = useState(false);
-  const [result, setResult] = useState<GenerateFeesResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const sessionClasses = classes.filter((c) => c.billingMode === 'PER_SESSION');
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
-    setResult(null);
     if (from && to && to < from) {
       setError(t('fees.errors.endsBeforeStarts'));
       return;
@@ -555,7 +636,7 @@ function GenerateSessionCard({
         to,
         classId: classId || undefined,
       });
-      setResult(r);
+      showToast({ text: t('fees.generated', { created: r.created, skipped: r.skipped }), variant: 'success' });
       onGenerated();
     } catch (err) {
       setError(apiErrorMessage(err));
@@ -613,11 +694,6 @@ function GenerateSessionCard({
             </Button>
           </div>
         </form>
-        {result ? (
-          <p className="mt-3 text-sm text-green-700">
-            {t('fees.generated', { created: result.created, skipped: result.skipped })}
-          </p>
-        ) : null}
         {error ? <p className="mt-3 text-sm text-destructive">{error}</p> : null}
       </CardContent>
     </Card>

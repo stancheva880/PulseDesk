@@ -1,5 +1,5 @@
 import { Controller, Get } from '@nestjs/common';
-import { ApiBearerAuth } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { ResponseSchema } from '@/common/response-schema';
 import { LoginMembershipListSchema } from './auth.schema';
 import { AuthService, type LoginMembership } from './auth.service';
@@ -15,6 +15,7 @@ import type { AuthenticatedUser } from './types/jwt-payload';
 export class MembershipsController {
   constructor(private readonly auth: AuthService) {}
 
+  @ApiOperation({ summary: 'List the clubs the signed-in user belongs to.' })
   @Get('memberships')
   @ResponseSchema('LoginMembershipList', LoginMembershipListSchema)
   list(@CurrentUser() user: AuthenticatedUser): Promise<LoginMembership[]> {

@@ -1,5 +1,6 @@
 import { SUPER_ADMIN_USER as su } from '@/test-utils/auth-user';
 import { ConflictException, ForbiddenException, NotFoundException } from '@nestjs/common';
+import { ConfigModule } from '@nestjs/config';
 import { Test, type TestingModule } from '@nestjs/testing';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { randomUUID } from 'node:crypto';
@@ -10,6 +11,8 @@ import {
   UserRole,
 } from '@prisma/client';
 import { LocationScopeService } from '@/auth/scope/location-scope.service';
+import { ConsoleMailService } from '@/mail/console-mail.service';
+import { MailService } from '@/mail/mail.service';
 import { PrismaService } from '@/prisma/prisma.service';
 import { SessionsService } from '@/sessions/sessions.service';
 import { AttendancesService } from './attendances.service';
@@ -23,7 +26,17 @@ describe('AttendancesService', () => {
 
   beforeAll(async () => {
     const moduleRef: TestingModule = await Test.createTestingModule({
-      providers: [AttendancesService, SessionsService, LocationScopeService, PrismaService],
+      // TKT-0114: the service reads FRONTEND_URL for claim links — same global config
+      // AppModule provides.
+      imports: [ConfigModule.forRoot({ isGlobal: true })],
+      providers: [
+        AttendancesService,
+        SessionsService,
+        LocationScopeService,
+        PrismaService,
+        // TKT-0113: the service now mails on promotion; same binding MailModule makes.
+        { provide: MailService, useClass: ConsoleMailService },
+      ],
     }).compile();
     service = moduleRef.get(AttendancesService);
     sessions = moduleRef.get(SessionsService);
@@ -495,6 +508,44 @@ describe('AttendancesService', () => {
       expect(entry.attendances).toHaveLength(1);
       expect(entry.attendances[0]!.traineeId).toBe(myKid.id);
       expect(entry.attendances[0]!.trainee.firstName).toBe(myKid.firstName);
+    });
+
+    // TKT-0122: an entry on a session that has started can never be promoted (TKT-0120 gates
+    // promotion), so the portal must not present it as a live queue position. Deleting the row is
+    // the sweep half of that ticket and deliberately not done here.
+    it('reports myWaitlist only for sessions that have not started', async () => {
+      const t = await newTenant();
+      const loc = await newLocation(t.id);
+      const customer = await newUser(t.id, UserRole.CUSTOMER);
+      const kid = await newTrainee(t.id, { guardianIds: [customer.id] });
+      const cls = await newClass(t.id, [kid.id]);
+      const HOUR = 3_600_000;
+      const mk = (startsAt: Date) =>
+        prisma.session.create({
+          data: {
+            tenantId: t.id,
+            classId: cls.id,
+            locationId: loc.id,
+            startsAt,
+            endsAt: new Date(startsAt.getTime() + HOUR),
+          },
+        });
+      const past = await mk(new Date(Date.now() - 2 * HOUR));
+      const future = await mk(new Date(Date.now() + 6 * HOUR));
+      await prisma.waitlistEntry.createMany({
+        data: [
+          { tenantId: t.id, sessionId: past.id, traineeId: kid.id },
+          { tenantId: t.id, sessionId: future.id, traineeId: kid.id },
+        ],
+      });
+
+      const byId = new Map(
+        (await service.listCustomerSessions(t.id, customer.id)).map((r) => [r.id, r]),
+      );
+      expect(byId.get(past.id)!.myWaitlist).toEqual([]);
+      expect(byId.get(future.id)!.myWaitlist).toEqual([kid.id]);
+      // Both rows still exist — this ticket hides, it does not delete.
+      expect(await prisma.waitlistEntry.count({ where: { traineeId: kid.id } })).toBe(2);
     });
 
     it('cross-tenant isolation: customer in tenant A does not see sessions in tenant B', async () => {

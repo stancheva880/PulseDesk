@@ -1,8 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import SchedulesListPage from '@/app/(dashboard)/schedules/page';
 import { AuthProvider } from '@/components/auth-provider';
 import { I18nProvider } from '@/components/i18n-provider';
+import { ToastViewport } from '@/components/toast';
 import { setAccessToken } from '@/lib/auth-storage';
 
 vi.mock('next/navigation', () => ({
@@ -69,5 +71,40 @@ describe('SchedulesListPage', () => {
     expect(screen.getByText('11:30')).toBeInTheDocument();
     expect(container.querySelector('a[href="/schedules/new"]')).not.toBeNull();
     expect(container.querySelector('a[href="/schedules/sch-1/edit"]')).not.toBeNull();
+  });
+
+  // TKT-0089 — the generate confirmation moved out of the page and into the toast, so it now
+  // survives the redirect that used to destroy it.
+  it('confirms generated sessions through the toast', async () => {
+    const user = userEvent.setup();
+    vi.spyOn(globalThis, 'fetch').mockImplementation((input, init) => {
+      const url = typeof input === 'string' ? input : (input as Request).url;
+      if (url.includes('/class-schedules/generate-sessions') && init?.method === 'POST') {
+        return Promise.resolve(jsonResponse(201, { created: 4, skipped: 1 }));
+      }
+      if (url.includes('/class-schedules')) return Promise.resolve(jsonResponse(200, paged(SCHEDULES)));
+      if (url.includes('/classes')) return Promise.resolve(jsonResponse(200, paged(CLASSES)));
+      if (url.includes('/locations')) return Promise.resolve(jsonResponse(200, paged(LOCATIONS)));
+      return Promise.resolve(jsonResponse(200, {}));
+    });
+
+    render(
+      <I18nProvider>
+        <ToastViewport />
+        <AuthProvider>
+          <SchedulesListPage />
+        </AuthProvider>
+      </I18nProvider>,
+    );
+    await screen.findByText('Main Hall');
+
+    const from = screen.getByLabelText(/From|От/);
+    const to = screen.getByLabelText(/To|До/);
+    await user.type(from, '2026-04-01');
+    await user.type(to, '2026-04-30');
+    await user.click(screen.getByRole('button', { name: /Generate|Генериране/ }));
+
+    const toast = await screen.findByText(/4/);
+    expect(toast.closest('[role="status"]')).not.toBeNull();
   });
 });
