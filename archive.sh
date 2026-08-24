@@ -4,15 +4,17 @@ set -euo pipefail
 
 usage() {
   cat <<'USAGE'
-Usage: archive.sh [-o OUTPUT] [-e EXTRA]
-  -o  output zip path (default ./pulsedesk-YYYYmmdd-HHMM.zip)
-  -e  comma-separated extra files/dirs/globs to exclude, matched at any depth
-  -h  this help
+Usage: archive.sh [-o OUTPUT] [-e EXTRA] [SUBDIR]
+  -o      output zip path (default ./pulsedesk[-SUBDIR]-YYYYmmdd-HHMM.zip)
+  -e      comma-separated extra files/dirs/globs to exclude, matched at any depth
+  SUBDIR  zip only this subdirectory of the repo (e.g. frontend, backend) -
+          for uploading a single app to Vercel's manual/zip deploy flow
+  -h      this help
 USAGE
 }
 
-root="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-out="$root/pulsedesk-$(date +%Y%m%d-%H%M).zip"
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+out=""
 extra=""
 
 while getopts "o:e:h" opt; do
@@ -23,6 +25,15 @@ while getopts "o:e:h" opt; do
     *) usage >&2; exit 2 ;;
   esac
 done
+shift $((OPTIND - 1))
+
+sub="${1:-}"
+root="$repo_root"
+if [[ -n $sub ]]; then
+  root="$repo_root/$sub"
+  [[ -d "$root" ]] || { echo "archive.sh: no such directory: $sub" >&2; exit 1; }
+fi
+[[ -z $out ]] && out="$repo_root/pulsedesk${sub:+-$sub}-$(date +%Y%m%d-%H%M).zip"
 
 # names/globs excluded at any depth; .env is an exact name so *.example survives
 patterns=(
