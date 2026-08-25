@@ -16,8 +16,11 @@
  * convention is not reliably honored by Vercel's generic Node.js function builder outside a
  * Next.js project. Every route this app serves is instead funneled here by the `"rewrites"` entry
  * in vercel.json (`/api/:path*` -> `/api`). Vercel's Node.js functions receive the request's
- * original, unmodified `req.url` regardless of the rewrite destination, so Nest's own router still
- * sees and dispatches the real path — the rewrite only selects which function handles the request.
+ * original, unmodified `req.url` path regardless of the rewrite destination, so Nest's own router
+ * still sees and dispatches the real path — the rewrite only selects which function handles the
+ * request. It is not free of side effects, though: because the destination doesn't reference
+ * `:path*`, Vercel appends the captured value as a `path` query-string param on every request.
+ * `app-setup.ts`'s `configureApp()` strips it before validation runs — see the comment there.
  */
 // eslint-disable-next-line @typescript-eslint/no-require-imports -- see docblock above
 module.exports = require('../dist/vercel-handler.js');
