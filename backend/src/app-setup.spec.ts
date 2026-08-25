@@ -2,15 +2,29 @@ import { Test } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import request from 'supertest';
-import type { INestApplication } from '@nestjs/common';
+import { Controller, Get, Query, type INestApplication, type Type } from '@nestjs/common';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { HealthController } from './health/health.controller';
 import { assertProductionSecrets, configureApp } from './app-setup';
 import { FakeConfigService } from './test-utils/fake-config';
+import { PaginationQueryDto } from './common/dto/pagination-query.dto';
 
-async function buildApp(configValues: Record<string, string> = {}): Promise<INestApplication> {
+// Stands in for any real list controller (locations, classes, sessions, ...) — all of them
+// bind their query string to a PaginationQueryDto subclass the same way.
+@Controller('probe')
+class PaginationProbeController {
+  @Get()
+  list(@Query() query: PaginationQueryDto): PaginationQueryDto {
+    return query;
+  }
+}
+
+async function buildApp(
+  configValues: Record<string, string> = {},
+  controllers: Type[] = [HealthController],
+): Promise<INestApplication> {
   const module = await Test.createTestingModule({
-    controllers: [HealthController],
+    controllers,
     providers: [{ provide: ConfigService, useValue: new FakeConfigService(configValues) }],
   }).compile();
 
@@ -360,4 +374,37 @@ describe('configureApp — trust proxy', () => {
       await expect(buildApp({ TRUST_PROXY_HOPS: value })).rejects.toThrow(/TRUST_PROXY_HOPS/);
     },
   );
+});
+
+// backend/vercel.json's rewrite (source /api/:path*, destination /api) funnels every request
+// through one serverless function and appends the unconsumed :path* capture as a `path` query
+// param. Every list endpoint validates its query string against a PaginationQueryDto subclass
+// through the global ValidationPipe's forbidNonWhitelisted, which otherwise rejects that
+// injected key as an unknown property — this is what surfaced in production as
+// "property path should not exist" on every list page.
+describe('configureApp — strips the path query param Vercel injects', () => {
+  let app: INestApplication;
+
+  beforeAll(async () => {
+    app = await buildApp({}, [HealthController, PaginationProbeController]);
+  });
+
+  afterAll(async () => {
+    await app.close();
+  });
+
+  it('does not reject a request carrying an injected path param', async () => {
+    const res = await request(app.getHttpServer()).get('/api/probe?pageSize=10&path=probe');
+    expect(res.status).toBe(200);
+  });
+
+  it('leaves declared query params untouched', async () => {
+    const res = await request(app.getHttpServer()).get('/api/probe?pageSize=10&path=probe');
+    expect(res.body).toEqual({ pageSize: 10 });
+  });
+
+  it('still rejects a genuinely unknown query param', async () => {
+    const res = await request(app.getHttpServer()).get('/api/probe?bogus=1');
+    expect(res.status).toBe(400);
+  });
 });

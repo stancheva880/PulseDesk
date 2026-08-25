@@ -2,6 +2,7 @@ import { ValidationPipe, type INestApplication } from '@nestjs/common';
 import type { ConfigService } from '@nestjs/config';
 import { SwaggerModule } from '@nestjs/swagger';
 import type { NestExpressApplication } from '@nestjs/platform-express';
+import type { Request, Response, NextFunction } from 'express';
 import helmet from 'helmet';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { looksLikePlaceholder } from './common/credential-guards';
@@ -74,6 +75,28 @@ export function configureApp(app: INestApplication, config: ConfigService): void
   applyTrustProxy(app, config);
   app.setGlobalPrefix('api');
   app.use(helmet());
+  app.use((req: Request, _res: Response, next: NextFunction) => {
+    // vercel.json's rewrite (source /api/:path*, destination /api) funnels every request
+    // through one serverless function and appends the unconsumed :path* capture as a `path`
+    // query param. Nothing in this app reads it — routing already works off req.url's real
+    // path (see src/vercel-handler.ts) — but the ValidationPipe below rejects it as an unknown
+    // property on every DTO-typed @Query(), i.e. every paginated list endpoint.
+    //
+    // Express 5's `req.query` is a live getter (lib/request.js) that re-parses the query string
+    // from scratch on every access, uncached — `delete req.query.path` mutates a throwaway
+    // object and has no effect on the next read. Redefining the property with a static value is
+    // the only way to make the removal stick for downstream reads (Nest's @Query() included).
+    if ('path' in req.query) {
+      const { path: _path, ...rest } = req.query;
+      Object.defineProperty(req, 'query', {
+        value: rest,
+        writable: true,
+        configurable: true,
+        enumerable: true,
+      });
+    }
+    next();
+  });
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
