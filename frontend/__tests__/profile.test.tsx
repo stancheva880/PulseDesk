@@ -355,3 +355,117 @@ describe('ProfilePage', () => {
     });
   });
 });
+
+// Own describe: needs a CUSTOMER token, where the rest of this file uses EMPLOYEE throughout.
+describe('ProfilePage — customer fees tab', () => {
+  const FEE_SELF = {
+    id: 'f1',
+    tenantId: 't',
+    classId: 'c1',
+    traineeId: 'tr1',
+    sessionId: null,
+    amount: '100.00',
+    status: 'PARTIAL',
+    periodStart: '2026-03-01T00:00:00.000Z',
+    periodEnd: '2026-03-31T23:59:59.999Z',
+    notes: null,
+    createdAt: '',
+    updatedAt: '',
+    class: { id: 'c1', name: 'Yoga 101' },
+    trainee: { id: 'tr1', firstName: 'Ada', lastName: 'Lovelace' },
+    payments: [
+      {
+        id: 'p1',
+        tenantId: 't',
+        feeId: 'f1',
+        amount: '40.00',
+        paidAt: '2026-03-15T00:00:00.000Z',
+        method: 'cash',
+        notes: null,
+        recordedById: null,
+        recordedByEmailSnapshot: null,
+        recordedByNameSnapshot: null,
+        createdAt: '',
+      },
+    ],
+  };
+  const FEE_KID = {
+    ...FEE_SELF,
+    id: 'f2',
+    traineeId: 'tr2',
+    amount: '50.00',
+    status: 'UNPAID',
+    payments: [],
+    trainee: { id: 'tr2', firstName: 'Bob', lastName: 'Builder' },
+  };
+
+  beforeEach(() => {
+    const exp = Math.floor(Date.now() / 1000) + 600;
+    setAccessToken(buildJwt({ sub: 'u1', email: 'cust@x.com', role: 'CUSTOMER', tenantId: 't', exp }));
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+    clearStoredTokens();
+  });
+
+  it('shows the fee, its status and no tab buttons for a single trainee', async () => {
+    mockFetch((url) => {
+      if (url.endsWith('/me/fees')) return jsonResponse(200, [FEE_SELF]);
+      return jsonResponse(404, null);
+    });
+    renderPage();
+
+    expect(await screen.findByText(/Yoga 101/)).toBeInTheDocument();
+    expect(screen.getAllByText(/Partial|Частично/).length).toBeGreaterThanOrEqual(1);
+    // A single trainee gets no tab row — there is nothing to switch between.
+    expect(screen.queryByRole('button', { name: 'Ada Lovelace' })).not.toBeInTheDocument();
+  });
+
+  it('shows a tab per child and filters to the selected one', async () => {
+    const user = userEvent.setup();
+    mockFetch((url) => {
+      if (url.endsWith('/me/fees')) return jsonResponse(200, [FEE_SELF, FEE_KID]);
+      return jsonResponse(404, null);
+    });
+    renderPage();
+
+    // Defaults to the first trainee — Ada's fee shows, Bob's does not.
+    expect(await screen.findByText(/Yoga 101/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Ada Lovelace' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Bob Builder' })).toBeInTheDocument();
+    expect(screen.getAllByText(/Partial|Частично/).length).toBeGreaterThanOrEqual(1);
+    expect(screen.queryByText(/Unpaid|Неплатена/)).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Bob Builder' }));
+
+    expect(await screen.findByText(/Unpaid|Неплатена/)).toBeInTheDocument();
+    expect(screen.queryByText(/Partial|Частично/)).not.toBeInTheDocument();
+  });
+
+  it('shows the empty message when the family has no fees', async () => {
+    mockFetch((url) => {
+      if (url.endsWith('/me/fees')) return jsonResponse(200, []);
+      return jsonResponse(404, null);
+    });
+    renderPage();
+
+    expect(await screen.findByText(/No fees yet|Все още няма такси/)).toBeInTheDocument();
+  });
+
+  it('does not show the fees tab for a non-customer role', async () => {
+    setAccessToken(
+      buildJwt({
+        sub: 'u1',
+        email: 'employee@x.com',
+        role: 'EMPLOYEE',
+        tenantId: 't',
+        exp: Math.floor(Date.now() / 1000) + 600,
+      }),
+    );
+    mockFetch(() => jsonResponse(404, null));
+    renderPage();
+
+    await screen.findByText(/^My profile$|^Моят профил$/);
+    expect(screen.queryByText(/^My fees$|^Моите такси$/)).not.toBeInTheDocument();
+  });
+});
