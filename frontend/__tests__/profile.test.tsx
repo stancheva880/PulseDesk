@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import ProfilePage from '@/app/profile/page';
 import { AuthProvider } from '@/components/auth-provider';
@@ -12,6 +12,15 @@ vi.mock('next/navigation', () => ({
   usePathname: () => '/profile',
   useSearchParams: () => new URLSearchParams(),
 }));
+
+// The real implementation draws through <canvas>, which jsdom does not implement — see
+// lib/avatar-image.ts's docblock and __tests__/avatar-image.test.ts for the parts that are
+// tested without this mock (the guard clauses, which run before canvas is ever touched).
+const compressAvatarFile = vi.fn();
+vi.mock('@/lib/avatar-image', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/avatar-image')>('@/lib/avatar-image');
+  return { ...actual, compressAvatarFile: (...args: unknown[]) => compressAvatarFile(...args) };
+});
 
 function buildJwt(payload: Record<string, unknown>): string {
   const header = btoa(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).replace(/=/g, '');
@@ -56,6 +65,7 @@ describe('ProfilePage', () => {
     vi.restoreAllMocks();
     clearStoredTokens();
     replace.mockClear();
+    compressAvatarFile.mockReset();
   });
 
   it('renders the current/new/confirm password fields', async () => {
@@ -144,5 +154,204 @@ describe('ProfilePage', () => {
         ),
       ),
     ).toBe(false);
+  });
+
+  describe('profile details (phone + email)', () => {
+    const PROFILE = {
+      id: 'u1',
+      // A real-shaped domain — zod's .email() (used by the submit form) rejects a bare
+      // TLD-less "employee@x" the way the JWT-claim fixture elsewhere in this file gets away with.
+      email: 'employee@x.com',
+      firstName: 'Ada',
+      lastName: 'Lovelace',
+      phone: '+359888000000',
+    };
+
+    it('loads and prefills first/last name, phone and email from GET /users/me', async () => {
+      mockFetch((url) => {
+        if (url.endsWith('/users/me')) return jsonResponse(200, PROFILE);
+        return jsonResponse(404, null);
+      });
+      renderPage();
+
+      expect(await screen.findByLabelText(/^First name$|Собствено име/)).toHaveValue('Ada');
+      expect(screen.getByLabelText(/^Last name$|Фамилия/)).toHaveValue('Lovelace');
+      expect(screen.getByLabelText(/^Phone$|Телефон/)).toHaveValue('+359888000000');
+      expect(screen.getByLabelText(/^Email$|Имейл/)).toHaveValue('employee@x.com');
+    });
+
+    it('saves first/last name and phone without sending a password', async () => {
+      const user = userEvent.setup();
+      let postedBody: unknown = null;
+      mockFetch((url, init) => {
+        if (url.endsWith('/users/me') && init?.method === 'PATCH') {
+          postedBody = JSON.parse(init.body as string);
+          return jsonResponse(200, { ...PROFILE, phone: '+359999999999' });
+        }
+        if (url.endsWith('/users/me')) return jsonResponse(200, PROFILE);
+        return jsonResponse(404, null);
+      });
+      renderPage();
+
+      const phoneInput = await screen.findByLabelText(/^Phone$|Телефон/);
+      await user.clear(phoneInput);
+      await user.type(phoneInput, '+359999999999');
+      await user.click(screen.getByRole('button', { name: /^Save$|^Запазване$/ }));
+
+      await vi.waitFor(() => expect(postedBody).not.toBeNull());
+      expect(postedBody).toEqual({
+        firstName: 'Ada',
+        lastName: 'Lovelace',
+        phone: '+359999999999',
+      });
+    });
+
+    it('requires the current password before it will submit a changed email', async () => {
+      const user = userEvent.setup();
+      const fetchSpy = mockFetch((url) => {
+        if (url.endsWith('/users/me')) return jsonResponse(200, PROFILE);
+        return jsonResponse(404, null);
+      });
+      renderPage();
+
+      const emailInput = await screen.findByLabelText(/^Email$|Имейл/);
+      await user.clear(emailInput);
+      await user.type(emailInput, 'new@x.com');
+      await user.click(screen.getByRole('button', { name: /^Save$|^Запазване$/ }));
+
+      expect(
+        await screen.findByText(/current password to change|текущата си парола, за да смените/i),
+      ).toBeInTheDocument();
+      expect(
+        fetchSpy.mock.calls.some(
+          ([input, init]) =>
+            String(typeof input === 'string' ? input : (input as Request).url).endsWith(
+              '/users/me',
+            ) && (init as RequestInit | undefined)?.method === 'PATCH',
+        ),
+      ).toBe(false);
+    });
+
+    it('sends the current password when the email did change', async () => {
+      const user = userEvent.setup();
+      let postedBody: unknown = null;
+      mockFetch((url, init) => {
+        if (url.endsWith('/users/me') && init?.method === 'PATCH') {
+          postedBody = JSON.parse(init.body as string);
+          return jsonResponse(200, { ...PROFILE, email: 'new@x.com' });
+        }
+        if (url.endsWith('/users/me')) return jsonResponse(200, PROFILE);
+        return jsonResponse(404, null);
+      });
+      renderPage();
+
+      const emailInput = await screen.findByLabelText(/^Email$|Имейл/);
+      await user.clear(emailInput);
+      await user.type(emailInput, 'new@x.com');
+      // The password field lives in this same card too — target it, not the change-password
+      // card's field of the same name further down the page.
+      const detailsCard = emailInput.closest('form')!;
+      await user.type(
+        within(detailsCard).getByLabelText(/Current password|Текуща парола/),
+        'MyRealPassword1!',
+      );
+      await user.click(screen.getByRole('button', { name: /^Save$|^Запазване$/ }));
+
+      await vi.waitFor(() => expect(postedBody).not.toBeNull());
+      expect(postedBody).toEqual({
+        firstName: 'Ada',
+        lastName: 'Lovelace',
+        phone: '+359888000000',
+        email: 'new@x.com',
+        currentPassword: 'MyRealPassword1!',
+      });
+    });
+  });
+
+  describe('avatar upload', () => {
+    const PROFILE = {
+      id: 'u1',
+      email: 'employee@x.com',
+      firstName: 'Ada',
+      lastName: 'Lovelace',
+      phone: '+359888000000',
+      avatarUrl: null,
+    };
+
+    it('compresses the picked file and saves it immediately, no Save click needed', async () => {
+      const user = userEvent.setup();
+      compressAvatarFile.mockResolvedValue('data:image/jpeg;base64,AAAA');
+      let postedBody: unknown = null;
+      mockFetch((url, init) => {
+        if (url.endsWith('/users/me') && init?.method === 'PATCH') {
+          postedBody = JSON.parse(init.body as string);
+          return jsonResponse(200, { ...PROFILE, avatarUrl: 'data:image/jpeg;base64,AAAA' });
+        }
+        if (url.endsWith('/users/me')) return jsonResponse(200, PROFILE);
+        return jsonResponse(404, null);
+      });
+      renderPage();
+
+      const fileInput = (await screen.findByLabelText(
+        /Change photo|Смяна на снимка/,
+      )) as HTMLInputElement;
+      const file = new File(['x'], 'me.png', { type: 'image/png' });
+      await user.upload(fileInput, file);
+
+      await vi.waitFor(() => expect(postedBody).not.toBeNull());
+      expect(postedBody).toEqual({ avatarUrl: 'data:image/jpeg;base64,AAAA' });
+      expect(compressAvatarFile).toHaveBeenCalledWith(file);
+      // The "Remove" action only appears once an avatar exists.
+      expect(
+        await screen.findByRole('button', { name: /^Remove$|^Премахване$/ }),
+      ).toBeInTheDocument();
+    });
+
+    it('shows a translated error and does not save when the file is rejected', async () => {
+      const user = userEvent.setup();
+      const { AvatarImageError } = await import('@/lib/avatar-image');
+      compressAvatarFile.mockRejectedValue(new AvatarImageError('too-large'));
+      const fetchSpy = mockFetch((url) => {
+        if (url.endsWith('/users/me')) return jsonResponse(200, PROFILE);
+        return jsonResponse(404, null);
+      });
+      renderPage();
+
+      const fileInput = (await screen.findByLabelText(
+        /Change photo|Смяна на снимка/,
+      )) as HTMLInputElement;
+      await user.upload(fileInput, new File(['x'], 'huge.png', { type: 'image/png' }));
+
+      expect(await screen.findByText(/too large|твърде голям/i)).toBeInTheDocument();
+      expect(
+        fetchSpy.mock.calls.some(
+          ([input, init]) =>
+            String(typeof input === 'string' ? input : (input as Request).url).endsWith(
+              '/users/me',
+            ) && (init as RequestInit | undefined)?.method === 'PATCH',
+        ),
+      ).toBe(false);
+    });
+
+    it('removes the avatar via the Remove button', async () => {
+      const user = userEvent.setup();
+      let postedBody: unknown = null;
+      mockFetch((url, init) => {
+        if (url.endsWith('/users/me') && init?.method === 'PATCH') {
+          postedBody = JSON.parse(init.body as string);
+          return jsonResponse(200, { ...PROFILE, avatarUrl: null });
+        }
+        if (url.endsWith('/users/me')) {
+          return jsonResponse(200, { ...PROFILE, avatarUrl: 'data:image/jpeg;base64,AAAA' });
+        }
+        return jsonResponse(404, null);
+      });
+      renderPage();
+
+      await user.click(await screen.findByRole('button', { name: /^Remove$|^Премахване$/ }));
+
+      await vi.waitFor(() => expect(postedBody).not.toBeNull());
+      expect(postedBody).toEqual({ avatarUrl: null });
+    });
   });
 });

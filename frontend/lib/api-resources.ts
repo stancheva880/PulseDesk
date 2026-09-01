@@ -92,6 +92,10 @@ export type UserRow = components['schemas']['UserSummary'];
 // POST /users: the same row plus the attach flag, which a plain create omits entirely.
 export type CreatedUser = components['schemas']['CreatedUser'];
 
+// GET/PATCH /users/me — narrower than UserRow: no role/tenantId/locations/status, see
+// OwnProfileSchema (backend/src/users/users.schema.ts) for why.
+export type OwnProfile = components['schemas']['OwnProfile'];
+
 // POST /users/:id/invite — delivery report only, no account fields.
 export type InviteResult = components['schemas']['InviteResult'];
 
@@ -191,10 +195,28 @@ export const Users = {
   // new link exists and the old one is dead.
   resendInvite: (id: string) =>
     apiRequest<InviteResult>(`/users/${id}/invite`, { method: 'POST' }),
-  // Self-service — any signed-in role, not just admins. Ends every other session on
-  // success, so the caller is expected to sign in again right after.
+  // Self-service — any signed-in role, not just admins, and every one of these three is
+  // omitTenantHeader like /auth/memberships: the account, not the club, so the AvatarMenu in
+  // the Topbar (present on every page, including before a tenant is chosen/verified) can call
+  // GET /users/me from mount without ever risking a stale X-Tenant-Id going out early.
+  // Ends every other session on success, so the caller is expected to sign in again right after.
   changePassword: (input: { currentPassword: string; newPassword: string }) =>
-    apiRequest<void>('/users/me/password', { method: 'PATCH', body: input }),
+    apiRequest<void>('/users/me/password', { method: 'PATCH', body: input, omitTenantHeader: true }),
+  // currentPassword is only read by the backend when email is present.
+  getOwnProfile: () => apiRequest<OwnProfile>('/users/me', { omitTenantHeader: true }),
+  updateOwnProfile: (input: {
+    firstName?: string | null;
+    lastName?: string | null;
+    phone?: string | null;
+    email?: string;
+    currentPassword?: string;
+    avatarUrl?: string | null;
+  }) =>
+    apiRequest<OwnProfile>('/users/me', {
+      method: 'PATCH',
+      body: input,
+      omitTenantHeader: true,
+    }),
 };
 
 export const Locations = {

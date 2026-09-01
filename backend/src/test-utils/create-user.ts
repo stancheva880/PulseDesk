@@ -11,6 +11,7 @@ interface TestUserData {
   tenantId?: string | null;
   firstName?: string | null;
   lastName?: string | null;
+  phone?: string | null;
   isActive?: boolean;
   locations?: Prisma.UserCreateInput['locations'];
 }

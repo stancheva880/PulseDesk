@@ -238,11 +238,12 @@ describe('DashboardLayout active-tenant gate', () => {
 
     expect(await screen.findByTestId(PANEL)).toBeInTheDocument();
     // Children never mount, so no page can send a tenant-scoped request. The shell's own
-    // two calls are the exception and neither needs a tenant: /auth/memberships is
-    // header-less by design, and GET /api/tenants is what fills the selector the panel
-    // points at (no @TenantId() on that route, so it answers without an active tenant).
+    // calls are the exception and none need a tenant: /auth/memberships and GET /api/users/me
+    // are header-less by design (omitTenantHeader: true — the Topbar's AvatarMenu calls the
+    // latter from mount, on every page), and GET /api/tenants is what fills the selector the
+    // panel points at (no @TenantId() on that route, so it answers without an active tenant).
     expect(screen.queryByText(CHILD)).not.toBeInTheDocument();
-    const shell = ['/auth/', '/api/tenants'];
+    const shell = ['/auth/', '/api/tenants', '/api/users/me'];
     expect(fetchedUrls().filter((u) => !shell.some((s) => u.includes(s)))).toEqual([]);
   });
 
@@ -434,8 +435,9 @@ describe('DashboardLayout stale club healing', () => {
     await screen.findByTestId(PANEL);
 
     // Children never mount, so nothing can send the stale id. The shell's own calls are the
-    // exception and neither uses @TenantId().
-    const shell = ['/auth/', '/api/tenants'];
+    // exception and none use @TenantId() (GET /api/users/me is the Topbar's AvatarMenu,
+    // omitTenantHeader: true — see the active-tenant gate describe above).
+    const shell = ['/auth/', '/api/tenants', '/api/users/me'];
     expect(fetchedUrls().filter((u) => !shell.some((s) => u.includes(s)))).toEqual([]);
     expect(screen.queryByText(/not found/i)).not.toBeInTheDocument();
   });
@@ -550,8 +552,9 @@ describe('DashboardLayout unverified member club', () => {
     await settle();
 
     expect(screen.queryByText(CHILD)).not.toBeInTheDocument();
-    // Nothing may go out carrying the suspect id.
-    const shell = ['/auth/'];
+    // Nothing may go out carrying the suspect id. GET /api/users/me (the Topbar's AvatarMenu)
+    // is the one exception, and omitTenantHeader: true means it never could anyway.
+    const shell = ['/auth/', '/api/users/me'];
     expect(fetchedUrls().filter((u) => !shell.some((s) => u.includes(s)))).toEqual([]);
     // And the gate writes nothing — auth-provider.tsx:96-118 stays the only writer.
     expect(readTenantContext()).toBe('left-over');

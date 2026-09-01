@@ -23,6 +23,7 @@ import { MailService } from '@/mail/mail.service';
 import { trySend } from '@/mail/try-send';
 import { PrismaService } from '@/prisma/prisma.service';
 import type { CreateUserDto } from './dto/create-user.dto';
+import type { UpdateOwnProfileDto } from './dto/update-own-profile.dto';
 import type { UpdateUserDto } from './dto/update-user.dto';
 
 /**
@@ -34,13 +35,22 @@ import type { UpdateUserDto } from './dto/update-user.dto';
 export type UserAccountStatus = 'PENDING' | 'ACTIVE' | 'INACTIVE';
 
 // Response shape is unchanged from the scalar-column era: `role`/`tenantId` are
-// synthesized from the user's membership (relative to the request's tenant).
-export type UserSummary = Omit<User, 'passwordHash' | 'isSuperAdmin'> & {
+// synthesized from the user's membership (relative to the request's tenant). `avatarUrl` is
+// excluded too — it is self-service only (GET/PATCH /users/me, see OwnProfileSchema), so an
+// admin browsing the club never receives another account's photo.
+export type UserSummary = Omit<User, 'passwordHash' | 'isSuperAdmin' | 'avatarUrl'> & {
   role: UserRole;
   tenantId: string | null;
   status: UserAccountStatus;
   locations: Array<{ id: string; name: string }>;
 };
+
+// GET/PATCH /users/me's shape — see OwnProfileSchema (users.schema.ts) for why it stays
+// narrower than UserSummary.
+export type OwnProfile = Pick<
+  User,
+  'id' | 'email' | 'firstName' | 'lastName' | 'phone' | 'avatarUrl'
+>;
 
 const USER_SELECT = {
   id: true,
@@ -555,6 +565,75 @@ export class UsersService {
       ? (await this.prisma.$transaction([update, this.auth.revokeAllRefreshTokens(id)]))[0]
       : await update;
     return toSummary(updated, targetTenantId);
+  }
+
+  private static readonly OWN_PROFILE_SELECT = {
+    id: true,
+    email: true,
+    firstName: true,
+    lastName: true,
+    phone: true,
+    avatarUrl: true,
+  } satisfies Prisma.UserSelect;
+
+  async getOwnProfile(userId: string): Promise<OwnProfile> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: UsersService.OWN_PROFILE_SELECT,
+    });
+    if (!user) throw new NotFoundException(`User ${userId} not found`);
+    return user;
+  }
+
+  /**
+   * Self-service profile edit — first/last name, phone, avatar, and (with re-authentication)
+   * email. Never touches passwordHash, role, locations or isActive; those stay admin actions on
+   * PATCH /users/:id. Email is the account's login identity, so changing it requires the
+   * current password as proof, the same bar changeOwnPassword sets for the credential it
+   * protects — unlike that endpoint, this one does not revoke other sessions, since nothing
+   * about an already-issued token depends on the email it was minted with.
+   */
+  async updateOwnProfile(userId: string, dto: UpdateOwnProfileDto): Promise<OwnProfile> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { email: true, passwordHash: true },
+    });
+    if (!user) throw new NotFoundException(`User ${userId} not found`);
+
+    const data: Prisma.UserUpdateInput = {};
+    if (dto.firstName !== undefined) data.firstName = dto.firstName ?? null;
+    if (dto.lastName !== undefined) data.lastName = dto.lastName ?? null;
+    if (dto.phone !== undefined) data.phone = dto.phone ?? null;
+    if (dto.avatarUrl !== undefined) data.avatarUrl = dto.avatarUrl ?? null;
+    if (dto.email !== undefined && dto.email !== user.email) {
+      const ok = user.passwordHash
+        ? await this.auth.verifyPassword(dto.currentPassword ?? '', user.passwordHash)
+        : false;
+      if (!ok) {
+        throw new BadRequestException({
+          message: 'Current password is incorrect',
+          code: 'AUTH_CURRENT_PASSWORD_INVALID',
+        });
+      }
+      data.email = dto.email;
+    }
+
+    try {
+      return await this.prisma.user.update({
+        where: { id: userId },
+        data,
+        select: UsersService.OWN_PROFILE_SELECT,
+      });
+    } catch (e) {
+      if (isUniqueConstraintError(e)) {
+        throw new ConflictException({
+          message: `Email "${dto.email}" already exists`,
+          code: 'USER_EMAIL_TAKEN',
+          params: { email: dto.email },
+        });
+      }
+      throw e;
+    }
   }
 
   async delete(actor: AuthenticatedUser, id: string): Promise<void> {

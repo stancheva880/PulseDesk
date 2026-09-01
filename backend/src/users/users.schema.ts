@@ -63,3 +63,17 @@ export const CreatedUserSchema = UserSummarySchema.extend({
  * successful resend whose mail did not go out, and re-sending again is the recovery.
  */
 export const InviteResultSchema = z.object({ inviteEmailSent: z.boolean() });
+
+/**
+ * GET/PATCH /users/me. Deliberately narrower than UserSummarySchema: no role, tenantId,
+ * locations or status — those are club-scoped and admin-managed (PATCH /users/:id), while this
+ * pair is the same for the account everywhere and needs none of that resolved.
+ */
+export const OwnProfileSchema = z.object({
+  id: z.string(),
+  email: z.string(),
+  firstName: z.string().nullable(),
+  lastName: z.string().nullable(),
+  phone: z.string().nullable(),
+  avatarUrl: z.string().nullable(),
+});

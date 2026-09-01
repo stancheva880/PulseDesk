@@ -1900,4 +1900,167 @@ describe('UsersController (e2e-ish)', () => {
         .expect(401);
     });
   });
+
+  // Same @Roles() override as PATCH /users/me/password — every authenticated role reaches these,
+  // not just ADMIN.
+  describe('GET /users/me and PATCH /users/me', () => {
+    async function newEmployee(tenantId: string, email?: string) {
+      const user = await createTestUser(prisma, {
+        email: email ?? `${randomUUID()}@emp.local`,
+        passwordHash: await auth.hashPassword(PASSWORD),
+        role: UserRole.EMPLOYEE,
+        tenantId,
+        phone: '+359000000',
+      });
+      userIds.push(user.id);
+      const tokens = await auth.login(user);
+      return { user, accessToken: tokens.accessToken };
+    }
+
+    it('GET returns the caller\'s own profile fields, no X-Tenant-Id needed', async () => {
+      const { tenant } = await newTenantWithLocation();
+      const employee = await newEmployee(tenant.id);
+
+      const res = await request(server)
+        .get('/users/me')
+        .set('Authorization', `Bearer ${employee.accessToken}`)
+        .expect(200);
+      expect(res.body).toEqual({
+        id: employee.user.id,
+        email: employee.user.email,
+        firstName: null,
+        lastName: null,
+        phone: '+359000000',
+        avatarUrl: null,
+      });
+    });
+
+    it('PATCH updates first/last name and phone without touching email', async () => {
+      const { tenant } = await newTenantWithLocation();
+      const employee = await newEmployee(tenant.id);
+
+      const res = await request(server)
+        .patch('/users/me')
+        .set('Authorization', `Bearer ${employee.accessToken}`)
+        .send({ firstName: 'Ada', lastName: 'Lovelace', phone: '+359111111' })
+        .expect(200);
+      expect(res.body).toEqual({
+        id: employee.user.id,
+        email: employee.user.email,
+        firstName: 'Ada',
+        lastName: 'Lovelace',
+        phone: '+359111111',
+        avatarUrl: null,
+      });
+    });
+
+    it('PATCH sets and clears the avatar, and rejects a non-data-URI value', async () => {
+      const { tenant } = await newTenantWithLocation();
+      const employee = await newEmployee(tenant.id);
+      const dataUri = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB';
+
+      const set = await request(server)
+        .patch('/users/me')
+        .set('Authorization', `Bearer ${employee.accessToken}`)
+        .send({ avatarUrl: dataUri })
+        .expect(200);
+      expect(set.body.avatarUrl).toBe(dataUri);
+
+      const cleared = await request(server)
+        .patch('/users/me')
+        .set('Authorization', `Bearer ${employee.accessToken}`)
+        .send({ avatarUrl: null })
+        .expect(200);
+      expect(cleared.body.avatarUrl).toBeNull();
+
+      await request(server)
+        .patch('/users/me')
+        .set('Authorization', `Bearer ${employee.accessToken}`)
+        .send({ avatarUrl: 'https://evil.example/x.png' })
+        .expect(400);
+    });
+
+    // The user's own question: does this work for the platform admin too, not just tenant
+    // roles? RolesGuard's SUPER_ADMIN bypass (roles.guard.ts) already covers @Roles() with no
+    // arguments the same as any other @Roles() list, but that guarantee had no test of its own.
+    it('lets a SUPER_ADMIN read and update their own profile too', async () => {
+      const sa = await newSuperAdmin();
+
+      const got = await request(server)
+        .get('/users/me')
+        .set('Authorization', `Bearer ${sa.accessToken}`)
+        .expect(200);
+      expect(got.body.id).toBe(sa.user.id);
+
+      const patched = await request(server)
+        .patch('/users/me')
+        .set('Authorization', `Bearer ${sa.accessToken}`)
+        .send({ firstName: 'Root' })
+        .expect(200);
+      expect(patched.body.firstName).toBe('Root');
+
+      await request(server)
+        .patch('/users/me/password')
+        .set('Authorization', `Bearer ${sa.accessToken}`)
+        .send({ currentPassword: PASSWORD, newPassword: 'BrandNewPassw0rd!' })
+        .expect(204);
+    });
+
+    it('PATCH changes email when the current password is correct', async () => {
+      const { tenant } = await newTenantWithLocation();
+      const employee = await newEmployee(tenant.id);
+      const newEmail = `${randomUUID()}@new.local`;
+
+      const res = await request(server)
+        .patch('/users/me')
+        .set('Authorization', `Bearer ${employee.accessToken}`)
+        .send({ email: newEmail, currentPassword: PASSWORD })
+        .expect(200);
+      expect(res.body.email).toBe(newEmail);
+
+      // Login now works with the new email, not the old one.
+      expect(await auth.validateUser(newEmail, PASSWORD)).not.toBeNull();
+      expect(await auth.validateUser(employee.user.email, PASSWORD)).toBeNull();
+    });
+
+    it('PATCH rejects an email change with a wrong or missing current password, and leaves email unchanged', async () => {
+      const { tenant } = await newTenantWithLocation();
+      const employee = await newEmployee(tenant.id);
+
+      const wrongPw = await request(server)
+        .patch('/users/me')
+        .set('Authorization', `Bearer ${employee.accessToken}`)
+        .send({ email: `${randomUUID()}@new.local`, currentPassword: 'WrongPassword!' })
+        .expect(400);
+      expect(wrongPw.body.code).toBe('AUTH_CURRENT_PASSWORD_INVALID');
+
+      const noPw = await request(server)
+        .patch('/users/me')
+        .set('Authorization', `Bearer ${employee.accessToken}`)
+        .send({ email: `${randomUUID()}@new.local` })
+        .expect(400);
+      expect(noPw.body.code).toBe('AUTH_CURRENT_PASSWORD_INVALID');
+
+      expect(await auth.validateUser(employee.user.email, PASSWORD)).not.toBeNull();
+    });
+
+    it('PATCH rejects an email already used by another account with 409', async () => {
+      const { tenant } = await newTenantWithLocation();
+      const taken = `${randomUUID()}@taken.local`;
+      await newEmployee(tenant.id, taken);
+      const employee = await newEmployee(tenant.id);
+
+      const res = await request(server)
+        .patch('/users/me')
+        .set('Authorization', `Bearer ${employee.accessToken}`)
+        .send({ email: taken, currentPassword: PASSWORD })
+        .expect(409);
+      expect(res.body.code).toBe('USER_EMAIL_TAKEN');
+    });
+
+    it('rejects requests with no access token', async () => {
+      await request(server).get('/users/me').expect(401);
+      await request(server).patch('/users/me').send({ firstName: 'x' }).expect(401);
+    });
+  });
 });
