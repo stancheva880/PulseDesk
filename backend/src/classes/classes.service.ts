@@ -29,6 +29,11 @@ export interface ClassListFilters {
   search?: string;
 }
 
+// GET /classes's own include — who teaches each class, visible on the list without opening it.
+const CLASS_LIST_INCLUDE = {
+  trainers: { select: { id: true, firstName: true, lastName: true, email: true } },
+} satisfies Prisma.ClassInclude;
+
 @Injectable()
 export class ClassesService {
   constructor(
@@ -63,7 +68,7 @@ export class ClassesService {
     user: AuthenticatedUser,
     pagination?: PaginationInput,
     filters?: ClassListFilters,
-  ): Promise<PaginatedResult<Class>> {
+  ): Promise<PaginatedResult<Prisma.ClassGetPayload<{ include: typeof CLASS_LIST_INCLUDE }>>> {
     // The filter sits on top of the scoped where rather than inside scopedWhere(), which
     // findById() shares: reading one class by id must not depend on whether it is active.
     // The search clause goes in `AND` so it narrows the scoped where instead of replacing any
@@ -80,6 +85,7 @@ export class ClassesService {
     const [items, total] = await this.prisma.$transaction([
       this.prisma.class.findMany({
         where,
+        include: CLASS_LIST_INCLUDE,
         orderBy: { name: 'asc' },
         skip: p.skip,
         take: p.take,

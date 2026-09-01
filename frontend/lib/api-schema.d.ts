@@ -1388,6 +1388,12 @@ export interface components {
                 isActive: boolean;
                 createdAt: string;
                 updatedAt: string;
+                trainers?: {
+                    id: string;
+                    firstName: string | null;
+                    lastName: string | null;
+                    email: string;
+                }[];
             }[];
             page: number;
             pageSize: number;
@@ -1414,6 +1420,12 @@ export interface components {
             isActive: boolean;
             createdAt: string;
             updatedAt: string;
+            trainers?: {
+                id: string;
+                firstName: string | null;
+                lastName: string | null;
+                email: string;
+            }[];
         };
         ClassDetail: {
             id: string;
@@ -1435,15 +1447,15 @@ export interface components {
             isActive: boolean;
             createdAt: string;
             updatedAt: string;
-            locations: {
-                id: string;
-                name: string;
-            }[];
             trainers: {
                 id: string;
                 firstName: string | null;
                 lastName: string | null;
                 email: string;
+            }[];
+            locations: {
+                id: string;
+                name: string;
             }[];
             trainees: {
                 id: string;
@@ -1541,6 +1553,12 @@ export interface components {
                 isActive: boolean;
                 createdAt: string;
                 updatedAt: string;
+                trainers?: {
+                    id: string;
+                    firstName: string | null;
+                    lastName: string | null;
+                    email: string;
+                }[];
             }[];
             guardians: {
                 id: string;
@@ -1679,6 +1697,16 @@ export interface components {
                 isActive: boolean;
                 createdAt: string;
                 updatedAt: string;
+                nextSession?: {
+                    id: string;
+                    startsAt: string;
+                    trainers: {
+                        id: string;
+                        firstName: string | null;
+                        lastName: string | null;
+                        email: string;
+                    }[];
+                } | null;
             }[];
             page: number;
             pageSize: number;
@@ -1697,6 +1725,16 @@ export interface components {
             isActive: boolean;
             createdAt: string;
             updatedAt: string;
+            nextSession?: {
+                id: string;
+                startsAt: string;
+                trainers: {
+                    id: string;
+                    firstName: string | null;
+                    lastName: string | null;
+                    email: string;
+                }[];
+            } | null;
         };
         GenerateResult: {
             created: number;

@@ -40,6 +40,24 @@ const JS_DAY_TO_ENUM: DayOfWeek[] = [
   DayOfWeek.SAT,
 ];
 
+// How far ahead list()'s nextSession search looks for a match — a club that has generated a
+// full season/year ahead (MAX_GENERATE_DAYS) must not force every page load to scan all of it
+// just to find the soonest occurrence of each slot.
+const NEXT_SESSION_LOOKAHEAD_DAYS = 90;
+
+interface TrainerRef {
+  id: string;
+  firstName: string | null;
+  lastName: string | null;
+  email: string;
+}
+
+interface NextSession {
+  id: string;
+  startsAt: Date;
+  trainers: TrainerRef[];
+}
+
 @Injectable()
 export class ClassSchedulesService {
   constructor(
@@ -52,7 +70,7 @@ export class ClassSchedulesService {
     tenantId: string,
     user: AuthenticatedUser,
     pagination?: PaginationInput,
-  ): Promise<PaginatedResult<ClassSchedule>> {
+  ): Promise<PaginatedResult<ClassSchedule & { nextSession: NextSession | null }>> {
     const where: Prisma.ClassScheduleWhereInput = {
       tenantId,
       ...(await this.scopeWhere(user, tenantId)),
@@ -67,7 +85,72 @@ export class ClassSchedulesService {
       }),
       this.prisma.classSchedule.count({ where }),
     ]);
-    return buildPaginatedResult(items, total, p);
+    const nextSessionById = await this.nextSessionsFor(tenantId, items);
+    const withNextSession = items.map((s) => ({
+      ...s,
+      nextSession: nextSessionById.get(s.id) ?? null,
+    }));
+    return buildPaginatedResult(withNextSession, total, p);
+  }
+
+  /**
+   * A schedule template has no trainer of its own — Session.trainers is per-session, may
+   * differ from the class, and generateSessions() only ever matched a candidate day against a
+   * schedule by (classId, locationId, dayOfWeek, startTime) to dedupe, so that is the only key
+   * available here too; there is no direct FK from Session back to the slot that produced it.
+   *
+   * Bounded to NEXT_SESSION_LOOKAHEAD_DAYS so a club with a season generated ahead of time
+   * doesn't force every page load to scan all of it — a schedule with nothing generated inside
+   * the window reads as no upcoming session, same as one with nothing generated at all.
+   */
+  private async nextSessionsFor(
+    tenantId: string,
+    schedules: ClassSchedule[],
+  ): Promise<Map<string, NextSession>> {
+    const result = new Map<string, NextSession>();
+    if (schedules.length === 0) return result;
+
+    const pairs = [...new Set(schedules.map((s) => `${s.classId}|${s.locationId}`))].map(
+      (key) => {
+        const [classId, locationId] = key.split('|') as [string, string];
+        return { classId, locationId };
+      },
+    );
+    const now = new Date();
+    const until = new Date(now.getTime() + NEXT_SESSION_LOOKAHEAD_DAYS * 86_400_000);
+    const candidates = await this.prisma.session.findMany({
+      where: {
+        tenantId,
+        startsAt: { gte: now, lt: until },
+        OR: pairs.map((p) => ({ classId: p.classId, locationId: p.locationId })),
+      },
+      orderBy: { startsAt: 'asc' },
+      select: {
+        id: true,
+        classId: true,
+        locationId: true,
+        startsAt: true,
+        trainers: { select: { id: true, firstName: true, lastName: true, email: true } },
+      },
+    });
+
+    for (const schedule of schedules) {
+      const match = candidates.find(
+        (c) =>
+          c.classId === schedule.classId &&
+          c.locationId === schedule.locationId &&
+          JS_DAY_TO_ENUM[c.startsAt.getDay()] === schedule.dayOfWeek &&
+          toHHMM(c.startsAt) === schedule.startTime,
+      );
+      if (match) {
+        result.set(schedule.id, {
+          id: match.id,
+          startsAt: match.startsAt,
+          trainers: match.trainers,
+        });
+      }
+    }
+    return result;
   }
 
   async findById(
@@ -290,6 +373,12 @@ function combineDateAndTime(date: Date, hhmm: string): Date {
   const d = new Date(date);
   d.setHours(h, m, 0, 0);
   return d;
+}
+
+// The inverse of combineDateAndTime above — local wall-clock time, matching how it wrote hh:mm.
+function toHHMM(date: Date): string {
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
 function parseDateOnly(s: string): Date {

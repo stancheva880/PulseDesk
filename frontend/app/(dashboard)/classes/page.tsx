@@ -60,6 +60,17 @@ function ClassesList({ initialActiveOnly }: { initialActiveOnly: boolean }) {
       skeleton: 'h-4 w-20',
     },
     {
+      // Always shown, not just on open — so a class with no trainer set is visible at a glance.
+      key: 'trainers',
+      header: t('classes.fields.trainers'),
+      cell: (cls) =>
+        cls.trainers && cls.trainers.length > 0
+          ? cls.trainers.map((tr) => `${tr.firstName ?? ''} ${tr.lastName ?? ''}`.trim() || tr.email).join(', ')
+          : '—',
+      cellClassName: 'text-muted-foreground',
+      skeleton: 'h-4 w-24',
+    },
+    {
       key: 'price',
       header: t('classes.fields.price'),
       cell: formatPrice,

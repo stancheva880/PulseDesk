@@ -200,6 +200,123 @@ describe('ClassSchedulesService', () => {
     });
   });
 
+  // A schedule has no trainer of its own — the table shows the soonest not-yet-started
+  // session this exact weekly slot has generated, so an admin can open it and change its
+  // trainer without leaving the schedules page. Matched by (classId, locationId, dayOfWeek,
+  // startTime), the same key generateSessions() itself dedupes on — there is no direct FK from
+  // Session back to the ClassSchedule that produced it.
+  describe('list — nextSession', () => {
+    // Anchors every fixture date to a real future weekday/time, so the "upcoming" half of the
+    // match is never flaky against whatever day the suite happens to run on.
+    function futureDate(daysAhead: number, hour = 18): Date {
+      const d = new Date();
+      d.setDate(d.getDate() + daysAhead);
+      d.setHours(hour, 0, 0, 0);
+      return d;
+    }
+    const DAY_ENUM: DayOfWeek[] = [
+      DayOfWeek.SUN, DayOfWeek.MON, DayOfWeek.TUE, DayOfWeek.WED,
+      DayOfWeek.THU, DayOfWeek.FRI, DayOfWeek.SAT,
+    ];
+    const hhmm = (d: Date) => `${String(d.getHours()).padStart(2, '0')}:00`;
+
+    async function newSession(
+      tenantId: string,
+      classId: string,
+      locationId: string,
+      startsAt: Date,
+      trainerIds: string[] = [],
+    ) {
+      return prisma.session.create({
+        data: {
+          tenantId,
+          classId,
+          locationId,
+          startsAt,
+          endsAt: new Date(startsAt.getTime() + 3_600_000),
+          ...(trainerIds.length
+            ? { trainers: { connect: trainerIds.map((id) => ({ id })) } }
+            : {}),
+        },
+      });
+    }
+
+    it('attaches the soonest upcoming session generated from this slot, with its trainers', async () => {
+      const t = await newTenant();
+      const loc = await newLocation(t.id);
+      const cls = await newClass(t.id);
+      const trainer = await createTestUser(prisma, {
+        tenantId: t.id, email: `${randomUUID()}@x`, passwordHash: 'x',
+        role: UserRole.EMPLOYEE, firstName: 'Tina', lastName: 'Trainer',
+      });
+      const soon = futureDate(7);
+      const later = futureDate(14);
+      const sched = await service.create(t.id, {
+        classId: cls.id, locationId: loc.id,
+        dayOfWeek: DAY_ENUM[soon.getDay()]!, startTime: hhmm(soon), endTime: '19:00',
+      }, su);
+      const soonSession = await newSession(t.id, cls.id, loc.id, soon, [trainer.id]);
+      await newSession(t.id, cls.id, loc.id, later, [trainer.id]);
+
+      const result = await service.list(t.id, su);
+      const row = result.items.find((s) => s.id === sched.id)!;
+      expect(row.nextSession).toEqual({
+        id: soonSession.id,
+        startsAt: soonSession.startsAt,
+        trainers: [{ id: trainer.id, firstName: 'Tina', lastName: 'Trainer', email: trainer.email }],
+      });
+    });
+
+    it('does not match a session on a different weekday or time', async () => {
+      const t = await newTenant();
+      const loc = await newLocation(t.id);
+      const cls = await newClass(t.id);
+      const soon = futureDate(7);
+      const wrongDay = futureDate(8, soon.getHours());
+      const sched = await service.create(t.id, {
+        classId: cls.id, locationId: loc.id,
+        dayOfWeek: DAY_ENUM[soon.getDay()]!, startTime: hhmm(soon), endTime: '19:00',
+      }, su);
+      await newSession(t.id, cls.id, loc.id, wrongDay);
+
+      const result = await service.list(t.id, su);
+      const row = result.items.find((s) => s.id === sched.id)!;
+      expect(row.nextSession).toBeNull();
+    });
+
+    it('ignores a session that has already started', async () => {
+      const t = await newTenant();
+      const loc = await newLocation(t.id);
+      const cls = await newClass(t.id);
+      const soon = futureDate(7);
+      const past = new Date(Date.now() - 7 * 86_400_000);
+      const sched = await service.create(t.id, {
+        classId: cls.id, locationId: loc.id,
+        dayOfWeek: DAY_ENUM[soon.getDay()]!, startTime: hhmm(soon), endTime: '19:00',
+      }, su);
+      await newSession(t.id, cls.id, loc.id, past);
+
+      const result = await service.list(t.id, su);
+      const row = result.items.find((s) => s.id === sched.id)!;
+      expect(row.nextSession).toBeNull();
+    });
+
+    it('is null when nothing has been generated from this slot at all', async () => {
+      const t = await newTenant();
+      const loc = await newLocation(t.id);
+      const cls = await newClass(t.id);
+      const soon = futureDate(7);
+      const sched = await service.create(t.id, {
+        classId: cls.id, locationId: loc.id,
+        dayOfWeek: DAY_ENUM[soon.getDay()]!, startTime: hhmm(soon), endTime: '19:00',
+      }, su);
+
+      const result = await service.list(t.id, su);
+      const row = result.items.find((s) => s.id === sched.id)!;
+      expect(row.nextSession).toBeNull();
+    });
+  });
+
   describe('generateSessions', () => {
     it('materializes Session rows for each weekday match in range', async () => {
       const t = await newTenant();

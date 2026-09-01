@@ -20,6 +20,15 @@ export const DayOfWeekSchema = z.enum(DayOfWeek);
 
 const hhmm = z.string().regex(HHMM);
 
+// Same trainer-ref shape sessions.schema.ts declares — kept local rather than shared across
+// sibling feature modules for one small object.
+const TrainerRefSchema = z.object({
+  id: z.string(),
+  firstName: z.string().nullable(),
+  lastName: z.string().nullable(),
+  email: z.string(),
+});
+
 export const ClassScheduleSchema = z.object({
   id: z.string(),
   tenantId: z.string(),
@@ -31,6 +40,19 @@ export const ClassScheduleSchema = z.object({
   isActive: z.boolean(),
   createdAt: isoDate,
   updatedAt: isoDate,
+  // List rows only (class-schedules.service.ts's list()). A template has no trainer of its
+  // own — this is the soonest not-yet-started session the slot has actually generated, so an
+  // admin can open and change its trainer without leaving the schedules table. null when
+  // nothing matches within the lookahead window; undefined on create/update/delete, which
+  // return the bare row.
+  nextSession: z
+    .object({
+      id: z.string(),
+      startsAt: isoDate,
+      trainers: z.array(TrainerRefSchema),
+    })
+    .nullable()
+    .optional(),
 });
 
 export const PaginatedClassScheduleSchema = paginatedSchema(ClassScheduleSchema);

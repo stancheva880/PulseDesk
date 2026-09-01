@@ -42,7 +42,7 @@ describe('generated classes response types', () => {
   });
 
   it('generates ClassDetail.locations as exactly id and name', () => {
-    const locations = property('ClassDetail', 'locations:', 'trainers:');
+    const locations = property('ClassDetail', 'locations:', 'trainees:');
     expect(locations).toMatch(/id: string;/);
     expect(locations).toMatch(/name: string;/);
     expect(locations).not.toMatch(/address/);
