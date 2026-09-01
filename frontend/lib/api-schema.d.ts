@@ -123,6 +123,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/users/me/password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Change your own password. Ends every other session. */
+        patch: operations["UsersController_changeOwnPassword"];
+        trace?: never;
+    };
     "/api/users": {
         parameters: {
             query?: never;
@@ -953,6 +970,10 @@ export interface components {
         };
         ResetPasswordDto: {
             token: string;
+            newPassword: string;
+        };
+        ChangePasswordDto: {
+            currentPassword: string;
             newPassword: string;
         };
         CreateUserDto: {
@@ -2225,6 +2246,30 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["LoginMembershipList"];
                 };
+            };
+        };
+    };
+    UsersController_changeOwnPassword: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Tenant the caller acts in. A tenant-bound user must name one of their own tenants (403 otherwise); a SUPER_ADMIN may name any active tenant (404 otherwise). */
+                "X-Tenant-Id"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChangePasswordDto"];
+            };
+        };
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

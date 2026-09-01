@@ -38,6 +38,7 @@
     "cards": "Cards",
     "users": "Users",
     "maintenance": "Maintenance",
+    "profile": "Profile",
     "logout": "Sign out",
     "openMenu": "Open menu",
     "menuTitle": "Menu",
@@ -118,7 +119,8 @@
     "SCHEDULE_END_BEFORE_START": "The end time must be after the start time.",
     "SCHEDULE_RANGE_TOO_LARGE": "That date range is too long. Generate at most {{maxDays}} days at a time.",
     "SESSION_END_BEFORE_START": "The session end must be after its start.",
-    "AUTH_RESET_LINK_INVALID": "Invalid or expired reset link."
+    "AUTH_RESET_LINK_INVALID": "Invalid or expired reset link.",
+    "AUTH_CURRENT_PASSWORD_INVALID": "Current password is incorrect."
   },
   "a11y": {
     "showPassword": "Show password",
@@ -231,6 +233,25 @@
     "submit": "Set password",
     "errors": {
       "invalidLink": "This invite link is invalid or has expired."
+    }
+  },
+  "profile": {
+    "title": "My profile",
+    "changePassword": {
+      "title": "Change password",
+      "description": "Changing your password signs you out everywhere — you will need to sign in again.",
+      "fields": {
+        "currentPassword": "Current password",
+        "newPassword": "New password",
+        "confirmPassword": "Confirm new password"
+      },
+      "submit": "Change password",
+      "submitting": "Saving…",
+      "errors": {
+        "currentRequired": "Enter your current password.",
+        "length": "Password must be at least 8 characters.",
+        "match": "Passwords do not match."
+      }
     }
   },
   "dashboard": {

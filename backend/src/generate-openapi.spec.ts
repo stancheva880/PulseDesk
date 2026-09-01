@@ -54,7 +54,10 @@ const HTTP_METHODS = ['get', 'post', 'put', 'patch', 'delete'];
 // Approved TEST CHANGE REQUEST, 2026-08-24: 82 → 83 for POST /api/waitlists/sweep (TKT-0122,
 // the SUPER_ADMIN stale-waitlist sweep — named in the approved plan). Same terms: still exact,
 // the route carries its own @ResponseSchema (WaitlistSweepResult).
-const ROUTE_COUNT = 83;
+// Approved TEST CHANGE REQUEST, 2026-09-01: 83 → 84 for PATCH /users/me/password (self-service
+// password change). Same terms: still exact, the route carries its own @ResponseSchema
+// (ChangeOwnPasswordNoContent).
+const ROUTE_COUNT = 84;
 // Approved TEST CHANGE REQUEST, 2026-08-23: 8 → 9 for the WaitlistMode enum (TKT-0112 —
 // named in the approved tech plan). Same terms: still exact.
 const ENUM_COUNT = 9;

@@ -191,6 +191,10 @@ export const Users = {
   // new link exists and the old one is dead.
   resendInvite: (id: string) =>
     apiRequest<InviteResult>(`/users/${id}/invite`, { method: 'POST' }),
+  // Self-service — any signed-in role, not just admins. Ends every other session on
+  // success, so the caller is expected to sign in again right after.
+  changePassword: (input: { currentPassword: string; newPassword: string }) =>
+    apiRequest<void>('/users/me/password', { method: 'PATCH', body: input }),
 };
 
 export const Locations = {

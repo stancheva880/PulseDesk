@@ -1847,4 +1847,57 @@ describe('UsersController (e2e-ish)', () => {
       expect(mailMock.send).not.toHaveBeenCalled();
     });
   });
+
+  // The class carries @Roles(ADMIN); this route's own @Roles() override is what every
+  // non-admin role below depends on to reach it at all.
+  describe('PATCH /users/me/password', () => {
+    async function newEmployee(tenantId: string) {
+      const user = await createTestUser(prisma, {
+        email: `${randomUUID()}@emp.local`,
+        passwordHash: await auth.hashPassword(PASSWORD),
+        role: UserRole.EMPLOYEE,
+        tenantId,
+      });
+      userIds.push(user.id);
+      const tokens = await auth.login(user);
+      return { user, accessToken: tokens.accessToken };
+    }
+
+    it('lets a non-admin (EMPLOYEE) change their own password, no X-Tenant-Id needed', async () => {
+      const { tenant } = await newTenantWithLocation();
+      const employee = await newEmployee(tenant.id);
+
+      await request(server)
+        .patch('/users/me/password')
+        .set('Authorization', `Bearer ${employee.accessToken}`)
+        .send({ currentPassword: PASSWORD, newPassword: 'BrandNewPassw0rd!' })
+        .expect(204);
+
+      const reauthed = await auth.validateUser(employee.user.email, 'BrandNewPassw0rd!');
+      expect(reauthed?.id).toBe(employee.user.id);
+    });
+
+    it('rejects the wrong current password with 400 and a translatable code', async () => {
+      const { tenant } = await newTenantWithLocation();
+      const employee = await newEmployee(tenant.id);
+
+      const res = await request(server)
+        .patch('/users/me/password')
+        .set('Authorization', `Bearer ${employee.accessToken}`)
+        .send({ currentPassword: 'WrongPassword!', newPassword: 'BrandNewPassw0rd!' })
+        .expect(400);
+      expect(res.body.code).toBe('AUTH_CURRENT_PASSWORD_INVALID');
+
+      // Unchanged — the old password still works.
+      const stillOld = await auth.validateUser(employee.user.email, PASSWORD);
+      expect(stillOld?.id).toBe(employee.user.id);
+    });
+
+    it('rejects a request with no access token', async () => {
+      await request(server)
+        .patch('/users/me/password')
+        .send({ currentPassword: PASSWORD, newPassword: 'BrandNewPassw0rd!' })
+        .expect(401);
+    });
+  });
 });
