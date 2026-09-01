@@ -130,4 +130,45 @@ describe('SchedulesListPage', () => {
     expect(screen.queryByRole('button', { name: /Generate|Генериране/ })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /^Delete$|^Изтриване$/ })).not.toBeInTheDocument();
   });
+
+  // The template itself has no trainer — the column links to the soonest session it has
+  // already generated, so the trainer can be changed there for just that occurrence.
+  it('links the trainer column to the next generated session, and shows a placeholder when none exists', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
+      const url = typeof input === 'string' ? input : (input as Request).url;
+      if (url.includes('/class-schedules')) {
+        return Promise.resolve(
+          jsonResponse(
+            200,
+            paged([
+              {
+                ...SCHEDULES[0],
+                nextSession: {
+                  id: 'sess-9',
+                  startsAt: '2026-09-08T15:00:00.000Z',
+                  trainers: [{ id: 'tr-1', firstName: 'Tina', lastName: 'Trainer', email: 'tina@x' }],
+                },
+              },
+              { ...SCHEDULES[0], id: 'sch-2', nextSession: null },
+            ]),
+          ),
+        );
+      }
+      if (url.includes('/classes')) return Promise.resolve(jsonResponse(200, paged(CLASSES)));
+      if (url.includes('/locations')) return Promise.resolve(jsonResponse(200, paged(LOCATIONS)));
+      return Promise.resolve(jsonResponse(200, {}));
+    });
+
+    const { container } = render(
+      <I18nProvider>
+        <AuthProvider>
+          <SchedulesListPage />
+        </AuthProvider>
+      </I18nProvider>,
+    );
+
+    expect(await screen.findByText('Tina Trainer')).toBeInTheDocument();
+    expect(container.querySelector('a[href="/sessions/sess-9/edit"]')).not.toBeNull();
+    expect(screen.getByText(/No upcoming session|Няма предстояща тренировка/)).toBeInTheDocument();
+  });
 });

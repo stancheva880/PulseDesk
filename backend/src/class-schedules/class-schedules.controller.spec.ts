@@ -236,6 +236,49 @@ describe('ClassSchedulesController (e2e-ish)', () => {
       expect(res.body.endTime).toBe('08:15');
       expect(res.body.tenantId).toBe(a.tenantId);
     });
+
+    // The response schema round-trip for class-schedules.service.ts's nextSession — the unit
+    // coverage is in class-schedules.service.spec.ts; this confirms it survives the interceptor.
+    it('list rows carry nextSession, over the wire', async () => {
+      const a = await setupActor(UserRole.ADMIN);
+      const cls = await newClass(a.tenantId);
+      const trainer = await createTestUser(prisma, {
+        tenantId: a.tenantId, email: `${randomUUID()}@x`, passwordHash: 'x',
+        role: UserRole.EMPLOYEE, firstName: 'Tina', lastName: 'Trainer',
+      });
+      const soon = new Date();
+      soon.setDate(soon.getDate() + 7);
+      soon.setHours(18, 0, 0, 0);
+      const days = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
+      const created = await createSchedule(a, cls.id, {
+        dayOfWeek: days[soon.getDay()]!,
+        startTime: '18:00',
+        endTime: '19:00',
+      });
+      const session = await prisma.session.create({
+        data: {
+          tenantId: a.tenantId,
+          classId: cls.id,
+          locationId: a.locationId,
+          startsAt: soon,
+          endsAt: new Date(soon.getTime() + 3_600_000),
+          trainers: { connect: { id: trainer.id } },
+        },
+      });
+
+      const res = await request(server)
+        .get('/class-schedules')
+        .set('Authorization', `Bearer ${a.accessToken}`)
+        .set('X-Tenant-Id', a.tenantId)
+        .expect(200);
+
+      const row = res.body.items.find((s: { id: string }) => s.id === created.id);
+      expect(row.nextSession).toEqual({
+        id: session.id,
+        startsAt: session.startsAt.toISOString(),
+        trainers: [{ id: trainer.id, firstName: 'Tina', lastName: 'Trainer', email: trainer.email }],
+      });
+    });
   });
 
   // TKT-? — an EMPLOYEE now reads (never writes) the schedules of the classes they teach.

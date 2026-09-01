@@ -202,6 +202,47 @@ describe('ClassesController (e2e-ish)', () => {
       expect(res.body.items.map((c: { name: string }) => c.name)).toEqual(['Mine']);
     });
 
+    // The classes table shows who's teaching each row without opening it.
+    it('list rows carry their trainers', async () => {
+      const a = await setupActor(UserRole.ADMIN);
+      const trainer = await createTestUser(prisma, {
+        tenantId: a.tenantId, email: `${randomUUID()}@x`, passwordHash: 'x',
+        role: UserRole.EMPLOYEE, firstName: 'Tina', lastName: 'Trainer',
+      });
+      const cls = await prisma.class.create({
+        data: {
+          tenantId: a.tenantId,
+          name: 'Yoga',
+          billingMode: BillingMode.PER_SESSION,
+          sessionPrice: 5,
+          trainers: { connect: { id: trainer.id } },
+          locations: { connect: { id: a.locationId } },
+        },
+      });
+      const untaught = await prisma.class.create({
+        data: {
+          tenantId: a.tenantId,
+          name: 'Untaught',
+          billingMode: BillingMode.PER_SESSION,
+          sessionPrice: 5,
+          locations: { connect: { id: a.locationId } },
+        },
+      });
+
+      const res = await request(server)
+        .get('/classes')
+        .set('Authorization', `Bearer ${a.accessToken}`)
+        .set('X-Tenant-Id', a.tenantId)
+        .expect(200);
+
+      const row = res.body.items.find((c: { id: string }) => c.id === cls.id);
+      expect(row.trainers).toEqual([
+        { id: trainer.id, firstName: 'Tina', lastName: 'Trainer', email: trainer.email },
+      ]);
+      const untaughtRow = res.body.items.find((c: { id: string }) => c.id === untaught.id);
+      expect(untaughtRow.trainers).toEqual([]);
+    });
+
     it('isolates classes across tenants', async () => {
       const a = await setupActor(UserRole.ADMIN);
       const b = await setupActor(UserRole.ADMIN);

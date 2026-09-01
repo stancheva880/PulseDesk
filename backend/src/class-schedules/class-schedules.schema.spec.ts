@@ -64,6 +64,30 @@ describe('ClassScheduleSchema', () => {
     const { dayOfWeek: _dropped, ...withoutDay } = runtimeSchedule;
     expect(ClassScheduleSchema.safeParse(withoutDay).success).toBe(false);
   });
+
+  // nextSession is list()-only (class-schedules.service.ts) — create()/update()/delete()
+  // return the bare row, so it must stay optional; null is a real, distinct "nothing
+  // generated within the lookahead window" answer, not the same as absent.
+  it('parses with nextSession absent (create/update), null, or a real session', () => {
+    expect(ClassScheduleSchema.parse(runtimeSchedule).nextSession).toBeUndefined();
+    expect(
+      ClassScheduleSchema.parse({ ...runtimeSchedule, nextSession: null }).nextSession,
+    ).toBeNull();
+
+    const parsed = ClassScheduleSchema.parse({
+      ...runtimeSchedule,
+      nextSession: {
+        id: 's1',
+        startsAt: new Date('2026-09-08T15:00:00.000Z'),
+        trainers: [{ id: 'u1', firstName: 'Tina', lastName: 'Trainer', email: 'tina@x' }],
+      },
+    });
+    expect(parsed.nextSession).toEqual({
+      id: 's1',
+      startsAt: '2026-09-08T15:00:00.000Z',
+      trainers: [{ id: 'u1', firstName: 'Tina', lastName: 'Trainer', email: 'tina@x' }],
+    });
+  });
 });
 
 describe('DayOfWeekSchema', () => {

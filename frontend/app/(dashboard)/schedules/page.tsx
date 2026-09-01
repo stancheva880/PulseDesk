@@ -130,6 +130,31 @@ export default function SchedulesListPage() {
       cellClassName: 'text-muted-foreground',
       skeleton: 'h-4 w-12',
     },
+    {
+      // A schedule is a template, not a trainer assignment — this links to the soonest
+      // upcoming session it has already generated, so the trainer can be changed there for
+      // just that occurrence, without touching the class or the template itself.
+      key: 'trainer',
+      header: t('schedules.fields.trainer'),
+      cell: (s) => {
+        const next = s.nextSession;
+        if (!next) {
+          return <span className="text-muted-foreground">{t('schedules.noUpcoming')}</span>;
+        }
+        const names =
+          next.trainers.length > 0
+            ? next.trainers
+                .map((tr) => `${tr.firstName ?? ''} ${tr.lastName ?? ''}`.trim() || tr.email)
+                .join(', ')
+            : '—';
+        return (
+          <Link href={`/sessions/${next.id}/edit`} className="underline-offset-4 hover:underline">
+            {names}
+          </Link>
+        );
+      },
+      skeleton: 'h-4 w-24',
+    },
   ];
 
   return (

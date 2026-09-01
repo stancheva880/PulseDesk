@@ -150,6 +150,39 @@ describe('ClassesListPage role gating', () => {
     expect(container.querySelector('a[href="/classes/new"]')).toBeNull();
     expect(container.querySelector('a[href="/classes/c1/edit"]')).toBeNull();
   });
+
+  // The trainer is always shown on the row, so it's visible without opening the class.
+  it('always shows the trainer(s) assigned to a class, and a dash when none are set', async () => {
+    setAccessToken(
+      buildJwt({ sub: 'u', email: 'a@b', role: 'ADMIN', tenantId: 't', exp: Math.floor(Date.now() / 1000) + 600 }),
+    );
+    vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
+      const url = typeof input === 'string' ? input : (input as Request).url;
+      if (url.includes('/classes')) {
+        return Promise.resolve(
+          jsonResponse(
+            200,
+            paged([
+              { ...CLASSES[0], trainers: [{ id: 'tr-1', firstName: 'Tina', lastName: 'Trainer', email: 'tina@x' }] },
+              { ...CLASSES[0], id: 'c2', name: 'Pilates', trainers: [] },
+            ]),
+          ),
+        );
+      }
+      return Promise.resolve(jsonResponse(200, []));
+    });
+
+    render(
+      <I18nProvider>
+        <AuthProvider>
+          <ClassesListPage />
+        </AuthProvider>
+      </I18nProvider>,
+    );
+
+    expect(await screen.findByRole('cell', { name: 'Tina Trainer' })).toBeInTheDocument();
+    expect(screen.getAllByRole('cell', { name: '—' }).length).toBeGreaterThanOrEqual(1);
+  });
 });
 
 // TKT-0096: the dashboard's active-classes tile links here with ?isActive=true, so the

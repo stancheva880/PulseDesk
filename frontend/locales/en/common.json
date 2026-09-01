@@ -425,7 +425,8 @@
       "endTime": "End time (HH:MM)",
       "from": "From",
       "to": "To",
-      "classFilter": "Limit to class (optional)"
+      "classFilter": "Limit to class (optional)",
+      "trainer": "Trainer"
     },
     "days": {
       "MON": "Monday",
@@ -436,6 +437,7 @@
       "SAT": "Saturday",
       "SUN": "Sunday"
     },
+    "noUpcoming": "No upcoming session",
     "errors": {
       "timeFormat": "Use HH:MM (24-hour).",
       "endsBeforeStarts": "End time must be after start time.",
