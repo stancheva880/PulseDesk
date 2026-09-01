@@ -1597,6 +1597,12 @@ export interface components {
                 _count?: {
                     attendances: number;
                 };
+                trainers?: {
+                    id: string;
+                    firstName: string | null;
+                    lastName: string | null;
+                    email: string;
+                }[];
             }[];
             page: number;
             pageSize: number;
@@ -1618,6 +1624,12 @@ export interface components {
             _count?: {
                 attendances: number;
             };
+            trainers?: {
+                id: string;
+                firstName: string | null;
+                lastName: string | null;
+                email: string;
+            }[];
         };
         SessionDetail: {
             id: string;
@@ -1634,6 +1646,12 @@ export interface components {
             _count?: {
                 attendances: number;
             };
+            trainers: {
+                id: string;
+                firstName: string | null;
+                lastName: string | null;
+                email: string;
+            }[];
             class: {
                 id: string;
                 name: string;
@@ -1647,12 +1665,6 @@ export interface components {
                 id: string;
                 name: string;
             };
-            trainers: {
-                id: string;
-                firstName: string | null;
-                lastName: string | null;
-                email: string;
-            }[];
         };
         PaginatedClassSchedule: {
             items: {
@@ -1773,6 +1785,12 @@ export interface components {
             _count?: {
                 attendances: number;
             };
+            trainers?: {
+                id: string;
+                firstName: string | null;
+                lastName: string | null;
+                email: string;
+            }[];
             class: {
                 id: string;
                 name: string;

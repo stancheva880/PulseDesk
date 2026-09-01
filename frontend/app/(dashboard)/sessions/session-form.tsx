@@ -111,6 +111,10 @@ export function SessionForm({
   const [trainerSeed, setTrainerSeed] = useState<ComboboxOption[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  // Bumped after a create-and-stay-on-form reset (TKT-0092) so the class-default effect below
+  // re-fires even when classId resets back to the *same* prefilled value — watch('classId')
+  // alone would not detect that as a change.
+  const [classDefaultsTick, setClassDefaultsTick] = useState(0);
 
   const {
     register,
@@ -118,11 +122,13 @@ export function SessionForm({
     handleSubmit,
     reset,
     setValue,
+    watch,
     formState: { errors, isSubmitting },
   } = useForm<FormValues>({
     resolver: zodResolver(mode === 'create' ? createSchema : editSchema),
     defaultValues: createDefaults(''),
   });
+  const classId = watch('classId');
 
   // The query-parameter parent, kept only when it is in the tenant-scoped list — a malformed or
   // foreign ?classId= is simply absent, so a bad link degrades to no selection (TKT-0091).
@@ -176,6 +182,30 @@ export function SessionForm({
     setValue('classId', prefilledClassId);
   }, [mode, prefilledClassId, setValue]);
 
+  // Create mode only: the trainer picker defaults to the selected class's current roster —
+  // visible and editable before save, not only discoverable after reopening the session.
+  // Overriding it here never touches the class's own trainer list; sessions.service.ts only
+  // reads Class.trainers when trainerIds is omitted at creation, and this always sends one.
+  useEffect(() => {
+    if (mode !== 'create') return;
+    if (!classId) {
+      setTrainerSeed([]);
+      setValue('trainerIds', []);
+      return;
+    }
+    let cancelled = false;
+    Classes.get(classId)
+      .then((detail) => {
+        if (cancelled) return;
+        setTrainerSeed(detail.trainers.map((tr) => ({ id: tr.id, label: personLabel(tr) })));
+        setValue('trainerIds', detail.trainers.map((tr) => tr.id));
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [mode, classId, classDefaultsTick, setValue]);
+
   const onSubmit = async (values: FormValues) => {
     setSubmitError(null);
     try {
@@ -189,8 +219,10 @@ export function SessionForm({
           notes: values.notes || undefined,
         });
         // TKT-0092: stay on the form, ready for the next record — the query-parameter
-        // parent survives the reset.
+        // parent survives the reset. The tick re-fires the class-default effect above even
+        // when classId resets back to the same prefilled value.
         reset(createDefaults(prefilledClassId));
+        setClassDefaultsTick((n) => n + 1);
       } else {
         await Sessions.update(id, {
           locationId: values.locationId,

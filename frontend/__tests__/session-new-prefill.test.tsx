@@ -39,6 +39,46 @@ const CLASSES = [
 const LOCATIONS = [
   { id: 'loc-1', tenantId: 't', name: 'Main Hall', address: null, isActive: true },
 ];
+// ClassDetail (GET /classes/:id), distinct from the ClassRow list shape above — the trainer
+// picker's create-mode default is fetched per selection via Classes.get(classId).
+const CLASS_DETAILS: Record<string, unknown> = {
+  c1: {
+    ...CLASSES[0],
+    description: null,
+    monthlyAmount: '80',
+    sessionPrice: null,
+    capacity: null,
+    waitlistMode: 'NONE',
+    allowSelfBooking: false,
+    bookingCutoffMin: null,
+    locations: [],
+    trainees: [],
+    trainers: [{ id: 'tr-1', firstName: 'Tina', lastName: 'Trainer', email: 'tina@x' }],
+  },
+  c2: {
+    ...CLASSES[1],
+    description: null,
+    monthlyAmount: null,
+    sessionPrice: '10',
+    capacity: null,
+    waitlistMode: 'NONE',
+    allowSelfBooking: false,
+    bookingCutoffMin: null,
+    locations: [],
+    trainees: [],
+    trainers: [],
+  },
+};
+const USERS = [
+  {
+    id: 'tr-1', email: 'tina@x', firstName: 'Tina', lastName: 'Trainer',
+    role: 'EMPLOYEE', isActive: true, tenantId: 't', createdAt: '', updatedAt: '', locations: [],
+  },
+  {
+    id: 'tr-2', email: 'sam@x', firstName: 'Sam', lastName: 'Sub',
+    role: 'EMPLOYEE', isActive: true, tenantId: 't', createdAt: '', updatedAt: '', locations: [],
+  },
+];
 
 function renderPage() {
   return render(
@@ -67,9 +107,16 @@ describe('NewSessionPage — ?classId= prefill', () => {
         postBody = init?.body ? JSON.parse(init.body as string) : null;
         return Promise.resolve(jsonResponse(201, { id: 's1' }));
       }
+      // /classes/:id (ClassDetail, incl. trainers) before the bare list — both contain
+      // "/classes", and the id-bearing one is the more specific match.
+      const detailId = /\/classes\/([^/?]+)/.exec(url)?.[1];
+      if (detailId) {
+        const detail = CLASS_DETAILS[detailId];
+        return Promise.resolve(detail ? jsonResponse(200, detail) : jsonResponse(404, null));
+      }
       if (url.includes('/classes')) return Promise.resolve(jsonResponse(200, paged(CLASSES)));
       if (url.includes('/locations')) return Promise.resolve(jsonResponse(200, paged(LOCATIONS)));
-      if (url.includes('/users')) return Promise.resolve(jsonResponse(200, paged([])));
+      if (url.includes('/users')) return Promise.resolve(jsonResponse(200, paged(USERS)));
       return Promise.resolve(jsonResponse(200, {}));
     });
   });
@@ -130,6 +177,56 @@ describe('NewSessionPage — ?classId= prefill', () => {
       expect(container.querySelector<HTMLSelectElement>('#classId')!.value).toBe('c1');
       expect(container.querySelector<HTMLSelectElement>('#locationId')!.value).toBe('');
       expect(container.querySelector<HTMLInputElement>('#startsAt')!.value).toBe('');
+    });
+  });
+
+  // The class's own trainer roster is the starting point for a new session — visible before
+  // save, not only discoverable by reopening it afterward (sessions.service.ts already applies
+  // this default server-side when trainerIds is omitted; this is what makes it visible).
+  it('pre-fills the trainer chips with the selected class\'s current trainers', async () => {
+    search = 'classId=c1';
+    renderPage();
+
+    expect(await screen.findByRole('button', { name: /Tina Trainer/ })).toBeInTheDocument();
+  });
+
+  it('clears the trainer chips when the class selection is cleared', async () => {
+    search = 'classId=c1';
+    const { container } = renderPage();
+    await screen.findByRole('button', { name: /Tina Trainer/ });
+
+    fireEvent.change(container.querySelector('#classId')!, { target: { value: '' } });
+
+    await waitFor(() => {
+      expect(screen.queryByRole('button', { name: /Tina Trainer/ })).not.toBeInTheDocument();
+    });
+  });
+
+  // Overriding the default for one session must never touch the class's own roster — this
+  // only asserts what gets submitted, which is the whole contract from the session's side.
+  it('lets the pre-filled trainer be swapped, and submits the override, not the class default', async () => {
+    search = 'classId=c1';
+    const { container } = renderPage();
+    await screen.findByRole('button', { name: /Tina Trainer/ });
+
+    // Swap: remove the class's default trainer, add a substitute instead.
+    fireEvent.click(screen.getByRole('button', { name: /Tina Trainer/ }));
+    fireEvent.focus(container.querySelector('#trainerIds')!);
+    const sam = await waitFor(() => {
+      const el = container.querySelector('#trainerIds-opt-tr-2');
+      if (!el) throw new Error('trainer option not rendered');
+      return el;
+    });
+    fireEvent.mouseDown(sam);
+
+    fireEvent.change(container.querySelector('#locationId')!, { target: { value: 'loc-1' } });
+    fireEvent.change(container.querySelector('#startsAt')!, { target: { value: '2026-06-01T18:00' } });
+    fireEvent.change(container.querySelector('#endsAt')!, { target: { value: '2026-06-01T19:00' } });
+    fireEvent.click(container.querySelector('button[type="submit"]')!);
+
+    await waitFor(() => {
+      expect(postBody).not.toBeNull();
+      expect(postBody!.trainerIds).toEqual(['tr-2']);
     });
   });
 });

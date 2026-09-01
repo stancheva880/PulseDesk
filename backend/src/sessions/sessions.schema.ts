@@ -13,6 +13,15 @@ import { LocationRefSchema } from '@/locations/locations.schema';
 /** The single declaration of the status union, derived from schema.prisma. */
 export const SessionStatusSchema = z.enum(SessionStatus);
 
+// Shared by SessionSchema's own (optional) trainers and SessionDetailSchema's (required) one —
+// same select shape in both callers of sessions.service.ts.
+const TrainerRefSchema = z.object({
+  id: z.string(),
+  firstName: z.string().nullable(),
+  lastName: z.string().nullable(),
+  email: z.string(),
+});
+
 export const SessionSchema = z.object({
   id: z.string(),
   tenantId: z.string(),
@@ -27,6 +36,10 @@ export const SessionSchema = z.object({
   // TKT-0103: present on list rows only (occupancy for the calendar's X/Y chips);
   // create/update return the bare row, hence optional.
   _count: z.object({ attendances: z.number().int() }).optional(),
+  // The sessions table shows who's teaching each row. Same "list rows only" reasoning as
+  // _count above: create()/update() return the bare row (no include), so this stays optional
+  // there and only ever needs it on GET /sessions.
+  trainers: z.array(TrainerRefSchema).optional(),
 });
 
 export const PaginatedSessionSchema = paginatedSchema(SessionSchema);
@@ -43,12 +56,6 @@ export const SessionDetailSchema = SessionSchema.extend({
     waitlistMode: WaitlistModeSchema,
   }),
   location: LocationRefSchema,
-  trainers: z.array(
-    z.object({
-      id: z.string(),
-      firstName: z.string().nullable(),
-      lastName: z.string().nullable(),
-      email: z.string(),
-    }),
-  ),
+  // Required here, unlike the base schema — findById() always includes it.
+  trainers: z.array(TrainerRefSchema),
 });
