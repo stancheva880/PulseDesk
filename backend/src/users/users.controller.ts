@@ -24,14 +24,16 @@ import type { PaginatedResult } from '@/common/dto/paginated-result';
 import { NoContent, ResponseSchema } from '@/common/response-schema';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { CreateUserDto } from './dto/create-user.dto';
+import { UpdateOwnProfileDto } from './dto/update-own-profile.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import {
   CreatedUserSchema,
   InviteResultSchema,
+  OwnProfileSchema,
   PaginatedUserSummarySchema,
   UserSummarySchema,
 } from './users.schema';
-import { UsersService, type UserSummary } from './users.service';
+import { UsersService, type OwnProfile, type UserSummary } from './users.service';
 
 @ApiBearerAuth()
 @Controller('users')
@@ -58,6 +60,28 @@ export class UsersController {
     @Body() dto: ChangePasswordDto,
   ): Promise<void> {
     await this.auth.changeOwnPassword(user.id, dto.currentPassword, dto.newPassword);
+  }
+
+  // Same @Roles() override as changeOwnPassword above, and for the same reason: 'me' is a
+  // single path segment, so it must also be declared before @Get(':id')/@Patch(':id') below —
+  // registered later, Nest would read it as the target id "me" instead.
+  @ApiOperation({ summary: 'Read your own profile.' })
+  @Roles()
+  @Get('me')
+  @ResponseSchema('OwnProfile', OwnProfileSchema)
+  getOwnProfile(@CurrentUser() user: AuthenticatedUser): Promise<OwnProfile> {
+    return this.users.getOwnProfile(user.id);
+  }
+
+  @ApiOperation({ summary: 'Update your own profile. Changing email needs your current password.' })
+  @Roles()
+  @Patch('me')
+  @ResponseSchema('OwnProfile', OwnProfileSchema)
+  updateOwnProfile(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: UpdateOwnProfileDto,
+  ): Promise<OwnProfile> {
+    return this.users.updateOwnProfile(user.id, dto);
   }
 
   @ApiOperation({ summary: 'List the accounts of the acting club. Filtered and paginated.' })

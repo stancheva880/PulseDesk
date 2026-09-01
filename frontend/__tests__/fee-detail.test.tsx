@@ -396,6 +396,62 @@ describe('FeeDetailPage — payment ledger flow', () => {
     expect(labels.at(-1)).toBeNull();
   });
 
+  // The two ledgers used to stack; now a tab shows one at a time (same pattern as the fees
+  // list's three generator forms), on desktop too — not only collapsed for a phone screen.
+  it('shows one ledger at a time, switched by the tab buttons', async () => {
+    const user = userEvent.setup();
+    const withBoth = {
+      ...FEE_DETAIL_BASE,
+      status: 'PARTIAL',
+      payments: [
+        {
+          id: 'p1',
+          tenantId: 't',
+          feeId: 'f1',
+          amount: '100.00',
+          paidAt: '2026-03-15T00:00:00.000Z',
+          method: 'cash',
+          notes: null,
+          recordedById: 'u',
+          recordedByEmailSnapshot: 'admin@x',
+          recordedByNameSnapshot: null,
+          createdAt: '',
+        },
+      ],
+      refunds: [
+        {
+          id: 'r1',
+          tenantId: 't',
+          feeId: 'f1',
+          amount: '40.00',
+          refundedAt: '2026-03-20T00:00:00.000Z',
+          method: 'bank',
+          notes: null,
+          recordedById: 'u',
+          recordedByEmailSnapshot: 'admin@x',
+          recordedByNameSnapshot: null,
+          createdAt: '',
+        },
+      ],
+    };
+    vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
+      const url = typeof input === 'string' ? input : (input as Request).url;
+      if (url.endsWith('/fees/f1')) return Promise.resolve(jsonResponse(200, withBoth));
+      return Promise.resolve(jsonResponse(404, null));
+    });
+
+    renderPage();
+    await screen.findByText(/cash/);
+    // Payments shows by default; the refund row is not in the document at all.
+    expect(screen.queryByText(/bank/)).not.toBeInTheDocument();
+
+    await user.click(
+      screen.getByRole('button', { name: /Refund ledger|Регистър на възстановяванията/ }),
+    );
+    expect(await screen.findByText(/bank/)).toBeInTheDocument();
+    expect(screen.queryByText(/cash/)).not.toBeInTheDocument();
+  });
+
   // TKT-0105 — money out: the refunds ledger sits beside the payments ledger, and the page
   // shows net paid (payments − refunds) instead of pretending gross is what the club holds.
   describe('refund ledger', () => {
@@ -456,6 +512,8 @@ describe('FeeDetailPage — payment ledger flow', () => {
 
       renderPage();
       await screen.findByText(/Yoga 101/);
+      // The refunds ledger sits behind its own tab now — payments shows by default.
+      await user.click(screen.getByRole('button', { name: /Refund ledger|Регистър на възстановяванията/ }));
       await user.type(document.getElementById('r-amount') as HTMLInputElement, '40');
       await user.type(document.getElementById('r-refundedAt') as HTMLInputElement, '2026-03-20');
       await user.type(document.getElementById('r-method') as HTMLInputElement, 'bank');
@@ -493,6 +551,8 @@ describe('FeeDetailPage — payment ledger flow', () => {
       });
 
       renderPage();
+      await screen.findByText(/Yoga 101/);
+      await user.click(screen.getByRole('button', { name: /Refund ledger|Регистър на възстановяванията/ }));
       await screen.findByText(/bank/);
       await user.click(screen.getByRole('button', { name: /^Delete$|^Изтриване$/ }));
       const confirmButtons = await screen.findAllByRole('button', { name: /^Delete$|^Изтриване$/ });
@@ -528,6 +588,7 @@ describe('FeeDetailPage — payment ledger flow', () => {
 
       renderPage();
       await screen.findByText(/Yoga 101/);
+      await user.click(screen.getByRole('button', { name: /Refund ledger|Регистър на възстановяванията/ }));
       await user.type(document.getElementById('r-amount') as HTMLInputElement, '150');
       await user.type(document.getElementById('r-refundedAt') as HTMLInputElement, '2026-03-20');
       const saveBtns = screen.getAllByRole('button', { name: /^Save$|^Запазване$/ });

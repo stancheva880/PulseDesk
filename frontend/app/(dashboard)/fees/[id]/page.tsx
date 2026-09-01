@@ -34,6 +34,10 @@ export default function FeeDetailPage() {
   const [fee, setFee] = useState<FeeDetail | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
 
+  // Which ledger card shows. Same tab-instead-of-stacking pattern as the fees list's three
+  // generator forms — one at a time reads better than two full ledgers stacked, on desktop too.
+  const [ledgerTab, setLedgerTab] = useState<'payments' | 'refunds'>('payments');
+
   // Edit-fee form
   const [editAmount, setEditAmount] = useState('');
   const [editNotes, setEditNotes] = useState('');
@@ -306,11 +310,26 @@ export default function FeeDetailPage() {
             </CardContent>
           </Card>
 
+          <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              variant={ledgerTab === 'payments' ? 'default' : 'outline'}
+              onClick={() => setLedgerTab('payments')}
+            >
+              {t('payments.ledger')}
+            </Button>
+            <Button
+              type="button"
+              variant={ledgerTab === 'refunds' ? 'default' : 'outline'}
+              onClick={() => setLedgerTab('refunds')}
+            >
+              {t('refunds.ledger')}
+            </Button>
+          </div>
+
+          {ledgerTab === 'payments' ? (
           <Card>
-            <CardHeader>
-              <CardTitle className="text-base">{t('payments.ledger')}</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-4 pt-6">
               {fee.payments.length === 0 ? (
                 <p className="text-sm text-muted-foreground">{t('payments.empty')}</p>
               ) : (
@@ -442,13 +461,12 @@ export default function FeeDetailPage() {
               ) : null}
             </CardContent>
           </Card>
+          ) : null}
 
           {/* TKT-0105 — money out: the refunds ledger mirrors the payments ledger. */}
+          {ledgerTab === 'refunds' ? (
           <Card>
-            <CardHeader>
-              <CardTitle className="text-base">{t('refunds.ledger')}</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-4 pt-6">
               {fee.refunds.length === 0 ? (
                 <p className="text-sm text-muted-foreground">{t('refunds.empty')}</p>
               ) : (
@@ -569,6 +587,7 @@ export default function FeeDetailPage() {
               ) : null}
             </CardContent>
           </Card>
+          ) : null}
         </>
       )}
 

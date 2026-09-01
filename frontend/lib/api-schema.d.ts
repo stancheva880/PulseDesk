@@ -140,6 +140,24 @@ export interface paths {
         patch: operations["UsersController_changeOwnPassword"];
         trace?: never;
     };
+    "/api/users/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read your own profile. */
+        get: operations["UsersController_getOwnProfile"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update your own profile. Changing email needs your current password. */
+        patch: operations["UsersController_updateOwnProfile"];
+        trace?: never;
+    };
     "/api/users": {
         parameters: {
             query?: never;
@@ -976,6 +994,14 @@ export interface components {
             currentPassword: string;
             newPassword: string;
         };
+        UpdateOwnProfileDto: {
+            firstName?: string | null;
+            lastName?: string | null;
+            phone?: string | null;
+            /** Format: email */
+            email?: string;
+            currentPassword?: string;
+        };
         CreateUserDto: {
             /** Format: email */
             email: string;
@@ -1240,6 +1266,13 @@ export interface components {
             /** @enum {string} */
             role: "SUPER_ADMIN" | "ADMIN" | "EMPLOYEE" | "CUSTOMER";
         }[];
+        OwnProfile: {
+            id: string;
+            email: string;
+            firstName: string | null;
+            lastName: string | null;
+            phone: string | null;
+        };
         PaginatedUserSummary: {
             items: {
                 id: string;
@@ -2270,6 +2303,54 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    UsersController_getOwnProfile: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Tenant the caller acts in. A tenant-bound user must name one of their own tenants (403 otherwise); a SUPER_ADMIN may name any active tenant (404 otherwise). */
+                "X-Tenant-Id"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OwnProfile"];
+                };
+            };
+        };
+    };
+    UsersController_updateOwnProfile: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Tenant the caller acts in. A tenant-bound user must name one of their own tenants (403 otherwise); a SUPER_ADMIN may name any active tenant (404 otherwise). */
+                "X-Tenant-Id"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateOwnProfileDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OwnProfile"];
+                };
             };
         };
     };

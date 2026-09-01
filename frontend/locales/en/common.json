@@ -237,6 +237,14 @@
   },
   "profile": {
     "title": "My profile",
+    "details": {
+      "title": "Profile details",
+      "currentPasswordHint": "Only needed when changing your email.",
+      "errors": {
+        "currentPasswordRequired": "Enter your current password to change your email.",
+        "email": "Enter a valid email address."
+      }
+    },
     "changePassword": {
       "title": "Change password",
       "description": "Changing your password signs you out everywhere — you will need to sign in again.",

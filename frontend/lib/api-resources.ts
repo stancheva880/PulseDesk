@@ -92,6 +92,10 @@ export type UserRow = components['schemas']['UserSummary'];
 // POST /users: the same row plus the attach flag, which a plain create omits entirely.
 export type CreatedUser = components['schemas']['CreatedUser'];
 
+// GET/PATCH /users/me — narrower than UserRow: no role/tenantId/locations/status, see
+// OwnProfileSchema (backend/src/users/users.schema.ts) for why.
+export type OwnProfile = components['schemas']['OwnProfile'];
+
 // POST /users/:id/invite — delivery report only, no account fields.
 export type InviteResult = components['schemas']['InviteResult'];
 
@@ -195,6 +199,15 @@ export const Users = {
   // success, so the caller is expected to sign in again right after.
   changePassword: (input: { currentPassword: string; newPassword: string }) =>
     apiRequest<void>('/users/me/password', { method: 'PATCH', body: input }),
+  // Self-service too. currentPassword is only read by the backend when email is present.
+  getOwnProfile: () => apiRequest<OwnProfile>('/users/me'),
+  updateOwnProfile: (input: {
+    firstName?: string | null;
+    lastName?: string | null;
+    phone?: string | null;
+    email?: string;
+    currentPassword?: string;
+  }) => apiRequest<OwnProfile>('/users/me', { method: 'PATCH', body: input }),
 };
 
 export const Locations = {
