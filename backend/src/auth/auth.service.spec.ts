@@ -840,4 +840,48 @@ describe('AuthService', () => {
       ).rejects.toBeInstanceOf(BadRequestException);
     });
   });
+
+  describe('changeOwnPassword', () => {
+    it('updates the password and revokes all refresh tokens, given the correct current password', async () => {
+      const { user, email } = await createTenantUser();
+      // Issue a refresh token — must end up revoked after the change.
+      const before = await service.login(user as never);
+      const beforeRow = await rowFor(before.refreshToken);
+      expect(beforeRow?.revokedAt).toBeNull();
+
+      await service.changeOwnPassword(user.id, TEST_PASSWORD, 'BrandNewPassw0rd!');
+
+      // Password actually changed — reauth with the new password now succeeds.
+      const reauthed = await service.validateUser(email, 'BrandNewPassw0rd!');
+      expect(reauthed?.id).toBe(user.id);
+      // The old password no longer works.
+      expect(await service.validateUser(email, TEST_PASSWORD)).toBeNull();
+
+      // Refresh token revoked.
+      const afterRow = await rowFor(before.refreshToken);
+      expect(afterRow?.revokedAt).not.toBeNull();
+    });
+
+    it('rejects the wrong current password and leaves the password unchanged', async () => {
+      const { user, email } = await createTenantUser();
+      await expect(
+        service.changeOwnPassword(user.id, 'NotTheRealPassword!', 'BrandNewPassw0rd!'),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(await service.validateUser(email, TEST_PASSWORD)).not.toBeNull();
+    });
+
+    it('rejects an unknown user id', async () => {
+      await expect(
+        service.changeOwnPassword(randomUUID(), TEST_PASSWORD, 'BrandNewPassw0rd!'),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it('rejects when the user has been deactivated', async () => {
+      const { user } = await createTenantUser();
+      await prisma.user.update({ where: { id: user.id }, data: { isActive: false } });
+      await expect(
+        service.changeOwnPassword(user.id, TEST_PASSWORD, 'BrandNewPassw0rd!'),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    });
+  });
 });

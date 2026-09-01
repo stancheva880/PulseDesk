@@ -384,6 +384,41 @@ export class AuthService {
   }
 
   /**
+   * Self-service password change from inside the app: the caller already holds a valid
+   * session, and the current password stands in for the reset-link token as proof of intent.
+   *
+   * Same 400 + code shape as completePasswordReset, and for the same reason: a 401 here
+   * would make the frontend's transparent-refresh-on-401 interceptor treat "wrong current
+   * password" as an expired access token, retry, and potentially sign the user out entirely.
+   * A wrong password is a bad request body, not an authentication failure.
+   *
+   * Revokes every other session exactly like completePasswordReset — a password change is
+   * exactly the moment a stolen session should stop working.
+   */
+  async changeOwnPassword(
+    userId: string,
+    currentPassword: string,
+    newPassword: string,
+  ): Promise<void> {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    const invalid = (): never => {
+      throw new BadRequestException({
+        message: 'Current password is incorrect',
+        code: 'AUTH_CURRENT_PASSWORD_INVALID',
+      });
+    };
+    if (!user || !user.isActive || !user.passwordHash) invalid();
+    const ok = await this.verifyPassword(currentPassword, user!.passwordHash!);
+    if (!ok) invalid();
+
+    const passwordHash = await this.hashPassword(newPassword);
+    await this.prisma.$transaction([
+      this.prisma.user.update({ where: { id: userId }, data: { passwordHash } }),
+      this.revokeAllRefreshTokens(userId),
+    ]);
+  }
+
+  /**
    * Ends every live session of a user by revoking their unrevoked refresh tokens.
    *
    * Returned un-awaited on purpose: a PrismaPromise does not run until it is awaited or handed

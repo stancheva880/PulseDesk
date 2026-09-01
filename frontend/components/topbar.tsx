@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -37,6 +38,11 @@ export function Topbar({ nav }: TopbarProps) {
         <TenantSelector />
         <ThemeToggle />
         <LanguageSwitcher />
+        {user ? (
+          <Button variant="outline" size="sm" asChild>
+            <Link href="/profile">{t('nav.profile')}</Link>
+          </Button>
+        ) : null}
         {user ? (
           <Button
             variant="outline"

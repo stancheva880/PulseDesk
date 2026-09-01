@@ -14,6 +14,7 @@ import {
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { UserRole } from '@prisma/client';
+import { AuthService } from '@/auth/auth.service';
 import { CurrentUser } from '@/auth/decorators/current-user.decorator';
 import { Roles } from '@/auth/decorators/roles.decorator';
 import { TenantId } from '@/auth/decorators/tenant-id.decorator';
@@ -21,6 +22,7 @@ import type { AuthenticatedUser } from '@/auth/types/jwt-payload';
 import { ListUsersQueryDto } from './dto/list-users-query.dto';
 import type { PaginatedResult } from '@/common/dto/paginated-result';
 import { NoContent, ResponseSchema } from '@/common/response-schema';
+import { ChangePasswordDto } from './dto/change-password.dto';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import {
@@ -35,7 +37,28 @@ import { UsersService, type UserSummary } from './users.service';
 @Controller('users')
 @Roles(UserRole.ADMIN)
 export class UsersController {
-  constructor(private readonly users: UsersService) {}
+  constructor(
+    private readonly users: UsersService,
+    private readonly auth: AuthService,
+  ) {}
+
+  /**
+   * Self-service, not an admin action — @Roles() with no arguments overrides the class-level
+   * @Roles(ADMIN) (RolesGuard.canActivate does getAllAndOverride, method wins), so every
+   * authenticated role can reach this for their own account. Static path, so it never
+   * collides with the :id routes below (those match a single segment; this is two).
+   */
+  @ApiOperation({ summary: 'Change your own password. Ends every other session.' })
+  @Roles()
+  @Patch('me/password')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ResponseSchema('ChangeOwnPasswordNoContent', NoContent)
+  async changeOwnPassword(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: ChangePasswordDto,
+  ): Promise<void> {
+    await this.auth.changeOwnPassword(user.id, dto.currentPassword, dto.newPassword);
+  }
 
   @ApiOperation({ summary: 'List the accounts of the acting club. Filtered and paginated.' })
   @Get()
