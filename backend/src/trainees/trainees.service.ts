@@ -93,6 +93,34 @@ export class TraineesService {
     return trainee;
   }
 
+  // --- customer-facing list ---
+
+  // Read-only list for the customer portal: the trainees the customer owns
+  // (`Trainee.userId === customer.id`, an adult learner's own record) or guards
+  // (`Trainee.guardians[]` includes customer) — same ownership rule as fees/sessions/cards.
+  // Each trainee's classes travel with it, so the portal's "Деца"/"Класове" tabs both read off
+  // this one call: a trainee with no classes yet (not enrolled) still appears, with `classes: []`
+  // — the family can see it is linked even before there is anything else to show about it.
+  listForCustomer(tenantId: string, customerUserId: string) {
+    return this.prisma.trainee.findMany({
+      where: {
+        tenantId,
+        OR: [
+          { userId: customerUserId },
+          { guardians: { some: { id: customerUserId } } },
+        ],
+      },
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        dateOfBirth: true,
+        classes: { select: { id: true, name: true, description: true } },
+      },
+      orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }],
+    });
+  }
+
   async create(
     tenantId: string,
     dto: CreateTraineeDto,

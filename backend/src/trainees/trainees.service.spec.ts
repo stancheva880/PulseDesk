@@ -286,6 +286,96 @@ describe('TraineesService', () => {
     });
   });
 
+  describe('listForCustomer', () => {
+    it('lists a guarded trainee, with the classes they are enrolled in', async () => {
+      const t = await newTenant();
+      const cls = await prisma.class.create({
+        data: {
+          tenantId: t.id,
+          name: `C-${randomUUID()}`,
+          billingMode: BillingMode.PER_SESSION,
+          sessionPrice: 10,
+        },
+      });
+      const parent = await newCustomer(t.id);
+      const child = await service.create(t.id, {
+        firstName: 'Kid',
+        lastName: 'X',
+        dateOfBirth: minorDobIso,
+        guardianUserIds: [parent.id],
+        classIds: [cls.id],
+        contacts: [
+          { firstName: 'Kid', lastName: 'X', relationship: ContactRelationship.PARENT },
+        ],
+      }, su);
+
+      const rows = await service.listForCustomer(t.id, parent.id);
+
+      expect(rows).toEqual([
+        {
+          id: child.id,
+          firstName: 'Kid',
+          lastName: 'X',
+          dateOfBirth: child.dateOfBirth,
+          classes: [{ id: cls.id, name: cls.name, description: null }],
+        },
+      ]);
+    });
+
+    it('lists the customer\'s own trainee record (adult learner), not just guarded ones', async () => {
+      const t = await newTenant();
+      const learner = await newCustomer(t.id);
+      const own = await service.create(t.id, {
+        firstName: 'Self',
+        lastName: 'Learner',
+        dateOfBirth: adultDobIso,
+      }, su);
+      await prisma.trainee.update({ where: { id: own.id }, data: { userId: learner.id } });
+
+      const rows = await service.listForCustomer(t.id, learner.id);
+
+      expect(rows.map((r) => r.id)).toEqual([own.id]);
+    });
+
+    it('lists an unenrolled trainee with an empty classes array, not omitted', async () => {
+      const t = await newTenant();
+      const parent = await newCustomer(t.id);
+      await service.create(t.id, {
+        firstName: 'Kid',
+        lastName: 'X',
+        dateOfBirth: minorDobIso,
+        guardianUserIds: [parent.id],
+        contacts: [
+          { firstName: 'Kid', lastName: 'X', relationship: ContactRelationship.PARENT },
+        ],
+      }, su);
+
+      const rows = await service.listForCustomer(t.id, parent.id);
+
+      expect(rows).toHaveLength(1);
+      expect(rows[0]!.classes).toEqual([]);
+    });
+
+    it('never returns another family\'s trainee', async () => {
+      const t = await newTenant();
+      const parent = await newCustomer(t.id);
+      const otherParent = await newCustomer(t.id);
+      await service.create(t.id, {
+        firstName: 'Other',
+        lastName: 'Kid',
+        dateOfBirth: minorDobIso,
+        guardianUserIds: [otherParent.id],
+        contacts: [
+          { firstName: 'Other', lastName: 'Kid', relationship: ContactRelationship.PARENT },
+        ],
+      }, su);
+
+      const rows = await service.listForCustomer(t.id, parent.id);
+
+      expect(rows).toEqual([]);
+    });
+  });
+
   describe('update / delete', () => {
     it('throws NotFound updating a trainee in another tenant', async () => {
       const a = await newTenant();

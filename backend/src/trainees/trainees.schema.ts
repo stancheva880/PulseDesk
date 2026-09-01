@@ -42,3 +42,19 @@ export const TraineeDetailSchema = TraineeSchema.extend({
   // Narrowed by `select`, and null when no account is linked.
   user: z.object({ id: z.string(), email: z.string() }).nullable(),
 });
+
+// GET /me/trainees (trainees.service.ts's listForCustomer). A narrower row than TraineeSchema —
+// built from a `select`, not the full model — since the portal has no use for tenantId, phone,
+// notes, etc. `classes` is what tells "Деца" and "Класове" apart on the same payload: which
+// classes each trainee is enrolled in, empty when there are none yet.
+export const CustomerTraineeEntrySchema = z.object({
+  id: z.string(),
+  firstName: z.string(),
+  lastName: z.string(),
+  dateOfBirth: isoDate,
+  classes: z.array(
+    z.object({ id: z.string(), name: z.string(), description: z.string().nullable() }),
+  ),
+});
+
+export const CustomerTraineeEntryListSchema = z.array(CustomerTraineeEntrySchema);

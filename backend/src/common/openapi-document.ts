@@ -50,6 +50,7 @@ const TAGS: ReadonlyArray<readonly [string, string]> = [
   ['Locations', 'Venues within a tenant. Writes are SUPER_ADMIN only.'],
   ['Classes', 'Training groups, their billing mode and their trainer/trainee rosters.'],
   ['Trainees', 'Trainee records. Creating a trainee under 18 requires at least one contact.'],
+  ['CustomerTrainees', "A family's own trainees (children or self), with the classes each is enrolled in — for the portal."],
   ['Contacts', 'Guardian contacts belonging to one trainee.'],
   ['ClassSchedules', 'Recurring weekly slots, and the flow that materialises sessions from them.'],
   ['Sessions', 'Concrete dated sessions and their per-session trainer roster.'],

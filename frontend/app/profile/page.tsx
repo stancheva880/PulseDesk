@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm } from 'react-hook-form';
@@ -8,7 +8,6 @@ import { useTranslation } from 'react-i18next';
 import { z } from 'zod';
 import { Loader2 } from 'lucide-react';
 import { useAuth } from '@/components/auth-provider';
-import { CustomerFeeCard } from '@/components/customer-fee-card';
 import { Topbar } from '@/components/topbar';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -17,7 +16,7 @@ import { Label } from '@/components/ui/label';
 import { PasswordInput } from '@/components/ui/password-input';
 import { apiErrorMessage } from '@/lib/api';
 import { showToast } from '@/components/toast';
-import { Fees, Users, type CustomerFeeEntry, type OwnProfile } from '@/lib/api-resources';
+import { Users, type OwnProfile } from '@/lib/api-resources';
 import { AvatarImageError, compressAvatarFile } from '@/lib/avatar-image';
 import { broadcastAvatarChanged } from '@/lib/avatar-context';
 import { useRequireRole } from '@/lib/use-require-role';
@@ -54,8 +53,6 @@ export default function ProfilePage() {
 
           {loadError ? <p className="text-sm text-destructive">{loadError}</p> : null}
 
-          {user?.role === 'CUSTOMER' ? <CustomerFeesCard /> : null}
-
           {profile ? (
             <ProfileDetailsCard profile={profile} onSaved={setProfile} />
           ) : !loadError ? (
@@ -66,81 +63,6 @@ export default function ProfilePage() {
         </div>
       </main>
     </div>
-  );
-}
-
-// CUSTOMER only. Same family-scoped data as the (now unlinked) /portal/fees page — own fees,
-// or a guarded child's — via GET /me/fees, past periods included, nothing date-filtered. A
-// tab per trainee only appears once there is more than one (a parent with several kids); a
-// single trainee (an adult customer's own fees, or one child) just lists straight through.
-function CustomerFeesCard() {
-  const { t } = useTranslation();
-  const [entries, setEntries] = useState<CustomerFeeEntry[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [selectedTraineeId, setSelectedTraineeId] = useState<string | null>(null);
-
-  useEffect(() => {
-    Fees.myFees()
-      .then(setEntries)
-      .catch((e: unknown) => setError(apiErrorMessage(e)));
-  }, []);
-
-  const trainees = useMemo(() => {
-    if (!entries) return [];
-    const seen = new Map<string, string>();
-    for (const fee of entries) {
-      if (!seen.has(fee.traineeId)) {
-        seen.set(fee.traineeId, `${fee.trainee.firstName} ${fee.trainee.lastName}`);
-      }
-    }
-    return Array.from(seen, ([id, name]) => ({ id, name }));
-  }, [entries]);
-
-  // Derived, not stored: defaults to the first trainee once the list loads, and stays on the
-  // clicked one as long as it is still in the list — no effect needed to keep the two in sync.
-  const effectiveTraineeId = trainees.some((tr) => tr.id === selectedTraineeId)
-    ? selectedTraineeId
-    : (trainees[0]?.id ?? null);
-
-  const visible = entries?.filter((fee) => fee.traineeId === effectiveTraineeId) ?? [];
-
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-base">{t('portal.feesTitle')}</CardTitle>
-        <p className="text-sm text-muted-foreground">{t('portal.feesSubtitle')}</p>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {error ? <p className="text-sm text-destructive">{error}</p> : null}
-        {entries === null ? (
-          <p className="text-sm text-muted-foreground">{t('common.loading')}</p>
-        ) : entries.length === 0 ? (
-          <p className="text-sm text-muted-foreground">{t('portal.feesEmpty')}</p>
-        ) : (
-          <>
-            {trainees.length > 1 ? (
-              <div className="flex flex-wrap gap-2">
-                {trainees.map((tr) => (
-                  <Button
-                    key={tr.id}
-                    type="button"
-                    variant={tr.id === effectiveTraineeId ? 'default' : 'outline'}
-                    onClick={() => setSelectedTraineeId(tr.id)}
-                  >
-                    {tr.name}
-                  </Button>
-                ))}
-              </div>
-            ) : null}
-            <ul className="space-y-3">
-              {visible.map((fee) => (
-                <CustomerFeeCard key={fee.id} fee={fee} />
-              ))}
-            </ul>
-          </>
-        )}
-      </CardContent>
-    </Card>
   );
 }
 

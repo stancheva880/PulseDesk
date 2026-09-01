@@ -1,6 +1,10 @@
 import { ContactRelationship } from '@prisma/client';
 import { describe, expect, it } from 'vitest';
-import { TraineeDetailSchema, TraineeSchema } from './trainees.schema';
+import {
+  CustomerTraineeEntryListSchema,
+  TraineeDetailSchema,
+  TraineeSchema,
+} from './trainees.schema';
 
 // TraineeDetail carries five relation subsets — two narrowed by `select`, three included
 // whole. Getting either kind wrong is the drift class this epic targets.
@@ -153,5 +157,35 @@ describe('TraineeDetailSchema', () => {
       'updatedAt',
     ]);
     expect(parsed.classes[0]!.name).toBe('Beginner Tennis');
+  });
+});
+
+describe('CustomerTraineeEntryListSchema', () => {
+  it('declares each trainee with exactly its narrow row and its classes, empty or not', () => {
+    const parsed = CustomerTraineeEntryListSchema.parse([
+      {
+        id: 'tr1',
+        firstName: 'Kid',
+        lastName: 'X',
+        dateOfBirth: new Date('2015-05-04T00:00:00.000Z'),
+        classes: [{ id: 'c1', name: 'Beginner Tennis', description: null }],
+      },
+      {
+        id: 'tr2',
+        firstName: 'Unenrolled',
+        lastName: 'Kid',
+        dateOfBirth: new Date('2016-05-04T00:00:00.000Z'),
+        classes: [],
+      },
+    ]);
+    expect(Object.keys(parsed[0]!).sort()).toEqual([
+      'classes',
+      'dateOfBirth',
+      'firstName',
+      'id',
+      'lastName',
+    ]);
+    expect(parsed[0]!.dateOfBirth).toBe('2015-05-04T00:00:00.000Z');
+    expect(parsed[1]!.classes).toEqual([]);
   });
 });

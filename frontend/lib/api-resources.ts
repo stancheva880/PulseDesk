@@ -62,6 +62,10 @@ export type Trainee = components['schemas']['Trainee'];
 // locations and classes come back whole. The backend schema enforces both now.
 export type TraineeDetail = components['schemas']['TraineeDetail'];
 
+// GET /me/trainees — the portal's own family list (children, or the customer's own trainee
+// record). classes is empty, not absent, for a linked trainee not yet enrolled anywhere.
+export type CustomerTraineeEntry = components['schemas']['CustomerTraineeEntryList'][number];
+
 // Inputs sent to the backend. Generated from backend/openapi.json — see `gen:api` +
 // `gen:types`. Never hand-write one: a hand-written request type is the drift PRD-0008
 // exists to stop. billingMode stays absent from UpdateClassDto (immutable after create)
@@ -276,6 +280,7 @@ export const Trainees = {
   update: (id: string, input: UpdateTraineeInput) =>
     apiRequest<Trainee>(`/trainees/${id}`, { method: 'PATCH', body: input }),
   remove: (id: string) => apiRequest<void>(`/trainees/${id}`, { method: 'DELETE' }),
+  myTrainees: () => apiRequest<CustomerTraineeEntry[]>('/me/trainees'),
 };
 
 export const Contacts = {

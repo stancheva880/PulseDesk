@@ -60,7 +60,10 @@ const HTTP_METHODS = ['get', 'post', 'put', 'patch', 'delete'];
 // Approved TEST CHANGE REQUEST, 2026-09-01: 84 → 86 for GET /users/me and PATCH /users/me
 // (self-service profile: phone + email change). Same terms: still exact, both routes carry
 // their own @ResponseSchema (OwnProfile).
-const ROUTE_COUNT = 86;
+// Approved TEST CHANGE REQUEST, 2026-09-02: 86 → 87 for GET /me/trainees (portal "Деца"/
+// "Класове" tabs). Same terms: still exact, the route carries its own @ResponseSchema
+// (CustomerTraineeEntryList).
+const ROUTE_COUNT = 87;
 // Approved TEST CHANGE REQUEST, 2026-08-23: 8 → 9 for the WaitlistMode enum (TKT-0112 —
 // named in the approved tech plan). Same terms: still exact.
 const ENUM_COUNT = 9;

@@ -650,6 +650,25 @@
     "navSchedule": "Schedule",
     "navFees": "Fees",
     "navCards": "Cards",
+    "tabs": {
+      "label": "Account sections",
+      "children": "Children",
+      "classes": "Classes",
+      "sessions": "Sessions",
+      "fees": "Fees"
+    },
+    "children": {
+      "title": "Children",
+      "subtitle": "The trainees linked to your account.",
+      "empty": "No trainees are linked to your account yet. Contact the club to get one linked.",
+      "age": "{{age}} y/o",
+      "noClasses": "Not enrolled in a class yet."
+    },
+    "classes": {
+      "title": "Classes",
+      "subtitle": "The classes your trainees are enrolled in.",
+      "noneEnrolled": "Not enrolled in a class."
+    },
     "cards": {
       "title": "My cards",
       "subtitle": "Visit cards for you and your trainees.",

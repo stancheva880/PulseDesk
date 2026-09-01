@@ -323,6 +323,23 @@ export interface paths {
         patch: operations["TraineesController_update"];
         trace?: never;
     };
+    "/api/me/trainees": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List the trainees of the family, with their classes, for the portal. */
+        get: operations["CustomerTraineesController_list"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/trainees/{traineeId}/contacts": {
         parameters: {
             query?: never;
@@ -1571,6 +1588,17 @@ export interface components {
                 email: string;
             } | null;
         };
+        CustomerTraineeEntryList: {
+            id: string;
+            firstName: string;
+            lastName: string;
+            dateOfBirth: string;
+            classes: {
+                id: string;
+                name: string;
+                description: string | null;
+            }[];
+        }[];
         ContactPersonList: {
             id: string;
             tenantId: string;
@@ -2937,6 +2965,28 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Trainee"];
+                };
+            };
+        };
+    };
+    CustomerTraineesController_list: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Tenant the caller acts in. A tenant-bound user must name one of their own tenants (403 otherwise); a SUPER_ADMIN may name any active tenant (404 otherwise). */
+                "X-Tenant-Id"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CustomerTraineeEntryList"];
                 };
             };
         };

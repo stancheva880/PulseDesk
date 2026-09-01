@@ -1422,6 +1422,43 @@
         ]
       }
     },
+    "/api/me/trainees": {
+      "get": {
+        "operationId": "CustomerTraineesController_list",
+        "parameters": [
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Tenant the caller acts in. A tenant-bound user must name one of their own tenants (403 otherwise); a SUPER_ADMIN may name any active tenant (404 otherwise).",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerTraineeEntryList"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List the trainees of the family, with their classes, for the portal.",
+        "tags": [
+          "CustomerTrainees"
+        ]
+      }
+    },
     "/api/trainees/{traineeId}/contacts": {
       "get": {
         "operationId": "ContactsController_list",
@@ -4213,6 +4250,10 @@
     {
       "name": "Trainees",
       "description": "Trainee records. Creating a trainee under 18 requires at least one contact."
+    },
+    {
+      "name": "CustomerTrainees",
+      "description": "A family's own trainees (children or self), with the classes each is enrolled in — for the portal."
     },
     {
       "name": "Contacts",
@@ -7350,6 +7391,64 @@
           "user"
         ],
         "additionalProperties": false
+      },
+      "CustomerTraineeEntryList": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "firstName": {
+              "type": "string"
+            },
+            "lastName": {
+              "type": "string"
+            },
+            "dateOfBirth": {
+              "type": "string"
+            },
+            "classes": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "description": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "id",
+                  "name",
+                  "description"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": [
+            "id",
+            "firstName",
+            "lastName",
+            "dateOfBirth",
+            "classes"
+          ],
+          "additionalProperties": false
+        }
       },
       "ContactPersonList": {
         "type": "array",
