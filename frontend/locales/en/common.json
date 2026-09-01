@@ -512,6 +512,11 @@
       "PARTIAL": "Partial",
       "PAID": "Paid"
     },
+    "generateTabs": {
+      "monthly": "Monthly",
+      "session": "Per-session",
+      "course": "Course"
+    },
     "generateMonthly": {
       "title": "Generate monthly fees",
       "description": "Create one fee per trainee per PER_MONTH class for the chosen period.",
