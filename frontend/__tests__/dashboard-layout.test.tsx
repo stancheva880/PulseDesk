@@ -184,10 +184,24 @@ describe('DashboardLayout route guards', () => {
   });
 
   it('still sends an EMPLOYEE on an admin-only path to the dashboard', async () => {
-    renderLayout('EMPLOYEE', '/schedules');
+    renderLayout('EMPLOYEE', '/users');
 
     await waitFor(() => expect(nav.replace).toHaveBeenCalledWith('/dashboard'));
     expect(screen.queryByText(CHILD)).not.toBeInTheDocument();
+  });
+
+  // EMPLOYEE reads their own schedules (the list itself is not admin-only anymore), but
+  // creating one still is — matches SessionsController's ADMIN-only writes.
+  it('sends an EMPLOYEE away from /schedules/new', async () => {
+    renderLayout('EMPLOYEE', '/schedules/new');
+    await waitFor(() => expect(nav.replace).toHaveBeenCalledWith('/schedules'));
+    expect(screen.queryByText(CHILD)).not.toBeInTheDocument();
+  });
+
+  it('lets an EMPLOYEE open the schedules list', async () => {
+    renderLayout('EMPLOYEE', '/schedules');
+    expect(await screen.findByText(CHILD)).toBeInTheDocument();
+    expect(nav.replace).not.toHaveBeenCalled();
   });
 
   // TKT-0122: the sweep endpoint is @Roles(SUPER_ADMIN), so /maintenance would render a page

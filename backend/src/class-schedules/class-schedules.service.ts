@@ -3,7 +3,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { DayOfWeek, Prisma, type ClassSchedule } from '@prisma/client';
+import { DayOfWeek, Prisma, UserRole, type ClassSchedule } from '@prisma/client';
 import { LocationScopeService } from '@/auth/scope/location-scope.service';
 import type { AuthenticatedUser } from '@/auth/types/jwt-payload';
 import {
@@ -53,9 +53,9 @@ export class ClassSchedulesService {
     user: AuthenticatedUser,
     pagination?: PaginationInput,
   ): Promise<PaginatedResult<ClassSchedule>> {
-    const where = {
+    const where: Prisma.ClassScheduleWhereInput = {
       tenantId,
-      ...(await this.scope.locationWhere(user, tenantId)),
+      ...(await this.scopeWhere(user, tenantId)),
     };
     const p = normalizePagination(pagination);
     const [items, total] = await this.prisma.$transaction([
@@ -79,11 +79,28 @@ export class ClassSchedulesService {
       where: {
         id,
         tenantId,
-        ...(await this.scope.locationWhere(user, tenantId)),
+        ...(await this.scopeWhere(user, tenantId)),
       },
     });
     if (!sched) throw new NotFoundException(`ClassSchedule ${id} not found`);
     return sched;
+  }
+
+  /**
+   * A schedule has no trainer list of its own, so "the employee's own schedule" is read off
+   * the class they teach (Class.trainers) — the same roster generateSessions already uses to
+   * default each generated Session's own trainer list. Mirrors sessions.service.ts's identical
+   * EMPLOYEE branch (there: `trainers: { some: { id: viewer.id } }` directly on Session).
+   * ADMIN/SUPER_ADMIN keep the existing location-based scope.
+   */
+  private async scopeWhere(
+    user: AuthenticatedUser,
+    tenantId: string,
+  ): Promise<Prisma.ClassScheduleWhereInput> {
+    if (user.role === UserRole.EMPLOYEE) {
+      return { class: { trainers: { some: { id: user.id } } } };
+    }
+    return this.scope.locationWhere(user, tenantId);
   }
 
   async create(

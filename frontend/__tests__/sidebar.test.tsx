@@ -91,14 +91,15 @@ describe('Sidebar', () => {
     expect(await screen.findByText(/PulseDesk/)).toBeInTheDocument();
   });
 
-  it('hides Schedules and Users from an EMPLOYEE (trainer)', async () => {
+  it('hides Users from an EMPLOYEE (trainer), but shows their own Schedules', async () => {
     const { container } = renderSidebar('EMPLOYEE');
     await screen.findByText('authenticated:EMPLOYEE');
-    expect(container.querySelector('a[href="/schedules"]')).toBeNull();
     expect(container.querySelector('a[href="/users"]')).toBeNull();
-    // Sessions/Classes stay visible — trainers can read them.
+    // Sessions/Classes/Schedules stay visible — trainers read their own (writes are ADMIN-only,
+    // gated in the pages and in DashboardLayout's DENY_RULES, not here).
     expect(container.querySelector('a[href="/sessions"]')).not.toBeNull();
     expect(container.querySelector('a[href="/classes"]')).not.toBeNull();
+    expect(container.querySelector('a[href="/schedules"]')).not.toBeNull();
   });
 
   // TKT-0122: platform maintenance is the first SUPER_ADMIN-only destination, so it is also

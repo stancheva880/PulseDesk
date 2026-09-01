@@ -33,7 +33,9 @@ export const NAV_ITEMS: NavItem[] = [
   { href: '/dashboard', labelKey: 'nav.dashboard', icon: LayoutDashboard },
   { href: '/locations', labelKey: 'nav.locations', icon: MapPin },
   { href: '/classes', labelKey: 'nav.classes', icon: Dumbbell },
-  { href: '/schedules', labelKey: 'nav.schedules', icon: CalendarDays, roles: ['SUPER_ADMIN', 'ADMIN'] },
+  // EMPLOYEE reads their own schedules (class-schedules.service.ts's scopeWhere) — writes
+  // (new/edit/delete/generate) stay ADMIN-only, gated in the page itself and in DENY_RULES.
+  { href: '/schedules', labelKey: 'nav.schedules', icon: CalendarDays, roles: ['SUPER_ADMIN', 'ADMIN', 'EMPLOYEE'] },
   { href: '/sessions', labelKey: 'nav.sessions', icon: Clock },
   { href: '/trainees', labelKey: 'nav.trainees', icon: Users },
   { href: '/fees', labelKey: 'nav.fees', icon: Receipt },
