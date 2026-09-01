@@ -75,4 +75,5 @@ export const OwnProfileSchema = z.object({
   firstName: z.string().nullable(),
   lastName: z.string().nullable(),
   phone: z.string().nullable(),
+  avatarUrl: z.string().nullable(),
 });

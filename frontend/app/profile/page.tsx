@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm } from 'react-hook-form';
@@ -17,6 +17,8 @@ import { PasswordInput } from '@/components/ui/password-input';
 import { apiErrorMessage } from '@/lib/api';
 import { showToast } from '@/components/toast';
 import { Users, type OwnProfile } from '@/lib/api-resources';
+import { AvatarImageError, compressAvatarFile } from '@/lib/avatar-image';
+import { broadcastAvatarChanged } from '@/lib/avatar-context';
 import { useRequireRole } from '@/lib/use-require-role';
 
 // Reachable by every signed-in role — no dashboard sidebar or portal nav, since neither
@@ -136,7 +138,8 @@ function ProfileDetailsCard({
       <CardHeader>
         <CardTitle className="text-base">{t('profile.details.title')}</CardTitle>
       </CardHeader>
-      <CardContent>
+      <CardContent className="space-y-6">
+        <AvatarUploader profile={profile} onSaved={onSaved} />
         <form className="space-y-4" onSubmit={handleSubmit(onSubmit)} noValidate>
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-1.5">
@@ -196,6 +199,109 @@ function ProfileDetailsCard({
         </form>
       </CardContent>
     </Card>
+  );
+}
+
+// Saves on selection — instant, not bundled into the details form's Save button, since a
+// photo isn't something you'd type and then reconsider the way a name or phone number is.
+function AvatarUploader({
+  profile,
+  onSaved,
+}: {
+  profile: OwnProfile;
+  onSaved: (p: OwnProfile) => void;
+}) {
+  const { t } = useTranslation();
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const onPick = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = ''; // lets the same file be picked again after an error
+    if (!file) return;
+    setError(null);
+    setBusy(true);
+    try {
+      const avatarUrl = await compressAvatarFile(file);
+      const updated = await Users.updateOwnProfile({ avatarUrl });
+      onSaved(updated);
+      broadcastAvatarChanged(updated.avatarUrl);
+    } catch (err) {
+      if (err instanceof AvatarImageError) {
+        setError(
+          t(
+            err.message === 'too-large'
+              ? 'profile.details.avatar.errors.tooLarge'
+              : err.message === 'not-an-image'
+                ? 'profile.details.avatar.errors.notAnImage'
+                : 'profile.details.avatar.errors.generic',
+          ),
+        );
+      } else {
+        setError(apiErrorMessage(err));
+      }
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const onRemove = async () => {
+    setError(null);
+    setBusy(true);
+    try {
+      const updated = await Users.updateOwnProfile({ avatarUrl: null });
+      onSaved(updated);
+      broadcastAvatarChanged(null);
+    } catch (err) {
+      setError(apiErrorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="flex items-center gap-4">
+      <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-full border bg-muted text-lg font-medium text-muted-foreground">
+        {profile.avatarUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element -- data: URI, not an optimizable remote image
+          <img src={profile.avatarUrl} alt="" className="h-full w-full object-cover" />
+        ) : (
+          <span aria-hidden>{(profile.email[0] ?? '?').toUpperCase()}</span>
+        )}
+      </div>
+      <div className="space-y-1.5">
+        <div className="flex gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={busy}
+            onClick={() => inputRef.current?.click()}
+          >
+            {busy ? t('profile.details.avatar.uploading') : t('profile.details.avatar.change')}
+          </Button>
+          {profile.avatarUrl ? (
+            <Button type="button" variant="ghost" size="sm" disabled={busy} onClick={onRemove}>
+              {t('profile.details.avatar.remove')}
+            </Button>
+          ) : null}
+        </div>
+        <input
+          ref={inputRef}
+          type="file"
+          accept="image/*"
+          aria-label={t('profile.details.avatar.change')}
+          className="hidden"
+          onChange={(e) => void onPick(e)}
+        />
+        {error ? (
+          <p role="alert" className="text-xs text-destructive">
+            {error}
+          </p>
+        ) : null}
+      </div>
+    </div>
   );
 }
 

@@ -1001,6 +1001,7 @@ export interface components {
             /** Format: email */
             email?: string;
             currentPassword?: string;
+            avatarUrl?: string | null;
         };
         CreateUserDto: {
             /** Format: email */
@@ -1272,6 +1273,7 @@ export interface components {
             firstName: string | null;
             lastName: string | null;
             phone: string | null;
+            avatarUrl: string | null;
         };
         PaginatedUserSummary: {
             items: {

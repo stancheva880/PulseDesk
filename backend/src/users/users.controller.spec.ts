@@ -1931,6 +1931,7 @@ describe('UsersController (e2e-ish)', () => {
         firstName: null,
         lastName: null,
         phone: '+359000000',
+        avatarUrl: null,
       });
     });
 
@@ -1949,7 +1950,60 @@ describe('UsersController (e2e-ish)', () => {
         firstName: 'Ada',
         lastName: 'Lovelace',
         phone: '+359111111',
+        avatarUrl: null,
       });
+    });
+
+    it('PATCH sets and clears the avatar, and rejects a non-data-URI value', async () => {
+      const { tenant } = await newTenantWithLocation();
+      const employee = await newEmployee(tenant.id);
+      const dataUri = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB';
+
+      const set = await request(server)
+        .patch('/users/me')
+        .set('Authorization', `Bearer ${employee.accessToken}`)
+        .send({ avatarUrl: dataUri })
+        .expect(200);
+      expect(set.body.avatarUrl).toBe(dataUri);
+
+      const cleared = await request(server)
+        .patch('/users/me')
+        .set('Authorization', `Bearer ${employee.accessToken}`)
+        .send({ avatarUrl: null })
+        .expect(200);
+      expect(cleared.body.avatarUrl).toBeNull();
+
+      await request(server)
+        .patch('/users/me')
+        .set('Authorization', `Bearer ${employee.accessToken}`)
+        .send({ avatarUrl: 'https://evil.example/x.png' })
+        .expect(400);
+    });
+
+    // The user's own question: does this work for the platform admin too, not just tenant
+    // roles? RolesGuard's SUPER_ADMIN bypass (roles.guard.ts) already covers @Roles() with no
+    // arguments the same as any other @Roles() list, but that guarantee had no test of its own.
+    it('lets a SUPER_ADMIN read and update their own profile too', async () => {
+      const sa = await newSuperAdmin();
+
+      const got = await request(server)
+        .get('/users/me')
+        .set('Authorization', `Bearer ${sa.accessToken}`)
+        .expect(200);
+      expect(got.body.id).toBe(sa.user.id);
+
+      const patched = await request(server)
+        .patch('/users/me')
+        .set('Authorization', `Bearer ${sa.accessToken}`)
+        .send({ firstName: 'Root' })
+        .expect(200);
+      expect(patched.body.firstName).toBe('Root');
+
+      await request(server)
+        .patch('/users/me/password')
+        .set('Authorization', `Bearer ${sa.accessToken}`)
+        .send({ currentPassword: PASSWORD, newPassword: 'BrandNewPassw0rd!' })
+        .expect(204);
     });
 
     it('PATCH changes email when the current password is correct', async () => {

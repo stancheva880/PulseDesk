@@ -120,6 +120,10 @@ model User {
   firstName    String?
   lastName     String?
   phone        String?
+  // A small square photo as a data: URI (client-side compressed before upload — see
+  // UpdateOwnProfileDto's length cap). No object storage in this stack, and Vercel's
+  // filesystem is ephemeral, so a DB column is the only place this can live.
+  avatarUrl    String?
   isActive     Boolean  @default(true)
 
   // Global platform admin — has no memberships; enters tenants via X-Tenant-Id.

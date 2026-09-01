@@ -39,6 +39,7 @@
     "users": "Users",
     "maintenance": "Maintenance",
     "profile": "Profile",
+    "editProfile": "Edit profile",
     "logout": "Sign out",
     "openMenu": "Open menu",
     "menuTitle": "Menu",
@@ -240,6 +241,16 @@
     "details": {
       "title": "Profile details",
       "currentPasswordHint": "Only needed when changing your email.",
+      "avatar": {
+        "change": "Change photo",
+        "remove": "Remove",
+        "uploading": "Uploading…",
+        "errors": {
+          "notAnImage": "Choose an image file.",
+          "tooLarge": "That file is too large (max 8 MB).",
+          "generic": "Upload failed. Try again."
+        }
+      },
       "errors": {
         "currentPasswordRequired": "Enter your current password to change your email.",
         "email": "Enter a valid email address."

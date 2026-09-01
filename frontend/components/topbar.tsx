@@ -1,15 +1,13 @@
 'use client';
 
-import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import { type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '@/components/auth-provider';
+import { AvatarMenu } from '@/components/avatar-menu';
 import { LanguageSwitcher } from '@/components/language-switcher';
 import { TenantSelector } from '@/components/tenant-selector';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
 
 
 interface TopbarProps {
@@ -19,8 +17,7 @@ interface TopbarProps {
 
 export function Topbar({ nav }: TopbarProps) {
   const { t } = useTranslation();
-  const router = useRouter();
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
 
   return (
     <header className="sticky top-0 z-30 flex h-14 items-center justify-between gap-3 border-b bg-background/80 px-6 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-background/60">
@@ -38,22 +35,8 @@ export function Topbar({ nav }: TopbarProps) {
         <TenantSelector />
         <ThemeToggle />
         <LanguageSwitcher />
-        {user ? (
-          <Button variant="outline" size="sm" asChild>
-            <Link href="/profile">{t('nav.profile')}</Link>
-          </Button>
-        ) : null}
-        {user ? (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => {
-              void logout().then(() => router.replace('/login'));
-            }}
-          >
-            {t('nav.logout')}
-          </Button>
-        ) : null}
+        {/* Edit profile + logout live in this menu now — see components/avatar-menu.tsx. */}
+        <AvatarMenu />
       </div>
     </header>
   );

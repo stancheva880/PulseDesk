@@ -35,8 +35,10 @@ import type { UpdateUserDto } from './dto/update-user.dto';
 export type UserAccountStatus = 'PENDING' | 'ACTIVE' | 'INACTIVE';
 
 // Response shape is unchanged from the scalar-column era: `role`/`tenantId` are
-// synthesized from the user's membership (relative to the request's tenant).
-export type UserSummary = Omit<User, 'passwordHash' | 'isSuperAdmin'> & {
+// synthesized from the user's membership (relative to the request's tenant). `avatarUrl` is
+// excluded too — it is self-service only (GET/PATCH /users/me, see OwnProfileSchema), so an
+// admin browsing the club never receives another account's photo.
+export type UserSummary = Omit<User, 'passwordHash' | 'isSuperAdmin' | 'avatarUrl'> & {
   role: UserRole;
   tenantId: string | null;
   status: UserAccountStatus;
@@ -45,7 +47,10 @@ export type UserSummary = Omit<User, 'passwordHash' | 'isSuperAdmin'> & {
 
 // GET/PATCH /users/me's shape — see OwnProfileSchema (users.schema.ts) for why it stays
 // narrower than UserSummary.
-export type OwnProfile = Pick<User, 'id' | 'email' | 'firstName' | 'lastName' | 'phone'>;
+export type OwnProfile = Pick<
+  User,
+  'id' | 'email' | 'firstName' | 'lastName' | 'phone' | 'avatarUrl'
+>;
 
 const USER_SELECT = {
   id: true,
@@ -568,6 +573,7 @@ export class UsersService {
     firstName: true,
     lastName: true,
     phone: true,
+    avatarUrl: true,
   } satisfies Prisma.UserSelect;
 
   async getOwnProfile(userId: string): Promise<OwnProfile> {
@@ -580,8 +586,8 @@ export class UsersService {
   }
 
   /**
-   * Self-service profile edit — first/last name, phone, and (with re-authentication) email.
-   * Never touches passwordHash, role, locations or isActive; those stay admin actions on
+   * Self-service profile edit — first/last name, phone, avatar, and (with re-authentication)
+   * email. Never touches passwordHash, role, locations or isActive; those stay admin actions on
    * PATCH /users/:id. Email is the account's login identity, so changing it requires the
    * current password as proof, the same bar changeOwnPassword sets for the credential it
    * protects — unlike that endpoint, this one does not revoke other sessions, since nothing
@@ -598,6 +604,7 @@ export class UsersService {
     if (dto.firstName !== undefined) data.firstName = dto.firstName ?? null;
     if (dto.lastName !== undefined) data.lastName = dto.lastName ?? null;
     if (dto.phone !== undefined) data.phone = dto.phone ?? null;
+    if (dto.avatarUrl !== undefined) data.avatarUrl = dto.avatarUrl ?? null;
     if (dto.email !== undefined && dto.email !== user.email) {
       const ok = user.passwordHash
         ? await this.auth.verifyPassword(dto.currentPassword ?? '', user.passwordHash)

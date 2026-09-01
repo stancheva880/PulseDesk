@@ -13,6 +13,15 @@ vi.mock('next/navigation', () => ({
   useSearchParams: () => new URLSearchParams(),
 }));
 
+// The real implementation draws through <canvas>, which jsdom does not implement — see
+// lib/avatar-image.ts's docblock and __tests__/avatar-image.test.ts for the parts that are
+// tested without this mock (the guard clauses, which run before canvas is ever touched).
+const compressAvatarFile = vi.fn();
+vi.mock('@/lib/avatar-image', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/avatar-image')>('@/lib/avatar-image');
+  return { ...actual, compressAvatarFile: (...args: unknown[]) => compressAvatarFile(...args) };
+});
+
 function buildJwt(payload: Record<string, unknown>): string {
   const header = btoa(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).replace(/=/g, '');
   const body = btoa(JSON.stringify(payload)).replace(/=/g, '');
@@ -56,6 +65,7 @@ describe('ProfilePage', () => {
     vi.restoreAllMocks();
     clearStoredTokens();
     replace.mockClear();
+    compressAvatarFile.mockReset();
   });
 
   it('renders the current/new/confirm password fields', async () => {
@@ -255,6 +265,93 @@ describe('ProfilePage', () => {
         email: 'new@x.com',
         currentPassword: 'MyRealPassword1!',
       });
+    });
+  });
+
+  describe('avatar upload', () => {
+    const PROFILE = {
+      id: 'u1',
+      email: 'employee@x.com',
+      firstName: 'Ada',
+      lastName: 'Lovelace',
+      phone: '+359888000000',
+      avatarUrl: null,
+    };
+
+    it('compresses the picked file and saves it immediately, no Save click needed', async () => {
+      const user = userEvent.setup();
+      compressAvatarFile.mockResolvedValue('data:image/jpeg;base64,AAAA');
+      let postedBody: unknown = null;
+      mockFetch((url, init) => {
+        if (url.endsWith('/users/me') && init?.method === 'PATCH') {
+          postedBody = JSON.parse(init.body as string);
+          return jsonResponse(200, { ...PROFILE, avatarUrl: 'data:image/jpeg;base64,AAAA' });
+        }
+        if (url.endsWith('/users/me')) return jsonResponse(200, PROFILE);
+        return jsonResponse(404, null);
+      });
+      renderPage();
+
+      const fileInput = (await screen.findByLabelText(
+        /Change photo|Смяна на снимка/,
+      )) as HTMLInputElement;
+      const file = new File(['x'], 'me.png', { type: 'image/png' });
+      await user.upload(fileInput, file);
+
+      await vi.waitFor(() => expect(postedBody).not.toBeNull());
+      expect(postedBody).toEqual({ avatarUrl: 'data:image/jpeg;base64,AAAA' });
+      expect(compressAvatarFile).toHaveBeenCalledWith(file);
+      // The "Remove" action only appears once an avatar exists.
+      expect(
+        await screen.findByRole('button', { name: /^Remove$|^Премахване$/ }),
+      ).toBeInTheDocument();
+    });
+
+    it('shows a translated error and does not save when the file is rejected', async () => {
+      const user = userEvent.setup();
+      const { AvatarImageError } = await import('@/lib/avatar-image');
+      compressAvatarFile.mockRejectedValue(new AvatarImageError('too-large'));
+      const fetchSpy = mockFetch((url) => {
+        if (url.endsWith('/users/me')) return jsonResponse(200, PROFILE);
+        return jsonResponse(404, null);
+      });
+      renderPage();
+
+      const fileInput = (await screen.findByLabelText(
+        /Change photo|Смяна на снимка/,
+      )) as HTMLInputElement;
+      await user.upload(fileInput, new File(['x'], 'huge.png', { type: 'image/png' }));
+
+      expect(await screen.findByText(/too large|твърде голям/i)).toBeInTheDocument();
+      expect(
+        fetchSpy.mock.calls.some(
+          ([input, init]) =>
+            String(typeof input === 'string' ? input : (input as Request).url).endsWith(
+              '/users/me',
+            ) && (init as RequestInit | undefined)?.method === 'PATCH',
+        ),
+      ).toBe(false);
+    });
+
+    it('removes the avatar via the Remove button', async () => {
+      const user = userEvent.setup();
+      let postedBody: unknown = null;
+      mockFetch((url, init) => {
+        if (url.endsWith('/users/me') && init?.method === 'PATCH') {
+          postedBody = JSON.parse(init.body as string);
+          return jsonResponse(200, { ...PROFILE, avatarUrl: null });
+        }
+        if (url.endsWith('/users/me')) {
+          return jsonResponse(200, { ...PROFILE, avatarUrl: 'data:image/jpeg;base64,AAAA' });
+        }
+        return jsonResponse(404, null);
+      });
+      renderPage();
+
+      await user.click(await screen.findByRole('button', { name: /^Remove$|^Премахване$/ }));
+
+      await vi.waitFor(() => expect(postedBody).not.toBeNull());
+      expect(postedBody).toEqual({ avatarUrl: null });
     });
   });
 });

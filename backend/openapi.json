@@ -4393,6 +4393,12 @@
           "currentPassword": {
             "type": "string",
             "maxLength": 200
+          },
+          "avatarUrl": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 300000,
+            "pattern": "^data:image\\/(png|jpeg|webp);base64,[A-Za-z0-9+/]+=*$"
           }
         }
       },
@@ -5534,6 +5540,16 @@
                 "type": "null"
               }
             ]
+          },
+          "avatarUrl": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
@@ -5541,7 +5557,8 @@
           "email",
           "firstName",
           "lastName",
-          "phone"
+          "phone",
+          "avatarUrl"
         ],
         "additionalProperties": false
       },
