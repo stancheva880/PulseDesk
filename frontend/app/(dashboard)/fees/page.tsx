@@ -63,6 +63,9 @@ function FeesList({ initialMonth }: { initialMonth: string }) {
   const [searchQuery, setSearchQuery] = useState('');
   // Bumped after a bulk generate, so the unbilled panel below re-reads with the list.
   const [generation, setGeneration] = useState(0);
+  // Which of the three generator forms is showing. One at a time, chosen by the tab
+  // buttons below — keeps the page from stacking three forms on a phone screen.
+  const [generatorTab, setGeneratorTab] = useState<'monthly' | 'session' | 'course'>('monthly');
   const [sort, setSort] = useState<{ key: string; desc: boolean }>({
     key: 'periodStart',
     desc: true,
@@ -280,10 +283,39 @@ function FeesList({ initialMonth }: { initialMonth: string }) {
       ) : null}
 
       {admin ? (
-        <div className="grid gap-4 md:grid-cols-2">
-          <GenerateMonthlyCard onGenerated={refreshAll} classes={classes} />
-          <GenerateSessionCard onGenerated={refreshAll} classes={classes} />
-          <GenerateCourseCard onGenerated={refreshAll} classes={classes} />
+        <div className="space-y-4">
+          <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              variant={generatorTab === 'monthly' ? 'default' : 'outline'}
+              onClick={() => setGeneratorTab('monthly')}
+            >
+              {t('fees.generateTabs.monthly')}
+            </Button>
+            <Button
+              type="button"
+              variant={generatorTab === 'session' ? 'default' : 'outline'}
+              onClick={() => setGeneratorTab('session')}
+            >
+              {t('fees.generateTabs.session')}
+            </Button>
+            <Button
+              type="button"
+              variant={generatorTab === 'course' ? 'default' : 'outline'}
+              onClick={() => setGeneratorTab('course')}
+            >
+              {t('fees.generateTabs.course')}
+            </Button>
+          </div>
+          {generatorTab === 'monthly' ? (
+            <GenerateMonthlyCard onGenerated={refreshAll} classes={classes} />
+          ) : null}
+          {generatorTab === 'session' ? (
+            <GenerateSessionCard onGenerated={refreshAll} classes={classes} />
+          ) : null}
+          {generatorTab === 'course' ? (
+            <GenerateCourseCard onGenerated={refreshAll} classes={classes} />
+          ) : null}
         </div>
       ) : null}
 

@@ -357,6 +357,9 @@ describe('FeesListPage', () => {
     renderPage();
     await screen.findByText('Ada Lovelace');
 
+    // The course form is behind its tab — hidden by default (monthly shows first).
+    await user.click(screen.getByRole('button', { name: /^Course$|^Курсови$/ }));
+
     const courseCard = screen
       .getByText(/Generate course fees|Генериране на курсови/)
       .closest('div')!.parentElement!.parentElement! as HTMLElement;
@@ -374,6 +377,32 @@ describe('FeesListPage', () => {
     expect(postedTo).toContain('/fees/generate-course');
     expect(postedBody).toEqual({ classId: 'course-1' });
   });
+  // Three forms stacked at once didn't fit a phone screen — now a tab picks one at a time.
+  it('shows one generator form at a time, switched by the tab buttons', async () => {
+    const user = userEvent.setup();
+    mockFetch((url) => {
+      if (url.includes('/trainees')) return jsonResponse(200, paged(TRAINEES));
+      if (url.includes('/classes')) return jsonResponse(200, paged(CLASSES));
+      if (url.includes('/fees')) return jsonResponse(200, paged(FEES));
+      return jsonResponse(404, null);
+    });
+    renderPage();
+    await screen.findByText('Ada Lovelace');
+
+    // Monthly is the default tab; the other two forms are not in the document.
+    expect(screen.getByText(/Generate monthly fees|Генериране на месечни/)).toBeInTheDocument();
+    expect(
+      screen.queryByText(/Generate per-session fees|Генериране на такси по тренировка/),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText(/Generate course fees|Генериране на курсови/)).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /^Per-session$|^По тренировка$/ }));
+    expect(
+      screen.getByText(/Generate per-session fees|Генериране на такси по тренировка/),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/Generate monthly fees|Генериране на месечни/)).not.toBeInTheDocument();
+  });
+
   // The API always accepted classId and a period window; until now the page never sent them,
   // so "who still owes for this class this month" could not be asked from the UI at all.
   describe('class + month + outstanding filters', () => {
