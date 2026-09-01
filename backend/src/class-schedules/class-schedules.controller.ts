@@ -30,10 +30,14 @@ import { UpdateClassScheduleDto } from './dto/update-class-schedule.dto';
 
 @ApiBearerAuth()
 @Controller('class-schedules')
-@Roles(UserRole.ADMIN)
+@Roles(UserRole.ADMIN, UserRole.EMPLOYEE)
 export class ClassSchedulesController {
   constructor(private readonly schedules: ClassSchedulesService) {}
 
+  // Both GET routes stay on the class-level @Roles() above — an EMPLOYEE reads their own
+  // schedules (class-schedules.service.ts's scopeWhere: schedules for classes they teach).
+  // Every write below overrides back down to ADMIN — the schedule template itself stays a
+  // planning action, same split as SessionsController's create/update/delete.
   @ApiOperation({ summary: 'List the weekly slots of the club. Paginated.' })
   @Get()
   @ResponseSchema('PaginatedClassSchedule', PaginatedClassScheduleSchema)
@@ -58,6 +62,7 @@ export class ClassSchedulesController {
 
   @ApiOperation({ summary: 'Create a weekly slot. Refused when the location is deactivated.' })
   @Post()
+  @Roles(UserRole.ADMIN)
   @ResponseSchema('ClassSchedule', ClassScheduleSchema)
   create(
     @TenantId() tenantId: string,
@@ -69,6 +74,7 @@ export class ClassSchedulesController {
 
   @ApiOperation({ summary: 'Change a weekly slot.' })
   @Patch(':id')
+  @Roles(UserRole.ADMIN)
   @ResponseSchema('ClassSchedule', ClassScheduleSchema)
   update(
     @TenantId() tenantId: string,
@@ -81,6 +87,7 @@ export class ClassSchedulesController {
 
   @ApiOperation({ summary: 'Delete a weekly slot. The sessions already made from it stay.' })
   @Delete(':id')
+  @Roles(UserRole.ADMIN)
   @HttpCode(HttpStatus.NO_CONTENT)
   @ResponseSchema('ClassScheduleNoContent', NoContent)
   async remove(
@@ -93,6 +100,7 @@ export class ClassSchedulesController {
 
   @ApiOperation({ summary: 'Make dated sessions from the active weekly slots, for a date range.' })
   @Post('generate-sessions')
+  @Roles(UserRole.ADMIN)
   @HttpCode(HttpStatus.OK)
   @ResponseSchema('GenerateResult', GenerateResultSchema)
   generate(

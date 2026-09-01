@@ -154,6 +154,18 @@ function SessionsList({
       skeleton: 'h-4 w-24',
     },
     {
+      key: 'trainers',
+      header: t('sessions.fields.trainers'),
+      cell: (s) =>
+        s.trainers && s.trainers.length > 0
+          ? s.trainers
+              .map((tr) => `${tr.firstName ?? ''} ${tr.lastName ?? ''}`.trim() || tr.email)
+              .join(', ')
+          : '—',
+      cellClassName: 'text-muted-foreground',
+      skeleton: 'h-4 w-24',
+    },
+    {
       key: 'status',
       header: t('sessions.fields.status'),
       cell: (s) => (

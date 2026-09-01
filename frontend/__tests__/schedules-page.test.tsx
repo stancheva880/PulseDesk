@@ -107,4 +107,27 @@ describe('SchedulesListPage', () => {
     const toast = await screen.findByText(/4/);
     expect(toast.closest('[role="status"]')).not.toBeNull();
   });
+
+  // EMPLOYEE reads their own (class-schedules.service.ts scopes the list server-side); writes
+  // stay ADMIN-only, so the page hides every control that leads to one.
+  it('hides New/Generate/Edit/Delete for an EMPLOYEE, but still shows the schedule row', async () => {
+    const exp = Math.floor(Date.now() / 1000) + 600;
+    setAccessToken(buildJwt({ sub: 'u', email: 'e@b', role: 'EMPLOYEE', tenantId: 't', exp }));
+    const { container } = render(
+      <I18nProvider>
+        <AuthProvider>
+          <SchedulesListPage />
+        </AuthProvider>
+      </I18nProvider>,
+    );
+
+    const tbody = await screen.findAllByText('Yoga').then(() => container.querySelector('tbody')!);
+    expect(tbody.textContent).toContain('Yoga');
+    expect(tbody.textContent).toContain('Main Hall');
+
+    expect(container.querySelector('a[href="/schedules/new"]')).toBeNull();
+    expect(container.querySelector('a[href="/schedules/sch-1/edit"]')).toBeNull();
+    expect(screen.queryByRole('button', { name: /Generate|Генериране/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^Delete$|^Изтриване$/ })).not.toBeInTheDocument();
+  });
 });

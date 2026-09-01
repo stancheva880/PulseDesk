@@ -20,8 +20,15 @@ const DENY_RULES: Array<{
   // Sections an EMPLOYEE (trainer) can't access at all — their list endpoints are ADMIN-only.
   {
     role: 'EMPLOYEE',
-    matches: (p) => ['/schedules', '/users'].some((x) => p === x || p.startsWith(`${x}/`)),
+    matches: (p) => p === '/users' || p.startsWith('/users/'),
     redirectTo: '/dashboard',
+  },
+  // EMPLOYEE reads their own schedules (class-schedules.service.ts's scopeWhere) but cannot
+  // write one — matches SessionsController's ADMIN-only create/update/delete.
+  {
+    role: 'EMPLOYEE',
+    matches: (p) => p === '/schedules/new' || /^\/schedules\/[^/]+\/edit$/.test(p),
+    redirectTo: '/schedules',
   },
   // Location writes are SUPER_ADMIN-only (locations.controller.ts:52,58,68). Matched
   // exactly rather than by prefix, so /locations itself stays reachable for an ADMIN.

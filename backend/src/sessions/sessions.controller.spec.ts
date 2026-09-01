@@ -570,6 +570,48 @@ describe('SessionsController (e2e-ish)', () => {
       expect(res.body.items[0]._count).toEqual({ attendances: 1 });
     });
 
+    // The sessions table shows who is teaching each row — the list response needs the
+    // trainer roster the same way the detail endpoint (GET /sessions/:id) already carries it.
+    it('list rows carry their trainers', async () => {
+      const a = await setupActor(UserRole.ADMIN);
+      const cls = await newClass(a.tenantId);
+      const trainer = await createTestUser(prisma, {
+        tenantId: a.tenantId,
+        email: `${randomUUID()}@x`,
+        passwordHash: 'x',
+        role: UserRole.EMPLOYEE,
+        firstName: 'Tina',
+        lastName: 'Trainer',
+      });
+      await seedSession(a.tenantId, cls.id, a.locationId, '2026-07-06T10:00:00.000Z', [
+        trainer.id,
+      ]);
+
+      const res = await request(server)
+        .get(`/sessions?classId=${cls.id}`)
+        .set('Authorization', `Bearer ${a.accessToken}`)
+        .set('X-Tenant-Id', a.tenantId)
+        .expect(200);
+
+      expect(res.body.items[0].trainers).toEqual([
+        { id: trainer.id, firstName: 'Tina', lastName: 'Trainer', email: trainer.email },
+      ]);
+    });
+
+    it('list rows with no trainer connected carry an empty array, not undefined', async () => {
+      const a = await setupActor(UserRole.ADMIN);
+      const cls = await newClass(a.tenantId);
+      await seedSession(a.tenantId, cls.id, a.locationId, '2026-07-06T10:00:00.000Z');
+
+      const res = await request(server)
+        .get(`/sessions?classId=${cls.id}`)
+        .set('Authorization', `Bearer ${a.accessToken}`)
+        .set('X-Tenant-Id', a.tenantId)
+        .expect(200);
+
+      expect(res.body.items[0].trainers).toEqual([]);
+    });
+
     it('filters by trainerId for an admin', async () => {
       const a = await setupActor(UserRole.ADMIN);
       const cls = await newClass(a.tenantId);

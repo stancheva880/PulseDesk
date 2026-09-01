@@ -48,6 +48,13 @@ export interface InternalSessionCreate {
   notes?: string | null;
 }
 
+// GET /sessions's own include — occupancy for the calendar's X/Y chips (TKT-0103), and who's
+// teaching each row for the table (matches SessionSchema's optional `trainers`/`_count`).
+const SESSION_LIST_INCLUDE = {
+  _count: { select: { attendances: true } },
+  trainers: { select: { id: true, firstName: true, lastName: true, email: true } },
+} satisfies Prisma.SessionInclude;
+
 @Injectable()
 export class SessionsService {
   constructor(
@@ -60,7 +67,7 @@ export class SessionsService {
     viewer: AuthenticatedUser,
     pagination?: PaginationInput,
     filters?: SessionListFilters,
-  ): Promise<PaginatedResult<Session>> {
+  ): Promise<PaginatedResult<Prisma.SessionGetPayload<{ include: typeof SESSION_LIST_INCLUDE }>>> {
     let where: Prisma.SessionWhereInput;
     if (viewer.role === UserRole.EMPLOYEE) {
       where = { tenantId, trainers: { some: { id: viewer.id } } };
@@ -88,9 +95,7 @@ export class SessionsService {
     const [items, total] = await this.prisma.$transaction([
       this.prisma.session.findMany({
         where,
-        // TKT-0103: occupancy for the calendar's X/Y chips; capacity itself comes from the
-        // class lookup the page already holds.
-        include: { _count: { select: { attendances: true } } },
+        include: SESSION_LIST_INCLUDE,
         orderBy: { startsAt: 'asc' },
         skip: p.skip,
         take: p.take,

@@ -7440,6 +7440,47 @@
                     "attendances"
                   ],
                   "additionalProperties": false
+                },
+                "trainers": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "firstName": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "lastName": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "email": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "firstName",
+                      "lastName",
+                      "email"
+                    ],
+                    "additionalProperties": false
+                  }
                 }
               },
               "required": [
@@ -7537,6 +7578,47 @@
               "attendances"
             ],
             "additionalProperties": false
+          },
+          "trainers": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "firstName": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "lastName": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "email": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "firstName",
+                "lastName",
+                "email"
+              ],
+              "additionalProperties": false
+            }
           }
         },
         "required": [
@@ -7612,6 +7694,47 @@
             ],
             "additionalProperties": false
           },
+          "trainers": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "firstName": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "lastName": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "email": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "firstName",
+                "lastName",
+                "email"
+              ],
+              "additionalProperties": false
+            }
+          },
           "class": {
             "type": "object",
             "properties": {
@@ -7674,47 +7797,6 @@
               "name"
             ],
             "additionalProperties": false
-          },
-          "trainers": {
-            "type": "array",
-            "items": {
-              "type": "object",
-              "properties": {
-                "id": {
-                  "type": "string"
-                },
-                "firstName": {
-                  "anyOf": [
-                    {
-                      "type": "string"
-                    },
-                    {
-                      "type": "null"
-                    }
-                  ]
-                },
-                "lastName": {
-                  "anyOf": [
-                    {
-                      "type": "string"
-                    },
-                    {
-                      "type": "null"
-                    }
-                  ]
-                },
-                "email": {
-                  "type": "string"
-                }
-              },
-              "required": [
-                "id",
-                "firstName",
-                "lastName",
-                "email"
-              ],
-              "additionalProperties": false
-            }
           }
         },
         "required": [
@@ -7728,9 +7810,9 @@
           "notes",
           "createdAt",
           "updatedAt",
+          "trainers",
           "class",
-          "location",
-          "trainers"
+          "location"
         ],
         "additionalProperties": false
       },
@@ -8388,6 +8470,47 @@
                 "attendances"
               ],
               "additionalProperties": false
+            },
+            "trainers": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "firstName": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "lastName": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "email": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "id",
+                  "firstName",
+                  "lastName",
+                  "email"
+                ],
+                "additionalProperties": false
+              }
             },
             "class": {
               "type": "object",

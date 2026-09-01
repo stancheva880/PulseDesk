@@ -134,7 +134,10 @@ describe('generated session response types', () => {
     expect(cls).toMatch(/billingMode/);
     expect(cls).not.toMatch(/description/);
 
-    const location = property('SessionDetail', 'location:', 'trainers:');
+    // 'PaginatedClassSchedule: {' (the next declared schema), not 'trainers:' — SessionSchema
+    // now has its own (optional) trainers field ahead of location in declaration order, so
+    // 'trainers:' is no longer the boundary right after location's own block.
+    const location = property('SessionDetail', 'location:', 'PaginatedClassSchedule: {');
     expect(location).toMatch(/name:/);
     expect(location).not.toMatch(/address/);
     expect(location).not.toMatch(/isActive/);
@@ -255,7 +258,8 @@ describe('generated location response types', () => {
     expect(location).toMatch(/isActive: boolean;/);
 
     // The embedders publish only id and name — the distinction this module exists to name.
-    const embedded = property('SessionDetail', 'location:', 'trainers:');
+    // 'PaginatedClassSchedule: {', not 'trainers:' — see the same note above.
+    const embedded = property('SessionDetail', 'location:', 'PaginatedClassSchedule: {');
     expect(embedded).toMatch(/name:/);
     expect(embedded).not.toMatch(/address/);
     expect(embedded).not.toMatch(/isActive/);

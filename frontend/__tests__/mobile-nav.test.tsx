@@ -113,18 +113,17 @@ describe('MobileNav', () => {
     ]);
   });
 
-  // AC #2 — the assertion the acceptance criterion names verbatim.
-  it('hides Schedules and Users from an EMPLOYEE', async () => {
+  it('hides Users from an EMPLOYEE, but shows their own Schedules', async () => {
     renderNav('EMPLOYEE');
     await screen.findByText('authenticated:EMPLOYEE');
     await userEvent.click(trigger());
 
     const panel = await screen.findByRole('dialog');
-    expect(panel.querySelector('a[href="/schedules"]')).toBeNull();
     expect(panel.querySelector('a[href="/users"]')).toBeNull();
-    // Trainers can still read these two.
+    // Trainers read their own — writes are ADMIN-only, gated elsewhere (not by hiding the link).
     expect(panel.querySelector('a[href="/sessions"]')).not.toBeNull();
     expect(panel.querySelector('a[href="/classes"]')).not.toBeNull();
+    expect(panel.querySelector('a[href="/schedules"]')).not.toBeNull();
   });
 
   // AC #3 — closes on selection.

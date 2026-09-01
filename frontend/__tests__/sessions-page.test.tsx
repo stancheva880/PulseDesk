@@ -284,4 +284,33 @@ describe('SessionsListPage', () => {
     expect(container.querySelector<HTMLInputElement>('#filter-from')!.value).toBe('2026-03-02');
     expect(container.querySelector<HTMLInputElement>('#filter-before')!.value).toBe('2026-03-09');
   });
+
+  // The table shows who's teaching each row, not just the detail/edit page.
+  it('shows the trainer(s) for each row, and a dash when none are assigned', async () => {
+    vi.restoreAllMocks();
+    const exp = Math.floor(Date.now() / 1000) + 600;
+    setAccessToken(buildJwt({ sub: 'u', email: 'a@b', role: 'ADMIN', tenantId: 't', exp }));
+    const sessionsWithTrainers = [
+      { ...SESSIONS[0], trainers: [{ id: 'tr-1', firstName: 'Tina', lastName: 'Trainer', email: 'tina@x' }] },
+      { ...SESSIONS[0], id: 's2', trainers: [] },
+    ];
+    vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
+      const url = typeof input === 'string' ? input : (input as Request).url;
+      if (url.includes('/sessions')) return Promise.resolve(jsonResponse(200, paged(sessionsWithTrainers)));
+      if (url.includes('/classes')) return Promise.resolve(jsonResponse(200, paged(CLASSES)));
+      if (url.includes('/locations')) return Promise.resolve(jsonResponse(200, paged(LOCATIONS)));
+      return Promise.resolve(jsonResponse(200, {}));
+    });
+
+    render(
+      <I18nProvider>
+        <AuthProvider>
+          <SessionsListPage />
+        </AuthProvider>
+      </I18nProvider>,
+    );
+
+    expect(await screen.findByRole('cell', { name: 'Tina Trainer' })).toBeInTheDocument();
+    expect(screen.getAllByRole('cell', { name: '—' }).length).toBeGreaterThanOrEqual(1);
+  });
 });

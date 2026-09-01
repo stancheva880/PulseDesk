@@ -7,6 +7,7 @@ import { BillingMode, DayOfWeek, UserRole } from '@prisma/client';
 import { LocationScopeService } from '@/auth/scope/location-scope.service';
 import { PrismaService } from '@/prisma/prisma.service';
 import { SessionsService } from '@/sessions/sessions.service';
+import { createTestUser } from '@/test-utils/create-user';
 import { ClassSchedulesService } from './class-schedules.service';
 
 describe('ClassSchedulesService', () => {
@@ -125,6 +126,77 @@ describe('ClassSchedulesService', () => {
         endTime: '19:00',
       }, su);
       await expect(service.findById(b.id, inA.id, su)).rejects.toBeInstanceOf(NotFoundException);
+    });
+  });
+
+  // A schedule has no trainer list of its own — "the employee's own schedule" is derived from
+  // the class they teach (Class.trainers), the same roster generateSessions already reads to
+  // default each Session's own trainer list. Same test shape as sessions.service.spec.ts's
+  // EMPLOYEE-scoping block — that is the precedent this mirrors.
+  describe('EMPLOYEE scoping', () => {
+    async function newEmployee(tenantId: string) {
+      return createTestUser(prisma, {
+        tenantId,
+        email: `${randomUUID()}@x`,
+        passwordHash: 'x',
+        role: UserRole.EMPLOYEE,
+      });
+    }
+    function employeeViewer(tenantId: string, userId: string) {
+      return { id: userId, email: 'e@x', role: UserRole.EMPLOYEE, tenantId } as const;
+    }
+
+    it('list only returns schedules for classes the employee teaches', async () => {
+      const t = await newTenant();
+      const loc = await newLocation(t.id);
+      const trainer = await newEmployee(t.id);
+      const otherTrainer = await newEmployee(t.id);
+      const ownClass = await newClass(t.id);
+      const otherClass = await newClass(t.id);
+      await prisma.class.update({
+        where: { id: ownClass.id },
+        data: { trainers: { connect: { id: trainer.id } } },
+      });
+      await prisma.class.update({
+        where: { id: otherClass.id },
+        data: { trainers: { connect: { id: otherTrainer.id } } },
+      });
+      await service.create(t.id, {
+        classId: ownClass.id,
+        locationId: loc.id,
+        dayOfWeek: DayOfWeek.MON,
+        startTime: '18:00',
+        endTime: '19:00',
+      }, su);
+      await service.create(t.id, {
+        classId: otherClass.id,
+        locationId: loc.id,
+        dayOfWeek: DayOfWeek.TUE,
+        startTime: '18:00',
+        endTime: '19:00',
+      }, su);
+
+      const result = await service.list(t.id, employeeViewer(t.id, trainer.id));
+      expect(result.items).toHaveLength(1);
+      expect(result.items[0]!.classId).toBe(ownClass.id);
+    });
+
+    it('findById on a schedule for a class the employee does not teach returns NotFound', async () => {
+      const t = await newTenant();
+      const loc = await newLocation(t.id);
+      const outsider = await newEmployee(t.id);
+      const cls = await newClass(t.id);
+      const sched = await service.create(t.id, {
+        classId: cls.id,
+        locationId: loc.id,
+        dayOfWeek: DayOfWeek.MON,
+        startTime: '18:00',
+        endTime: '19:00',
+      }, su);
+
+      await expect(
+        service.findById(t.id, sched.id, employeeViewer(t.id, outsider.id)),
+      ).rejects.toBeInstanceOf(NotFoundException);
     });
   });
 

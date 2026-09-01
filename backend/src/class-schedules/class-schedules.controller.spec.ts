@@ -238,6 +238,115 @@ describe('ClassSchedulesController (e2e-ish)', () => {
     });
   });
 
+  // TKT-? — an EMPLOYEE now reads (never writes) the schedules of the classes they teach.
+  describe('GET /class-schedules — EMPLOYEE', () => {
+    it('lists only schedules for classes the employee teaches (200)', async () => {
+      const e = await setupActor(UserRole.EMPLOYEE);
+      const ownClass = await newClass(e.tenantId);
+      const otherClass = await newClass(e.tenantId);
+      await prisma.class.update({
+        where: { id: ownClass.id },
+        data: { trainers: { connect: { id: e.userId } } },
+      });
+      await prisma.classSchedule.create({
+        data: {
+          tenantId: e.tenantId,
+          classId: ownClass.id,
+          locationId: e.locationId,
+          dayOfWeek: 'MON',
+          startTime: '18:00',
+          endTime: '19:00',
+        },
+      });
+      await prisma.classSchedule.create({
+        data: {
+          tenantId: e.tenantId,
+          classId: otherClass.id,
+          locationId: e.locationId,
+          dayOfWeek: 'TUE',
+          startTime: '18:00',
+          endTime: '19:00',
+        },
+      });
+
+      const res = await request(server)
+        .get('/class-schedules')
+        .set('Authorization', `Bearer ${e.accessToken}`)
+        .set('X-Tenant-Id', e.tenantId)
+        .expect(200);
+      expect(res.body.total).toBe(1);
+      expect(res.body.items[0].classId).toBe(ownClass.id);
+    });
+
+    it('404s on a schedule for a class the employee does not teach', async () => {
+      const e = await setupActor(UserRole.EMPLOYEE);
+      const cls = await newClass(e.tenantId);
+      const sched = await prisma.classSchedule.create({
+        data: {
+          tenantId: e.tenantId,
+          classId: cls.id,
+          locationId: e.locationId,
+          dayOfWeek: 'MON',
+          startTime: '18:00',
+          endTime: '19:00',
+        },
+      });
+
+      await request(server)
+        .get(`/class-schedules/${sched.id}`)
+        .set('Authorization', `Bearer ${e.accessToken}`)
+        .set('X-Tenant-Id', e.tenantId)
+        .expect(404);
+    });
+  });
+
+  describe('PATCH /class-schedules/:id — EMPLOYEE', () => {
+    it('returns 403 — schedule writes stay ADMIN-only', async () => {
+      const e = await setupActor(UserRole.EMPLOYEE);
+      const cls = await newClass(e.tenantId);
+      const sched = await prisma.classSchedule.create({
+        data: {
+          tenantId: e.tenantId,
+          classId: cls.id,
+          locationId: e.locationId,
+          dayOfWeek: 'MON',
+          startTime: '18:00',
+          endTime: '19:00',
+        },
+      });
+
+      await request(server)
+        .patch(`/class-schedules/${sched.id}`)
+        .set('Authorization', `Bearer ${e.accessToken}`)
+        .set('X-Tenant-Id', e.tenantId)
+        .send({ startTime: '17:00' })
+        .expect(403);
+    });
+  });
+
+  describe('DELETE /class-schedules/:id — EMPLOYEE', () => {
+    it('returns 403 — schedule writes stay ADMIN-only', async () => {
+      const e = await setupActor(UserRole.EMPLOYEE);
+      const cls = await newClass(e.tenantId);
+      const sched = await prisma.classSchedule.create({
+        data: {
+          tenantId: e.tenantId,
+          classId: cls.id,
+          locationId: e.locationId,
+          dayOfWeek: 'MON',
+          startTime: '18:00',
+          endTime: '19:00',
+        },
+      });
+
+      await request(server)
+        .delete(`/class-schedules/${sched.id}`)
+        .set('Authorization', `Bearer ${e.accessToken}`)
+        .set('X-Tenant-Id', e.tenantId)
+        .expect(403);
+    });
+  });
+
   describe('POST /class-schedules/generate-sessions', () => {
     it('admin generates sessions with a summary response', async () => {
       const a = await setupActor(UserRole.ADMIN);

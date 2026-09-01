@@ -106,4 +106,21 @@ describe('PortalLayout active-tenant gate', () => {
     // The gate withholds; auth-provider.tsx:96-118 remains the only writer.
     expect(readTenantContext()).toBe('left-over');
   });
+
+  // Fees moved into the profile page's own tab; Schedule/Cards nav removed alongside it for
+  // now (routes still exist, just no entry point in the header).
+  it('shows the brand mark but no Schedule/Fees/Cards nav links', async () => {
+    writeStoredMemberships(MEMBERSHIPS);
+
+    renderPortal();
+
+    expect(await screen.findByText(CHILD)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /PulseDesk/ })).toHaveAttribute(
+      'href',
+      '/portal/schedule',
+    );
+    expect(screen.queryByRole('link', { name: /^Schedule$|^График$/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /^Fees$|^Такси$/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /^Cards$|^Карти$/ })).not.toBeInTheDocument();
+  });
 });
