@@ -177,9 +177,21 @@ export class UsersService {
     pagination?: PaginationInput,
     filters?: UserListFilters,
   ): Promise<PaginatedResult<UserSummary>> {
-    const where: Prisma.UserWhereInput = {
+    const membershipWhere: Prisma.UserWhereInput = {
       memberships: { some: { tenantId, ...(filters?.role ? { role: filters.role } : {}) } },
     };
+    // A SUPER_ADMIN account holds no membership anywhere, so it can never match the clause
+    // above — there is nowhere else in the product that lists them (GET /users/super-admins
+    // was removed as dead code in TKT-0010). Fold them into the list a SUPER_ADMIN actor is
+    // already browsing instead of standing up a second, easily-forgotten route. Gated by the
+    // role filter like everything else: unset or SUPER_ADMIN itself includes them, any other
+    // role does not.
+    const includeSuperAdmins =
+      actor.role === UserRole.SUPER_ADMIN &&
+      (filters?.role === undefined || filters.role === UserRole.SUPER_ADMIN);
+    const where: Prisma.UserWhereInput = includeSuperAdmins
+      ? { OR: [membershipWhere, { isSuperAdmin: true }] }
+      : membershipWhere;
     const search = searchClause(filters?.search);
     if (search.length > 0) where.AND = search;
     if (actor.role === UserRole.ADMIN) {

@@ -942,25 +942,117 @@ describe('UsersController (e2e-ish)', () => {
     it('SUPER_ADMIN lists users in the X-Tenant-Id tenant', async () => {
       const sa = await newSuperAdmin();
       const { tenant, location } = await newTenantWithLocation();
+      const email = `${randomUUID()}@e.local`;
       const memberRes = await request(server)
         .post('/users')
         .set('Authorization', `Bearer ${sa.accessToken}`)
         .set('X-Tenant-Id', tenant.id)
-        .send({
-          email: `${randomUUID()}@e.local`,
-          role: UserRole.EMPLOYEE,
-          locationIds: [location.id],
-        })
+        .send({ email, role: UserRole.EMPLOYEE, locationIds: [location.id] })
         .expect(201);
       userIds.push(memberRes.body.id);
+      // ?search= isolates this row from every other platform SUPER_ADMIN account this file's
+      // newSuperAdmin() helper has created as an actor elsewhere — a SUPER_ADMIN's unfiltered
+      // list now includes all of them too (see the includeSuperAdmins tests below), and they
+      // are cleaned up only in afterAll, so an unscoped page 1 is not reliably this test's row.
       const res = await request(server)
-        .get('/users')
+        .get(`/users?search=${encodeURIComponent(email)}`)
         .set('Authorization', `Bearer ${sa.accessToken}`)
         .set('X-Tenant-Id', tenant.id)
         .expect(200);
       expect(
         res.body.items.find((u: { id: string }) => u.id === memberRes.body.id),
       ).toBeDefined();
+    });
+
+    // A SUPER_ADMIN account holds no membership anywhere — GET /users/super-admins, the
+    // route that used to answer "which ones exist", was removed in TKT-0010 as dead code.
+    // Nothing replaced it, so a freshly created SUPER_ADMIN was invisible everywhere. Folding
+    // it into the list a SUPER_ADMIN already browses (rather than a second dedicated route)
+    // is what keeps this from becoming dead surface again.
+    it('a SUPER_ADMIN also sees every platform SUPER_ADMIN account, with no membership needed', async () => {
+      const sa = await newSuperAdmin();
+      const token = randomUUID();
+      const otherSa = await createTestUser(prisma, {
+        email: `${token}@super2.local`,
+        // Just invited — proves the PENDING status renders for this account too.
+        passwordHash: null,
+        role: UserRole.SUPER_ADMIN,
+      });
+      userIds.push(otherSa.id);
+      const { tenant } = await newTenantWithLocation();
+
+      // ?search= isolates this test's own row from every other SUPER_ADMIN account created
+      // elsewhere in this file (newSuperAdmin() is the actor for dozens of tests, and those
+      // accounts now match the unfiltered list too — see the member() comment above).
+      const res = await request(server)
+        .get(`/users?search=${token}`)
+        .set('Authorization', `Bearer ${sa.accessToken}`)
+        .set('X-Tenant-Id', tenant.id)
+        .expect(200);
+
+      const row = res.body.items.find((u: { id: string }) => u.id === otherSa.id);
+      expect(row).toBeDefined();
+      expect(row.status).toBe('PENDING');
+      expect(row.tenantId).toBeNull();
+    });
+
+    it('an ADMIN does not see platform SUPER_ADMIN accounts', async () => {
+      const otherSa = await createTestUser(prisma, {
+        email: `${randomUUID()}@super3.local`,
+        passwordHash: await auth.hashPassword(PASSWORD),
+        role: UserRole.SUPER_ADMIN,
+      });
+      userIds.push(otherSa.id);
+      const { tenant, location } = await newTenantWithLocation();
+      const admin = await newAdmin(tenant.id, [location.id]);
+
+      const res = await request(server)
+        .get('/users')
+        .set('Authorization', `Bearer ${admin.accessToken}`)
+        .set('X-Tenant-Id', tenant.id)
+        .expect(200);
+
+      expect(
+        res.body.items.find((u: { id: string }) => u.id === otherSa.id),
+      ).toBeUndefined();
+    });
+
+    it('?role=SUPER_ADMIN returns platform SUPER_ADMIN accounts, and ?role=EMPLOYEE excludes them', async () => {
+      const sa = await newSuperAdmin();
+      const token = randomUUID();
+      const otherSa = await createTestUser(prisma, {
+        email: `${token}@super4.local`,
+        passwordHash: await auth.hashPassword(PASSWORD),
+        role: UserRole.SUPER_ADMIN,
+      });
+      userIds.push(otherSa.id);
+      const { tenant, location } = await newTenantWithLocation();
+      const employee = await createTestUser(prisma, {
+        email: `${token}@e.local`,
+        passwordHash: 'x',
+        role: UserRole.EMPLOYEE,
+        tenantId: tenant.id,
+        locations: { connect: [{ id: location.id }] },
+      });
+      userIds.push(employee.id);
+
+      const asSuperAdmin = await request(server)
+        .get(`/users?role=SUPER_ADMIN&search=${token}`)
+        .set('Authorization', `Bearer ${sa.accessToken}`)
+        .set('X-Tenant-Id', tenant.id)
+        .expect(200);
+      const superAdminIds = asSuperAdmin.body.items.map((u: { id: string }) => u.id);
+      expect(superAdminIds).toContain(otherSa.id);
+      expect(superAdminIds).not.toContain(employee.id);
+
+      const asEmployee = await request(server)
+        .get(`/users?role=EMPLOYEE&search=${token}`)
+        .set('Authorization', `Bearer ${sa.accessToken}`)
+        .set('X-Tenant-Id', tenant.id)
+        .expect(200);
+      const employeeIds = asEmployee.body.items.map((u: { id: string }) => u.id);
+      expect(employeeIds).toContain(employee.id);
+      expect(employeeIds).not.toContain(otherSa.id);
     });
 
     it('ADMIN lists users in their assigned locations only', async () => {
@@ -1427,14 +1519,20 @@ describe('UsersController (e2e-ish)', () => {
 
   // TKT-0060 — a pending account is a distinguishable state, and its invite can be re-sent.
   describe('account status + POST /users/:id/invite', () => {
-    // A tenant member built directly, so the hash and isActive can be set per case.
+    // A tenant member built directly, so the hash and isActive can be set per case. `token`
+    // lands in the email so a test can isolate its own rows via ?search= — needed since a
+    // SUPER_ADMIN actor's unfiltered GET /users now also returns every platform SUPER_ADMIN
+    // account (see the includeSuperAdmins test below), and this file's `newSuperAdmin()`
+    // helper is called by dozens of other tests whose accounts are cleaned up only in
+    // afterAll — page 1 of an unscoped request is not reliably this test's own rows.
     async function member(
       tenantId: string,
       locationId: string,
       opts: { passwordHash: string | null; isActive?: boolean; role?: UserRole },
+      token = randomUUID(),
     ) {
       const user = await createTestUser(prisma, {
-        email: `${randomUUID()}@m.local`,
+        email: `${randomUUID()}-${token}@m.local`,
         passwordHash: opts.passwordHash,
         role: opts.role ?? UserRole.EMPLOYEE,
         tenantId,
@@ -1449,20 +1547,25 @@ describe('UsersController (e2e-ish)', () => {
       const sa = await newSuperAdmin();
       const { tenant, location } = await newTenantWithLocation();
       const hash = await auth.hashPassword(PASSWORD);
-      const pending = await member(tenant.id, location.id, { passwordHash: null });
-      const active = await member(tenant.id, location.id, { passwordHash: hash });
-      const inactive = await member(tenant.id, location.id, {
-        passwordHash: hash,
-        isActive: false,
-      });
+      const token = randomUUID();
+      const pending = await member(tenant.id, location.id, { passwordHash: null }, token);
+      const active = await member(tenant.id, location.id, { passwordHash: hash }, token);
+      const inactive = await member(
+        tenant.id,
+        location.id,
+        { passwordHash: hash, isActive: false },
+        token,
+      );
       // isActive is checked first, so an invited-then-deactivated account reads INACTIVE.
-      const pendingInactive = await member(tenant.id, location.id, {
-        passwordHash: null,
-        isActive: false,
-      });
+      const pendingInactive = await member(
+        tenant.id,
+        location.id,
+        { passwordHash: null, isActive: false },
+        token,
+      );
 
       const res = await request(server)
-        .get('/users')
+        .get(`/users?search=${token}`)
         .set('Authorization', `Bearer ${sa.accessToken}`)
         .set('X-Tenant-Id', tenant.id)
         .expect(200);
