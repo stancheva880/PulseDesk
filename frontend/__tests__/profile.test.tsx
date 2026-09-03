@@ -86,6 +86,26 @@ describe('ProfilePage', () => {
     expect(await screen.findByLabelText(/Current password|Текуща парола/)).toBeInTheDocument();
   });
 
+  it('links the back arrow to the dashboard for a staff role', async () => {
+    mockFetch(() => jsonResponse(404, null));
+    const { container } = renderPage();
+
+    const back = await screen.findByRole('link', { name: /^Back$|^Назад$/ });
+    expect(back).toHaveAttribute('href', '/dashboard');
+    expect(container.querySelector('a[href="/dashboard"] svg')).not.toBeNull();
+  });
+
+  it('links the back arrow to the portal for a CUSTOMER', async () => {
+    setAccessToken(
+      buildJwt({ sub: 'u1', email: 'cust@x', role: 'CUSTOMER', tenantId: 't', exp: Math.floor(Date.now() / 1000) + 600 }),
+    );
+    mockFetch(() => jsonResponse(404, null));
+    renderPage();
+
+    const back = await screen.findByRole('link', { name: /^Back$|^Назад$/ });
+    expect(back).toHaveAttribute('href', '/portal/schedule');
+  });
+
   it('renders the current/new/confirm password fields', async () => {
     const user = userEvent.setup();
     mockFetch(() => jsonResponse(404, null));

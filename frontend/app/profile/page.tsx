@@ -1,12 +1,13 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
 import { z } from 'zod';
-import { Loader2 } from 'lucide-react';
+import { ArrowLeft, Loader2 } from 'lucide-react';
 import { useAuth } from '@/components/auth-provider';
 import { Topbar } from '@/components/topbar';
 import { Button } from '@/components/ui/button';
@@ -17,6 +18,7 @@ import { Label } from '@/components/ui/label';
 import { PasswordInput } from '@/components/ui/password-input';
 import { apiErrorMessage } from '@/lib/api';
 import { showToast } from '@/components/toast';
+import { landingRoute } from '@/lib/auth-storage';
 import { Tenants, Users, type OwnProfile } from '@/lib/api-resources';
 import { AvatarImageError, compressAvatarFile } from '@/lib/avatar-image';
 import { broadcastAvatarChanged } from '@/lib/avatar-context';
@@ -57,9 +59,19 @@ export default function ProfilePage() {
 
   if (!ready) return null;
 
+  const backNav = user ? (
+    <Link
+      href={landingRoute(user.role)}
+      className="inline-flex items-center gap-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
+    >
+      <ArrowLeft className="h-4 w-4" />
+      {t('common.back')}
+    </Link>
+  ) : null;
+
   return (
     <div className="flex min-h-screen flex-col">
-      <Topbar />
+      <Topbar nav={backNav} />
       <main className="app-surface flex-1 overflow-y-auto px-6 py-8">
         <div className="mx-auto max-w-lg space-y-6">
           <div>
