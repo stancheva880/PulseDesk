@@ -4388,6 +4388,44 @@
           "Tenants"
         ]
       }
+    },
+    "/api/tenants/{id}": {
+      "delete": {
+        "operationId": "TenantsController_remove",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Tenant the caller acts in. A tenant-bound user must name one of their own tenants (403 otherwise); a SUPER_ADMIN may name any active tenant (404 otherwise).",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Delete a club and everything that belongs to it. Irreversible.",
+        "tags": [
+          "Tenants"
+        ]
+      }
     }
   },
   "info": {

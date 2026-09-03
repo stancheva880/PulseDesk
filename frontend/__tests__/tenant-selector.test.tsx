@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { setAccessToken } from '@/lib/auth-storage';
 import { AuthProvider } from '@/components/auth-provider';
@@ -7,10 +7,14 @@ import { I18nProvider } from '@/components/i18n-provider';
 import { TenantSelector } from '@/components/tenant-selector';
 
 // Navigation helpers are module-mocked — jsdom can't assert on window.location.
-const { hardNavigate } = vi.hoisted(() => ({ hardNavigate: vi.fn() }));
+const { hardNavigate, reloadApp } = vi.hoisted(() => ({
+  hardNavigate: vi.fn(),
+  reloadApp: vi.fn(),
+}));
 vi.mock('@/lib/tenant-context', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/tenant-context')>()),
   hardNavigate,
+  reloadApp,
 }));
 
 function buildJwt(payload: Record<string, unknown>): string {
@@ -123,5 +127,116 @@ describe('TenantSelector (membership switcher)', () => {
     renderSelector();
     await vi.waitFor(() => expect(screen.queryByRole('combobox')).toBeNull());
     expect(screen.queryByText('Club One')).toBeNull();
+  });
+});
+
+// TKT-0132: SUPER_ADMIN gets a delete option next to the tenant dropdown — irreversible
+// (schema.prisma cascades everything the club owns), so confirming requires typing the exact
+// club name, same shape as GitHub's "type the repo name" delete flow.
+describe('TenantSelector (super admin)', () => {
+  const CLUBS = [
+    { id: 't1', slug: 'club-one', name: 'Club One', isActive: true },
+    { id: 't2', slug: 'club-two', name: 'Club Two', isActive: true },
+  ];
+
+  function seedSuperAdmin(activeTenant = 't1') {
+    const exp = Math.floor(Date.now() / 1000) + 600;
+    setAccessToken(
+      buildJwt({ sub: 'su', email: 'su@x', role: 'SUPER_ADMIN', tenantId: null, exp }),
+    );
+    window.localStorage.setItem('pulsedesk.tenantContext', activeTenant);
+  }
+
+  beforeEach(() => {
+    hardNavigate.mockClear();
+    reloadApp.mockClear();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    window.localStorage.clear();
+  });
+
+  it('disables the delete button until a club is selected', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(jsonResponse(200, CLUBS));
+    seedSuperAdmin('');
+
+    renderSelector();
+    await screen.findByRole('combobox');
+
+    expect(screen.getByRole('button', { name: /Delete club|Изтриване на клуб/ })).toBeDisabled();
+  });
+
+  it('names the selected club and keeps Delete disabled until the typed name matches exactly', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(jsonResponse(200, CLUBS));
+    seedSuperAdmin('t1');
+    const user = userEvent.setup();
+
+    renderSelector();
+    await screen.findByRole('option', { name: /Club One/ });
+    await user.click(screen.getByRole('button', { name: /Delete club|Изтриване на клуб/ }));
+
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByText(/Club One/)).toBeInTheDocument();
+    const confirmDelete = within(dialog).getByRole('button', { name: /^Delete$|^Изтриване$/ });
+    expect(confirmDelete).toBeDisabled();
+
+    await user.type(screen.getByRole('textbox'), 'not the name');
+    expect(confirmDelete).toBeDisabled();
+
+    await user.clear(screen.getByRole('textbox'));
+    await user.type(screen.getByRole('textbox'), 'Club One');
+    expect(confirmDelete).not.toBeDisabled();
+  });
+
+  it('deletes the club, clears the tenant context, and reloads on success', async () => {
+    let deleteCalled: { url: string; method: string } | null = null;
+    vi.spyOn(globalThis, 'fetch').mockImplementation((input, init) => {
+      const url = typeof input === 'string' ? input : (input as Request).url;
+      const method = init?.method ?? 'GET';
+      if (url.endsWith('/tenants/t1') && method === 'DELETE') {
+        deleteCalled = { url, method };
+        return Promise.resolve(new Response(null, { status: 204 }));
+      }
+      return Promise.resolve(jsonResponse(200, CLUBS));
+    });
+    seedSuperAdmin('t1');
+    const user = userEvent.setup();
+
+    renderSelector();
+    await screen.findByRole('option', { name: /Club One/ });
+    await user.click(screen.getByRole('button', { name: /Delete club|Изтриване на клуб/ }));
+    const dialog = await screen.findByRole('dialog');
+    await user.type(within(dialog).getByRole('textbox'), 'Club One');
+    await user.click(within(dialog).getByRole('button', { name: /^Delete$|^Изтриване$/ }));
+
+    await vi.waitFor(() => expect(deleteCalled).not.toBeNull());
+    expect(window.localStorage.getItem('pulsedesk.tenantContext')).toBeNull();
+    expect(reloadApp).toHaveBeenCalled();
+  });
+
+  it('shows the server error and keeps the dialog open when the delete fails', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation((input, init) => {
+      const url = typeof input === 'string' ? input : (input as Request).url;
+      const method = init?.method ?? 'GET';
+      if (url.endsWith('/tenants/t1') && method === 'DELETE') {
+        return Promise.resolve(
+          jsonResponse(409, { statusCode: 409, message: 'Club still in use' }),
+        );
+      }
+      return Promise.resolve(jsonResponse(200, CLUBS));
+    });
+    seedSuperAdmin('t1');
+    const user = userEvent.setup();
+
+    renderSelector();
+    await screen.findByRole('option', { name: /Club One/ });
+    await user.click(screen.getByRole('button', { name: /Delete club|Изтриване на клуб/ }));
+    const dialog = await screen.findByRole('dialog');
+    await user.type(within(dialog).getByRole('textbox'), 'Club One');
+    await user.click(within(dialog).getByRole('button', { name: /^Delete$|^Изтриване$/ }));
+
+    expect(await within(dialog).findByText(/Club still in use/)).toBeInTheDocument();
+    expect(reloadApp).not.toHaveBeenCalled();
   });
 });

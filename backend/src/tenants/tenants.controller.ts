@@ -1,10 +1,10 @@
-import { Body, Controller, Get, Patch, Post } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, Patch, Post } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { UserRole } from '@prisma/client';
 import { Roles } from '@/auth/decorators/roles.decorator';
 import { TenantId } from '@/auth/decorators/tenant-id.decorator';
 import { DEFAULT_LIST_TAKE } from '@/common/dto/paginated-result';
-import { ResponseSchema } from '@/common/response-schema';
+import { NoContent, ResponseSchema } from '@/common/response-schema';
 import { PrismaService } from '@/prisma/prisma.service';
 import { CreateTenantDto } from './dto/create-tenant.dto';
 import { UpdateTenantPaymentDetailsDto } from './dto/update-tenant-payment-details.dto';
@@ -79,5 +79,15 @@ export class TenantsController {
     @Body() dto: UpdateTenantPaymentDetailsDto,
   ) {
     return this.tenants.updatePaymentDetails(tenantId, dto);
+  }
+
+  // TKT-0132: deletes the club and everything that belongs to it (schema.prisma cascades).
+  // Irreversible — the frontend confirms by asking the operator to type the club's name.
+  @ApiOperation({ summary: 'Delete a club and everything that belongs to it. Irreversible.' })
+  @Delete(':id')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ResponseSchema('TenantNoContent', NoContent)
+  async remove(@Param('id') id: string): Promise<void> {
+    await this.tenants.delete(id);
   }
 }

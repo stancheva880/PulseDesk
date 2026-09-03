@@ -67,7 +67,10 @@ const HTTP_METHODS = ['get', 'post', 'put', 'patch', 'delete'];
 // /locations/:id/payment-details, GET /me/locations, GET+PATCH /tenants/payment-details.
 // Same terms: still exact, all four carry their own @ResponseSchema (Location,
 // CustomerLocationPaymentEntryList, TenantPaymentDetails ×2).
-const ROUTE_COUNT = 91;
+// Approved TEST CHANGE REQUEST, 2026-09-03: 91 → 92 for DELETE /tenants/:id (TKT-0132, club
+// deletion). Same terms: still exact, the route carries its own @ResponseSchema
+// (TenantNoContent).
+const ROUTE_COUNT = 92;
 // Approved TEST CHANGE REQUEST, 2026-08-23: 8 → 9 for the WaitlistMode enum (TKT-0112 —
 // named in the approved tech plan). Same terms: still exact.
 const ENUM_COUNT = 9;

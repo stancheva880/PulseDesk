@@ -844,6 +844,12 @@
       "body": "The invite to {{email}} did not go out. The administrator has no password until they open the invite. Send the invite again from the Users page.",
       "continue": "Go to the club"
     },
-    "createdToast": "Club “{{name}}” created"
+    "createdToast": "Club “{{name}}” created",
+    "delete": {
+      "trigger": "Delete club",
+      "title": "Delete club",
+      "description": "This permanently deletes club “{{name}}” and everything it owns — locations, trainees, classes, fees, payments. Type the club's exact name to confirm.",
+      "confirmLabel": "Club name"
+    }
   }
 }

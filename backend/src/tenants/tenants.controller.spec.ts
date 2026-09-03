@@ -638,4 +638,88 @@ describe('TenantsController (e2e-ish)', () => {
       await request(server).post('/tenants').send(payload()).expect(401);
     });
   });
+
+  describe('DELETE /tenants/:id', () => {
+    it('SUPER_ADMIN deletes a club and everything cascades', async () => {
+      const tenant = await prisma.tenant.create({
+        data: { slug: `t-${randomUUID()}`, name: 'Doomed Club' },
+      });
+      const location = await prisma.location.create({
+        data: { tenantId: tenant.id, name: 'Main Hall' },
+      });
+      const trainee = await prisma.trainee.create({
+        data: {
+          tenantId: tenant.id,
+          firstName: 'T',
+          lastName: 'X',
+          dateOfBirth: new Date('2000-01-01'),
+          locations: { connect: [{ id: location.id }] },
+        },
+      });
+      const token = await newSuperAdmin();
+
+      await request(server)
+        .delete(`/tenants/${tenant.id}`)
+        .set('Authorization', `Bearer ${token}`)
+        .expect(204);
+
+      expect(await prisma.tenant.findUnique({ where: { id: tenant.id } })).toBeNull();
+      expect(await prisma.location.findUnique({ where: { id: location.id } })).toBeNull();
+      expect(await prisma.trainee.findUnique({ where: { id: trainee.id } })).toBeNull();
+    });
+
+    // A club-scoped user survives — only their Membership in the deleted club is gone. Email
+    // is globally unique (see CLAUDE.md), so the account itself is not tenant-owned.
+    it("keeps a member's account, only drops their membership in the deleted club", async () => {
+      const tenant = await prisma.tenant.create({
+        data: { slug: `t-${randomUUID()}`, name: 'Club With A Member' },
+      });
+      const member = await createTestUser(prisma, {
+        email: `${randomUUID()}@x.local`,
+        passwordHash: await auth.hashPassword(PASSWORD),
+        role: UserRole.ADMIN,
+        tenantId: tenant.id,
+      });
+      userIds.push(member.id);
+      const token = await newSuperAdmin();
+
+      await request(server)
+        .delete(`/tenants/${tenant.id}`)
+        .set('Authorization', `Bearer ${token}`)
+        .expect(204);
+
+      const survivor = await prisma.user.findUnique({
+        where: { id: member.id },
+        include: { memberships: true },
+      });
+      expect(survivor).not.toBeNull();
+      expect(survivor!.memberships).toHaveLength(0);
+    });
+
+    it('ADMIN gets 403', async () => {
+      const tenant = await prisma.tenant.create({
+        data: { slug: `t-${randomUUID()}`, name: 'Untouchable' },
+      });
+      tenantIds.push(tenant.id);
+      const token = await newTenantUser(UserRole.ADMIN);
+
+      await request(server)
+        .delete(`/tenants/${tenant.id}`)
+        .set('Authorization', `Bearer ${token}`)
+        .expect(403);
+      expect(await prisma.tenant.findUnique({ where: { id: tenant.id } })).not.toBeNull();
+    });
+
+    it('returns 404 for an unknown id', async () => {
+      const token = await newSuperAdmin();
+      await request(server)
+        .delete(`/tenants/${randomUUID()}`)
+        .set('Authorization', `Bearer ${token}`)
+        .expect(404);
+    });
+
+    it('returns 401 without auth', async () => {
+      await request(server).delete(`/tenants/${randomUUID()}`).expect(401);
+    });
+  });
 });

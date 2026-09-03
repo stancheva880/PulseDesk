@@ -1039,6 +1039,23 @@ export interface paths {
         patch: operations["TenantsController_updatePaymentDetails"];
         trace?: never;
     };
+    "/api/tenants/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete a club and everything that belongs to it. Irreversible. */
+        delete: operations["TenantsController_remove"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -4585,6 +4602,28 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["TenantPaymentDetails"];
                 };
+            };
+        };
+    };
+    TenantsController_remove: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Tenant the caller acts in. A tenant-bound user must name one of their own tenants (403 otherwise); a SUPER_ADMIN may name any active tenant (404 otherwise). */
+                "X-Tenant-Id"?: string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

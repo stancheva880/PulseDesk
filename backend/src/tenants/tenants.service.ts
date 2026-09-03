@@ -1,4 +1,4 @@
-import { ConflictException, Injectable, Logger } from '@nestjs/common';
+import { ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { UserRole } from '@prisma/client';
 import { AuthService } from '@/auth/auth.service';
 import { isUniqueConstraintError } from '@/common/prisma-relations';
@@ -159,5 +159,16 @@ export class TenantsService {
       data: dto,
       select: TenantsService.PAYMENT_DETAILS_SELECT,
     });
+  }
+
+  // TKT-0132: deleting a club cascades — every tenant-scoped table's `tenant` relation is
+  // `onDelete: Cascade` in schema.prisma (locations, trainees, classes, fees, payments, the
+  // lot). A user keeps their account (User carries no tenantId) but loses their Membership
+  // row for this club, same as any other member leaving. Irreversible; the frontend confirms
+  // by asking the operator to type the club's name before calling this.
+  async delete(id: string): Promise<void> {
+    const existing = await this.prisma.tenant.findUnique({ where: { id }, select: { id: true } });
+    if (!existing) throw new NotFoundException(`Tenant ${id} not found`);
+    await this.prisma.tenant.delete({ where: { id } });
   }
 }

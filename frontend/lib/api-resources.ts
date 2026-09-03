@@ -136,6 +136,10 @@ export const Tenants = {
       method: 'PATCH',
       body: input,
     }),
+  // Deletes the club and everything it owns (schema.prisma cascades) — irreversible. Like
+  // list/create above, @Roles(SUPER_ADMIN) and no @TenantId(), so no tenant header either.
+  remove: (id: string) =>
+    apiRequest<void>(`/tenants/${id}`, { method: 'DELETE', omitTenantHeader: true }),
 };
 
 // The active-tenant gate and the club selector both need this list and mount in the same

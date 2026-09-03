@@ -1,15 +1,26 @@
 'use client';
 
-import { Plus } from 'lucide-react';
+import { Plus, Trash2 } from 'lucide-react';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
-import { listClubs, type TenantSummary } from '@/lib/api-resources';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { apiErrorMessage } from '@/lib/api';
+import { Tenants, listClubs, type TenantSummary } from '@/lib/api-resources';
 import { landingRoute, readStoredMemberships } from '@/lib/auth-storage';
 import {
   hardNavigate,
   readTenantContext,
+  reloadApp,
   subscribeTenantContext,
   writeTenantContext,
 } from '@/lib/tenant-context';
@@ -31,6 +42,10 @@ function SuperAdminSelector() {
   const { t } = useTranslation();
   const [tenants, setTenants] = useState<TenantSummary[] | null>(null);
   const [selected, setSelected] = useState<string>(() => readTenantContext() ?? '');
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [confirmText, setConfirmText] = useState('');
+  const [deleteBusy, setDeleteBusy] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   // Shares one request with the active-tenant gate. A failure is reported by that gate's
   // panel in <main>, so this control stays silent rather than repeating the message.
@@ -59,6 +74,30 @@ function SuperAdminSelector() {
     if (typeof window !== 'undefined') window.location.reload();
   };
 
+  const selectedTenant = tenants?.find((tenant) => tenant.id === selected) ?? null;
+
+  const openDelete = () => {
+    setConfirmText('');
+    setDeleteError(null);
+    setDeleteOpen(true);
+  };
+
+  // TKT-0132: deletes everything the club owns (schema.prisma cascades) — irreversible, so
+  // the confirm button stays disabled until the operator types the exact club name.
+  const onDelete = async () => {
+    if (!selectedTenant || confirmText !== selectedTenant.name) return;
+    setDeleteBusy(true);
+    setDeleteError(null);
+    try {
+      await Tenants.remove(selectedTenant.id);
+      writeTenantContext(null);
+      reloadApp();
+    } catch (e) {
+      setDeleteError(apiErrorMessage(e));
+      setDeleteBusy(false);
+    }
+  };
+
   return (
     <div className="flex items-center gap-2 text-sm">
       <select
@@ -80,6 +119,56 @@ function SuperAdminSelector() {
           <Plus className="h-4 w-4" />
         </Link>
       </Button>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+        disabled={!selectedTenant}
+        title={t('tenants.delete.trigger')}
+        aria-label={t('tenants.delete.trigger')}
+        onClick={openDelete}
+      >
+        <Trash2 className="h-4 w-4" />
+      </Button>
+
+      <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>{t('tenants.delete.title')}</DialogTitle>
+            <DialogDescription>
+              {t('tenants.delete.description', { name: selectedTenant?.name ?? '' })}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-1.5">
+            <Input
+              aria-label={t('tenants.delete.confirmLabel')}
+              placeholder={selectedTenant?.name ?? ''}
+              value={confirmText}
+              onChange={(e) => setConfirmText(e.target.value)}
+            />
+            {deleteError ? <p className="text-sm text-destructive">{deleteError}</p> : null}
+          </div>
+          <DialogFooter className="gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setDeleteOpen(false)}
+              disabled={deleteBusy}
+            >
+              {t('common.cancel')}
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={onDelete}
+              disabled={deleteBusy || confirmText !== selectedTenant?.name}
+            >
+              {t('common.delete')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
