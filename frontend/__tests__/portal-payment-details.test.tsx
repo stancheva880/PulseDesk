@@ -29,7 +29,7 @@ const ONE_LOCATION = [
     bankIban: 'BG80BNBG96611020345678',
     bankAccountHolder: 'Studio EOOD',
     revolutHandle: null,
-    paypalEmail: null,
+    myposLink: null,
     cashNote: null,
   },
 ];
@@ -42,7 +42,7 @@ const TWO_LOCATIONS = [
     bankIban: null,
     bankAccountHolder: null,
     revolutHandle: '@annex',
-    paypalEmail: 'annex@x.com',
+    myposLink: 'https://www.mypos.com/pay/annex',
     cashNote: 'Pay at reception',
   },
 ];
@@ -101,9 +101,24 @@ describe('PortalPaymentDetailsPage', () => {
 
     expect(await screen.findByText('@annex')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Revolut/ })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /PayPal/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /mypos\.com/ })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Cash on-site|В брой на място/ })).toBeInTheDocument();
     expect(screen.queryByText('BG80BNBG96611020345678')).not.toBeInTheDocument();
+  });
+
+  it('renders the mypos.com method as a clickable link', async () => {
+    mockFetch((url) => {
+      if (url.endsWith('/me/locations')) return jsonResponse(200, TWO_LOCATIONS);
+      return jsonResponse(404, null);
+    });
+
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Annex' }));
+    fireEvent.click(screen.getByRole('button', { name: /mypos\.com/ }));
+
+    const link = await screen.findByRole('link', { name: 'https://www.mypos.com/pay/annex' });
+    expect(link).toHaveAttribute('href', 'https://www.mypos.com/pay/annex');
+    expect(link).toHaveAttribute('target', '_blank');
   });
 
   it('shows the empty message when no trainee is linked', async () => {
@@ -123,7 +138,7 @@ describe('PortalPaymentDetailsPage', () => {
     mockFetch((url) => {
       if (url.endsWith('/me/locations')) {
         return jsonResponse(200, [
-          { id: 'loc-3', name: 'Bare', bankIban: null, bankAccountHolder: null, revolutHandle: null, paypalEmail: null, cashNote: null },
+          { id: 'loc-3', name: 'Bare', bankIban: null, bankAccountHolder: null, revolutHandle: null, myposLink: null, cashNote: null },
         ]);
       }
       return jsonResponse(404, null);

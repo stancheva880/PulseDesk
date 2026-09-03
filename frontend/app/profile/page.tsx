@@ -494,7 +494,7 @@ const paymentDetailsSchema = z.object({
   bankIban: z.string().trim().max(50).optional(),
   bankAccountHolder: z.string().trim().max(120).optional(),
   revolutHandle: z.string().trim().max(120).optional(),
-  paypalEmail: z.union([z.string().trim().email('locations.errors.paypalEmail'), z.literal('')]).optional(),
+  myposLink: z.union([z.string().trim().url('locations.errors.myposLink'), z.literal('')]).optional(),
   cashNote: z.string().trim().max(500).optional(),
 });
 type PaymentDetailsFormValues = z.infer<typeof paymentDetailsSchema>;
@@ -518,7 +518,7 @@ function ClubPaymentDetailsCard() {
       bankIban: '',
       bankAccountHolder: '',
       revolutHandle: '',
-      paypalEmail: '',
+      myposLink: '',
       cashNote: '',
     },
   });
@@ -530,7 +530,7 @@ function ClubPaymentDetailsCard() {
           bankIban: d.bankIban ?? '',
           bankAccountHolder: d.bankAccountHolder ?? '',
           revolutHandle: d.revolutHandle ?? '',
-          paypalEmail: d.paypalEmail ?? '',
+          myposLink: d.myposLink ?? '',
           cashNote: d.cashNote ?? '',
         });
         setLoaded(true);
@@ -546,7 +546,7 @@ function ClubPaymentDetailsCard() {
         bankIban: asNullable(values.bankIban),
         bankAccountHolder: asNullable(values.bankAccountHolder),
         revolutHandle: asNullable(values.revolutHandle),
-        paypalEmail: asNullable(values.paypalEmail),
+        myposLink: asNullable(values.myposLink),
         cashNote: asNullable(values.cashNote),
       });
       showToast({ text: t('common.savedToast'), variant: 'success' });
@@ -592,9 +592,14 @@ function ClubPaymentDetailsCard() {
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="club-paypalEmail">{t('locations.fields.paypalEmail')}</Label>
-              <Input id="club-paypalEmail" type="email" {...register('paypalEmail')} />
-              <FieldError id="club-paypalEmail-error" messageKey={errors.paypalEmail?.message} />
+              <Label htmlFor="club-myposLink">{t('locations.fields.myposLink')}</Label>
+              <Input
+                id="club-myposLink"
+                type="url"
+                placeholder="https://www.mypos.com/..."
+                {...register('myposLink')}
+              />
+              <FieldError id="club-myposLink-error" messageKey={errors.myposLink?.message} />
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="club-cashNote">{t('locations.fields.cashNote')}</Label>

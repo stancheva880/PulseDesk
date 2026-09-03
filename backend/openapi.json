@@ -4758,10 +4758,11 @@
             "nullable": true,
             "maxLength": 120
           },
-          "paypalEmail": {
+          "myposLink": {
             "type": "string",
             "nullable": true,
-            "format": "email"
+            "maxLength": 255,
+            "format": "uri"
           },
           "cashNote": {
             "type": "string",
@@ -5633,10 +5634,11 @@
             "nullable": true,
             "maxLength": 120
           },
-          "paypalEmail": {
+          "myposLink": {
             "type": "string",
             "nullable": true,
-            "format": "email"
+            "maxLength": 255,
+            "format": "uri"
           },
           "cashNote": {
             "type": "string",
@@ -6287,7 +6289,7 @@
                     }
                   ]
                 },
-                "paypalEmail": {
+                "myposLink": {
                   "anyOf": [
                     {
                       "type": "string"
@@ -6319,7 +6321,7 @@
                 "bankIban",
                 "bankAccountHolder",
                 "revolutHandle",
-                "paypalEmail",
+                "myposLink",
                 "cashNote"
               ],
               "additionalProperties": false
@@ -6408,7 +6410,7 @@
               }
             ]
           },
-          "paypalEmail": {
+          "myposLink": {
             "anyOf": [
               {
                 "type": "string"
@@ -6440,7 +6442,7 @@
           "bankIban",
           "bankAccountHolder",
           "revolutHandle",
-          "paypalEmail",
+          "myposLink",
           "cashNote"
         ],
         "additionalProperties": false
@@ -6486,7 +6488,7 @@
                 }
               ]
             },
-            "paypalEmail": {
+            "myposLink": {
               "anyOf": [
                 {
                   "type": "string"
@@ -6513,7 +6515,7 @@
             "bankIban",
             "bankAccountHolder",
             "revolutHandle",
-            "paypalEmail",
+            "myposLink",
             "cashNote"
           ],
           "additionalProperties": false
@@ -7555,7 +7557,7 @@
                     }
                   ]
                 },
-                "paypalEmail": {
+                "myposLink": {
                   "anyOf": [
                     {
                       "type": "string"
@@ -7587,7 +7589,7 @@
                 "bankIban",
                 "bankAccountHolder",
                 "revolutHandle",
-                "paypalEmail",
+                "myposLink",
                 "cashNote"
               ],
               "additionalProperties": false
@@ -11276,7 +11278,7 @@
               }
             ]
           },
-          "paypalEmail": {
+          "myposLink": {
             "anyOf": [
               {
                 "type": "string"
@@ -11301,7 +11303,7 @@
           "bankIban",
           "bankAccountHolder",
           "revolutHandle",
-          "paypalEmail",
+          "myposLink",
           "cashNote"
         ],
         "additionalProperties": false

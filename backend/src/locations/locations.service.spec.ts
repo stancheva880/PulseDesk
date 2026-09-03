@@ -239,7 +239,7 @@ describe('LocationsService', () => {
       await service.updatePaymentDetails(
         t.id,
         created.id,
-        { bankIban: 'BG80BNBG96611020345678', paypalEmail: 'club@x.com' },
+        { bankIban: 'BG80BNBG96611020345678', myposLink: 'https://www.mypos.com/pay/club' },
         SUPER,
       );
       const cleared = await service.updatePaymentDetails(
@@ -249,7 +249,7 @@ describe('LocationsService', () => {
         SUPER,
       );
       expect(cleared.bankIban).toBeNull();
-      expect(cleared.paypalEmail).toBe('club@x.com');
+      expect(cleared.myposLink).toBe('https://www.mypos.com/pay/club');
     });
 
     it('lets an ADMIN update payment details for a location they are assigned to', async () => {
@@ -326,7 +326,7 @@ describe('LocationsService', () => {
           bankIban: 'BG80BNBG96611020345678',
           bankAccountHolder: 'Studio EOOD',
           revolutHandle: null,
-          paypalEmail: null,
+          myposLink: null,
           cashNote: null,
         },
       ]);
@@ -387,7 +387,7 @@ describe('LocationsService', () => {
           bankIban: 'BG80BNBG96611020345678',
           bankAccountHolder: null,
           revolutHandle: '@clubdefault',
-          paypalEmail: null,
+          myposLink: null,
           cashNote: 'Pay at reception',
         },
       ]);

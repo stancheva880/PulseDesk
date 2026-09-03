@@ -298,7 +298,7 @@
       "bankIban": "IBAN",
       "bankAccountHolder": "Титуляр на сметката",
       "revolutHandle": "Revolut (потребителско име или линк)",
-      "paypalEmail": "PayPal имейл",
+      "myposLink": "Линк за плащане в mypos.com",
       "cashNote": "Бележка за плащане в брой"
     },
     "paymentDetails": {
@@ -309,7 +309,7 @@
     },
     "errors": {
       "duplicate": "Локация с това име вече съществува.",
-      "paypalEmail": "Въведете валиден имейл адрес."
+      "myposLink": "Въведете валиден линк (започващ с http:// или https://)."
     }
   },
   "classes": {
@@ -683,7 +683,7 @@
       "methods": {
         "bank": "Банков превод (IBAN)",
         "revolut": "Revolut",
-        "paypal": "PayPal",
+        "mypos": "mypos.com",
         "cash": "В брой на място"
       },
       "fields": {

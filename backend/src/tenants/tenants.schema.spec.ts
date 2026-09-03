@@ -62,14 +62,14 @@ describe('TenantPaymentDetailsSchema', () => {
       'bankAccountHolder',
       'bankIban',
       'cashNote',
-      'paypalEmail',
+      'myposLink',
       'revolutHandle',
     ]);
     const parsed = TenantPaymentDetailsSchema.parse({
       bankIban: null,
       bankAccountHolder: null,
       revolutHandle: '@club',
-      paypalEmail: null,
+      myposLink: null,
       cashNote: null,
     });
     expect(parsed.bankIban).toBeNull();

@@ -416,7 +416,7 @@ describe('ProfilePage — club payment details', () => {
     bankIban: 'BG80BNBG96611020345678',
     bankAccountHolder: 'Club EOOD',
     revolutHandle: null,
-    paypalEmail: null,
+    myposLink: null,
     cashNote: null,
   };
 

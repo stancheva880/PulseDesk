@@ -535,7 +535,7 @@ describe('LocationsController (e2e-ish)', () => {
         .expect(403);
     });
 
-    it('rejects a malformed paypalEmail with 400', async () => {
+    it('rejects a malformed myposLink with 400', async () => {
       const tenant = await newTenant();
       const created = await prisma.location.create({ data: { tenantId: tenant.id, name: 'Studio' } });
       const su = await setupSuperAdmin();
@@ -543,7 +543,7 @@ describe('LocationsController (e2e-ish)', () => {
         .patch(`/locations/${created.id}/payment-details`)
         .set('Authorization', `Bearer ${su.accessToken}`)
         .set('X-Tenant-Id', tenant.id)
-        .send({ paypalEmail: 'not-an-email' })
+        .send({ myposLink: 'not-a-url' })
         .expect(400);
     });
   });

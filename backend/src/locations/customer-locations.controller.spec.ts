@@ -109,7 +109,7 @@ describe('CustomerLocationsController (e2e-ish)', () => {
           bankIban: 'BG80BNBG96611020345678',
           bankAccountHolder: 'Studio EOOD',
           revolutHandle: null,
-          paypalEmail: null,
+          myposLink: null,
           cashNote: null,
         },
       ]);

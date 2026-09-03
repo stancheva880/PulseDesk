@@ -7,14 +7,14 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { apiErrorMessage } from '@/lib/api';
 import { Locations, type CustomerLocationPaymentEntry } from '@/lib/api-resources';
 
-type MethodKey = 'bank' | 'revolut' | 'paypal' | 'cash';
+type MethodKey = 'bank' | 'revolut' | 'mypos' | 'cash';
 
 // Which methods a location actually offers — a method with nothing set gets no tab.
 function availableMethods(loc: CustomerLocationPaymentEntry): MethodKey[] {
   const methods: MethodKey[] = [];
   if (loc.bankIban || loc.bankAccountHolder) methods.push('bank');
   if (loc.revolutHandle) methods.push('revolut');
-  if (loc.paypalEmail) methods.push('paypal');
+  if (loc.myposLink) methods.push('mypos');
   if (loc.cashNote) methods.push('cash');
   return methods;
 }
@@ -121,8 +121,15 @@ export default function PortalPaymentDetailsPage() {
                 {effectiveMethod === 'revolut' ? (
                   <p className="font-medium">{location.revolutHandle}</p>
                 ) : null}
-                {effectiveMethod === 'paypal' ? (
-                  <p className="font-medium">{location.paypalEmail}</p>
+                {effectiveMethod === 'mypos' && location.myposLink ? (
+                  <a
+                    href={location.myposLink}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="font-medium text-primary underline underline-offset-2 break-all"
+                  >
+                    {location.myposLink}
+                  </a>
                 ) : null}
                 {effectiveMethod === 'cash' ? <p>{location.cashNote}</p> : null}
               </CardContent>

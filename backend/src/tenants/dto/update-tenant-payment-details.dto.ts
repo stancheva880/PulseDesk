@@ -1,4 +1,4 @@
-import { IsEmail, IsOptional, IsString, MaxLength, ValidateIf } from 'class-validator';
+import { IsOptional, IsString, IsUrl, MaxLength, ValidateIf } from 'class-validator';
 
 // Mirrors locations/dto/update-location-payment-details.dto.ts exactly — same fields, same
 // null-clears/undefined-leaves-untouched rule — for the club's shared default instead of one
@@ -23,9 +23,10 @@ export class UpdateTenantPaymentDetailsDto {
   revolutHandle?: string | null;
 
   @IsOptional()
-  @ValidateIf((o: UpdateTenantPaymentDetailsDto) => o.paypalEmail !== null)
-  @IsEmail()
-  paypalEmail?: string | null;
+  @ValidateIf((o: UpdateTenantPaymentDetailsDto) => o.myposLink !== null)
+  @IsUrl()
+  @MaxLength(255)
+  myposLink?: string | null;
 
   @IsOptional()
   @ValidateIf((o: UpdateTenantPaymentDetailsDto) => o.cashNote !== null)

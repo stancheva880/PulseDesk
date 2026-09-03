@@ -17,7 +17,7 @@ export const LocationSchema = z.object({
   bankIban: z.string().nullable(),
   bankAccountHolder: z.string().nullable(),
   revolutHandle: z.string().nullable(),
-  paypalEmail: z.string().nullable(),
+  myposLink: z.string().nullable(),
   cashNote: z.string().nullable(),
 });
 
@@ -44,7 +44,7 @@ export const CustomerLocationPaymentEntrySchema = z.object({
   bankIban: z.string().nullable(),
   bankAccountHolder: z.string().nullable(),
   revolutHandle: z.string().nullable(),
-  paypalEmail: z.string().nullable(),
+  myposLink: z.string().nullable(),
   cashNote: z.string().nullable(),
 });
 

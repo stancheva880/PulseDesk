@@ -51,7 +51,7 @@ const runtimeLocation = {
   bankIban: null,
   bankAccountHolder: null,
   revolutHandle: null,
-  paypalEmail: null,
+  myposLink: null,
   cashNote: null,
 };
 
@@ -161,8 +161,8 @@ describe('TraineeDetailSchema', () => {
       'createdAt',
       'id',
       'isActive',
+      'myposLink',
       'name',
-      'paypalEmail',
       'revolutHandle',
       'tenantId',
       'updatedAt',

@@ -101,7 +101,7 @@ model Tenant {
   bankIban          String?
   bankAccountHolder String?
   revolutHandle     String?
-  paypalEmail       String?
+  myposLink         String?
   cashNote          String?
 
   memberships    Membership[]
@@ -240,7 +240,7 @@ model Location {
   bankIban          String?
   bankAccountHolder String?
   revolutHandle     String?
-  paypalEmail       String?
+  myposLink         String?
   cashNote          String?
 
   trainers       User[]          @relation("UserLocations")

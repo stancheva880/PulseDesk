@@ -140,7 +140,7 @@ export class TenantsService {
     bankIban: true,
     bankAccountHolder: true,
     revolutHandle: true,
-    paypalEmail: true,
+    myposLink: true,
     cashNote: true,
   } as const;
 

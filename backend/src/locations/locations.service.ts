@@ -21,7 +21,7 @@ const CUSTOMER_PAYMENT_SELECT = {
   bankIban: true,
   bankAccountHolder: true,
   revolutHandle: true,
-  paypalEmail: true,
+  myposLink: true,
   cashNote: true,
 } as const;
 
@@ -151,7 +151,7 @@ export class LocationsService {
           bankIban: true,
           bankAccountHolder: true,
           revolutHandle: true,
-          paypalEmail: true,
+          myposLink: true,
           cashNote: true,
         },
       }),
@@ -177,7 +177,7 @@ export class LocationsService {
       bankIban: loc.bankIban ?? tenant.bankIban,
       bankAccountHolder: loc.bankAccountHolder ?? tenant.bankAccountHolder,
       revolutHandle: loc.revolutHandle ?? tenant.revolutHandle,
-      paypalEmail: loc.paypalEmail ?? tenant.paypalEmail,
+      myposLink: loc.myposLink ?? tenant.myposLink,
       cashNote: loc.cashNote ?? tenant.cashNote,
     }));
   }

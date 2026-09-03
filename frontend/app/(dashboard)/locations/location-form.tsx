@@ -29,7 +29,7 @@ const schema = z.object({
   bankIban: z.string().trim().max(50, 'common.errors.tooLong').optional(),
   bankAccountHolder: z.string().trim().max(120, 'common.errors.tooLong').optional(),
   revolutHandle: z.string().trim().max(120, 'common.errors.tooLong').optional(),
-  paypalEmail: z.union([z.string().trim().email('locations.errors.paypalEmail'), z.literal('')]).optional(),
+  myposLink: z.union([z.string().trim().url('locations.errors.myposLink'), z.literal('')]).optional(),
   cashNote: z.string().trim().max(500, 'common.errors.tooLong').optional(),
 });
 type FormValues = z.infer<typeof schema>;
@@ -38,7 +38,7 @@ const EMPTY_PAYMENT = {
   bankIban: '',
   bankAccountHolder: '',
   revolutHandle: '',
-  paypalEmail: '',
+  myposLink: '',
   cashNote: '',
 };
 
@@ -54,7 +54,7 @@ function paymentPayload(values: FormValues) {
     bankIban: asNullable(values.bankIban),
     bankAccountHolder: asNullable(values.bankAccountHolder),
     revolutHandle: asNullable(values.revolutHandle),
-    paypalEmail: asNullable(values.paypalEmail),
+    myposLink: asNullable(values.myposLink),
     cashNote: asNullable(values.cashNote),
   };
 }
@@ -97,7 +97,7 @@ export function LocationForm({ mode, id = '' }: { mode: 'create' | 'edit'; id?: 
           bankIban: loc.bankIban ?? '',
           bankAccountHolder: loc.bankAccountHolder ?? '',
           revolutHandle: loc.revolutHandle ?? '',
-          paypalEmail: loc.paypalEmail ?? '',
+          myposLink: loc.myposLink ?? '',
           cashNote: loc.cashNote ?? '',
         };
         setPaymentOpen(hasAnyPaymentDetail(payment));
@@ -234,15 +234,16 @@ export function LocationForm({ mode, id = '' }: { mode: 'create' | 'edit'; id?: 
                       />
                     </div>
                     <div className="space-y-1.5">
-                      <Label htmlFor="paypalEmail">{t('locations.fields.paypalEmail')}</Label>
+                      <Label htmlFor="myposLink">{t('locations.fields.myposLink')}</Label>
                       <Input
-                        id="paypalEmail"
-                        type="email"
-                        aria-invalid={errors.paypalEmail ? true : undefined}
-                        aria-describedby={errors.paypalEmail ? 'paypalEmail-error' : undefined}
-                        {...register('paypalEmail')}
+                        id="myposLink"
+                        type="url"
+                        placeholder="https://www.mypos.com/..."
+                        aria-invalid={errors.myposLink ? true : undefined}
+                        aria-describedby={errors.myposLink ? 'myposLink-error' : undefined}
+                        {...register('myposLink')}
                       />
-                      <FieldError id="paypalEmail-error" messageKey={errors.paypalEmail?.message} />
+                      <FieldError id="myposLink-error" messageKey={errors.myposLink?.message} />
                     </div>
                     <div className="space-y-1.5">
                       <Label htmlFor="cashNote">{t('locations.fields.cashNote')}</Label>

@@ -166,7 +166,7 @@ describe('TenantsController (e2e-ish)', () => {
         bankIban: 'BG80BNBG96611020345678',
         bankAccountHolder: 'Club EOOD',
         revolutHandle: null,
-        paypalEmail: null,
+        myposLink: null,
         cashNote: null,
       });
 
@@ -210,7 +210,7 @@ describe('TenantsController (e2e-ish)', () => {
         .patch('/tenants/payment-details')
         .set('Authorization', `Bearer ${admin.accessToken}`)
         .set('X-Tenant-Id', admin.tenantId)
-        .send({ bankIban: 'BG80BNBG96611020345678', paypalEmail: 'club@x.com' })
+        .send({ bankIban: 'BG80BNBG96611020345678', myposLink: 'https://www.mypos.com/pay/club' })
         .expect(200);
       const cleared = await request(server)
         .patch('/tenants/payment-details')
@@ -219,16 +219,16 @@ describe('TenantsController (e2e-ish)', () => {
         .send({ bankIban: null })
         .expect(200);
       expect(cleared.body.bankIban).toBeNull();
-      expect(cleared.body.paypalEmail).toBe('club@x.com');
+      expect(cleared.body.myposLink).toBe('https://www.mypos.com/pay/club');
     });
 
-    it('rejects a malformed paypalEmail with 400', async () => {
+    it('rejects a malformed myposLink with 400', async () => {
       const admin = await newTenantActor(UserRole.ADMIN);
       await request(server)
         .patch('/tenants/payment-details')
         .set('Authorization', `Bearer ${admin.accessToken}`)
         .set('X-Tenant-Id', admin.tenantId)
-        .send({ paypalEmail: 'not-an-email' })
+        .send({ myposLink: 'not-a-url' })
         .expect(400);
     });
   });

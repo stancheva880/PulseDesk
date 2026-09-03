@@ -31,7 +31,7 @@ export interface CreatedTenant extends TenantSummary {
 // The RolesGuard's SUPER_ADMIN bypass means this is also reachable by SUPER_ADMIN
 // without further annotation; ADMIN/EMPLOYEE/CUSTOMER are rejected with 403.
 // TKT-0128 carves out one exception: the payment-details pair is ADMIN's to run day to day
-// too (the club's own shared bank/Revolut/PayPal/cash default), so those two routes override
+// too (the club's own shared bank/Revolut/MyPOS/cash default), so those two routes override
 // with their own, wider @Roles().
 @ApiBearerAuth()
 @Controller('tenants')

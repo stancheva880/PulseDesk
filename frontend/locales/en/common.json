@@ -298,7 +298,7 @@
       "bankIban": "IBAN",
       "bankAccountHolder": "Account holder",
       "revolutHandle": "Revolut (username or link)",
-      "paypalEmail": "PayPal email",
+      "myposLink": "mypos.com payment link",
       "cashNote": "Cash payment note"
     },
     "paymentDetails": {
@@ -309,7 +309,7 @@
     },
     "errors": {
       "duplicate": "A location with this name already exists.",
-      "paypalEmail": "Enter a valid email address."
+      "myposLink": "Enter a valid link (starting with http:// or https://)."
     }
   },
   "classes": {
@@ -683,7 +683,7 @@
       "methods": {
         "bank": "Bank transfer (IBAN)",
         "revolut": "Revolut",
-        "paypal": "PayPal",
+        "mypos": "mypos.com",
         "cash": "Cash on-site"
       },
       "fields": {

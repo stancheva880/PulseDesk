@@ -1105,8 +1105,8 @@ export interface components {
             bankIban?: string | null;
             bankAccountHolder?: string | null;
             revolutHandle?: string | null;
-            /** Format: email */
-            paypalEmail?: string | null;
+            /** Format: uri */
+            myposLink?: string | null;
             cashNote?: string | null;
         };
         CreateClassDto: {
@@ -1318,8 +1318,8 @@ export interface components {
             bankIban?: string | null;
             bankAccountHolder?: string | null;
             revolutHandle?: string | null;
-            /** Format: email */
-            paypalEmail?: string | null;
+            /** Format: uri */
+            myposLink?: string | null;
             cashNote?: string | null;
         };
         Health: {
@@ -1440,7 +1440,7 @@ export interface components {
                 bankIban: string | null;
                 bankAccountHolder: string | null;
                 revolutHandle: string | null;
-                paypalEmail: string | null;
+                myposLink: string | null;
                 cashNote: string | null;
             }[];
             page: number;
@@ -1459,7 +1459,7 @@ export interface components {
             bankIban: string | null;
             bankAccountHolder: string | null;
             revolutHandle: string | null;
-            paypalEmail: string | null;
+            myposLink: string | null;
             cashNote: string | null;
         };
         CustomerLocationPaymentEntryList: {
@@ -1468,7 +1468,7 @@ export interface components {
             bankIban: string | null;
             bankAccountHolder: string | null;
             revolutHandle: string | null;
-            paypalEmail: string | null;
+            myposLink: string | null;
             cashNote: string | null;
         }[];
         PaginatedClassRow: {
@@ -1639,7 +1639,7 @@ export interface components {
                 bankIban: string | null;
                 bankAccountHolder: string | null;
                 revolutHandle: string | null;
-                paypalEmail: string | null;
+                myposLink: string | null;
                 cashNote: string | null;
             }[];
             classes: {
@@ -2285,7 +2285,7 @@ export interface components {
             bankIban: string | null;
             bankAccountHolder: string | null;
             revolutHandle: string | null;
-            paypalEmail: string | null;
+            myposLink: string | null;
             cashNote: string | null;
         };
     };

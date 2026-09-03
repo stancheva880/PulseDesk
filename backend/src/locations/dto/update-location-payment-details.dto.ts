@@ -1,4 +1,4 @@
-import { IsEmail, IsOptional, IsString, MaxLength, ValidateIf } from 'class-validator';
+import { IsOptional, IsString, IsUrl, MaxLength, ValidateIf } from 'class-validator';
 
 // Every field is independently clearable: `null` removes it (the portal simply stops
 // offering that method), `undefined`/omitted leaves it untouched, matching the
@@ -24,9 +24,10 @@ export class UpdateLocationPaymentDetailsDto {
   revolutHandle?: string | null;
 
   @IsOptional()
-  @ValidateIf((o: UpdateLocationPaymentDetailsDto) => o.paypalEmail !== null)
-  @IsEmail()
-  paypalEmail?: string | null;
+  @ValidateIf((o: UpdateLocationPaymentDetailsDto) => o.myposLink !== null)
+  @IsUrl()
+  @MaxLength(255)
+  myposLink?: string | null;
 
   @IsOptional()
   @ValidateIf((o: UpdateLocationPaymentDetailsDto) => o.cashNote !== null)
