@@ -629,20 +629,22 @@ describe('FeeDetailPage — employee edit rights', () => {
     });
 
     renderPage();
-    const amount = (await screen.findByLabelText(
-      /Amount|Сума/,
-    )) as HTMLInputElement;
+    await screen.findByText(/Yoga 101/);
+    // Both the fee-edit and add-payment forms have an "Amount" field now that an employee sees
+    // both — target the fee-edit one by id, same as the rest of this file's helpers do.
+    const amount = document.getElementById('amount') as HTMLInputElement;
     expect(amount).not.toBeDisabled();
 
     await user.clear(amount);
     await user.type(amount, '80');
-    await user.click(screen.getByRole('button', { name: /^Save$|^Запазване$/ }));
+    // The fee-edit form's Save button is the first — the add-payment form has its own below it.
+    await user.click(screen.getAllByRole('button', { name: /^Save$|^Запазване$/ })[0]!);
 
     await vi.waitFor(() => expect(patched).not.toBeNull());
     expect(patched).toMatchObject({ amount: 80 });
   });
 
-  it('does not offer the payments ledger add-form or delete actions to an employee', async () => {
+  it('offers the add-payment form but not delete to an employee', async () => {
     const paidFee = {
       ...FEE_DETAIL_BASE,
       status: 'PARTIAL',
@@ -671,9 +673,56 @@ describe('FeeDetailPage — employee edit rights', () => {
     renderPage();
     await screen.findByText(/Yoga 101/);
 
-    // The existing payment row shows, but with no delete action and no add-payment form.
+    // The existing payment row shows, with no delete action, but the add-payment form is there.
     expect(screen.getByText('cash')).toBeInTheDocument();
     expect(screen.queryByText('Изтриване')).not.toBeInTheDocument();
-    expect(document.getElementById('p-amount')).toBeNull();
+    expect(document.getElementById('p-amount')).not.toBeNull();
+  });
+
+  it('lets an employee record a payment for the remaining balance', async () => {
+    const user = userEvent.setup();
+    const partialFee = {
+      ...FEE_DETAIL_BASE,
+      amount: '100.00',
+      status: 'PARTIAL',
+      payments: [
+        {
+          id: 'p1',
+          tenantId: 't',
+          feeId: 'f1',
+          amount: '40.00',
+          paidAt: '2026-03-15T00:00:00.000Z',
+          method: 'cash',
+          notes: null,
+          recordedById: 'u',
+          recordedByEmailSnapshot: 'admin@x',
+          recordedByNameSnapshot: null,
+          createdAt: '',
+        },
+      ],
+    };
+    let posted: Record<string, unknown> | null = null;
+    vi.spyOn(globalThis, 'fetch').mockImplementation((input, init) => {
+      const url = typeof input === 'string' ? input : (input as Request).url;
+      const method = init?.method ?? 'GET';
+      if (url.endsWith('/fees/f1/payments') && method === 'POST') {
+        posted = JSON.parse(init!.body as string);
+        return Promise.resolve(jsonResponse(201, { id: 'p2' }));
+      }
+      if (url.endsWith('/fees/f1')) return Promise.resolve(jsonResponse(200, partialFee));
+      return Promise.resolve(jsonResponse(404, null));
+    });
+
+    renderPage();
+    await screen.findByText(/Yoga 101/);
+
+    // "Pay rest" fills the outstanding balance (100 - 40 = 60) into the amount box.
+    await user.click(screen.getByText(/Pay the rest|Плати остатъка/));
+    await user.type(document.getElementById('p-paidAt') as HTMLInputElement, '2026-03-20');
+    const saveButtons = screen.getAllByRole('button', { name: /^Save$|^Запазване$/ });
+    await user.click(saveButtons[saveButtons.length - 1]!);
+
+    await vi.waitFor(() => expect(posted).not.toBeNull());
+    expect(posted).toMatchObject({ amount: 60 });
   });
 });

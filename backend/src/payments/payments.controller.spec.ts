@@ -92,7 +92,7 @@ describe('PaymentsController (e2e-ish)', () => {
     };
   }
 
-  async function makeFee(tenantId: string, amount = 100, locationId?: string) {
+  async function makeFee(tenantId: string, amount = 100, locationId?: string, trainerId?: string) {
     const trainee = await prisma.trainee.create({
       data: { tenantId, firstName: 'T', lastName: 'X', dateOfBirth: new Date('2000-01-01') },
     });
@@ -104,6 +104,7 @@ describe('PaymentsController (e2e-ish)', () => {
         monthlyAmount: amount,
         trainees: { connect: [{ id: trainee.id }] },
         locations: locationId ? { connect: [{ id: locationId }] } : undefined,
+        trainers: trainerId ? { connect: [{ id: trainerId }] } : undefined,
       },
     });
     return fees.create(tenantId, {
@@ -129,19 +130,43 @@ describe('PaymentsController (e2e-ish)', () => {
       expect(updated?.status).toBe(FeeStatus.PAID);
     });
 
-    it('returns 403 for employee', async () => {
+    it('returns 404 for employee on a fee outside their tenant', async () => {
       const a = await setupActor(UserRole.EMPLOYEE);
       const adminA = await setupActor(UserRole.ADMIN);
       const fee = await makeFee(adminA.tenantId, 100);
-      // employee in their *own* tenant cannot record on a fee that's not theirs;
-      // for this test we just use the cross-tenant fee — both expectations are 403/404,
-      // but role gating fires first → 403.
+      // Role gating now lets an employee through; the fee still isn't visible to them
+      // because it's in another tenant, so assertFeeAccessible reports it as not found.
       await request(server)
         .post(`/fees/${fee.id}/payments`)
         .set('Authorization', `Bearer ${a.accessToken}`)
         .set('X-Tenant-Id', a.tenantId)
         .send({ amount: 50, paidAt: '2026-03-15' })
-        .expect(403);
+        .expect(404);
+    });
+
+    // TKT-0129: an employee records payments only for a fee on a class they teach.
+    it('an employee records a payment for a fee on a class they teach', async () => {
+      const e = await setupActor(UserRole.EMPLOYEE);
+      const fee = await makeFee(e.tenantId, 100, e.locationId, e.userId);
+      await request(server)
+        .post(`/fees/${fee.id}/payments`)
+        .set('Authorization', `Bearer ${e.accessToken}`)
+        .set('X-Tenant-Id', e.tenantId)
+        .send({ amount: 60, paidAt: '2026-03-15' })
+        .expect(201);
+      const updated = await prisma.fee.findUnique({ where: { id: fee.id } });
+      expect(updated?.status).toBe(FeeStatus.PARTIAL);
+    });
+
+    it('an employee gets 404 recording a payment for a fee on a class they do not teach', async () => {
+      const e = await setupActor(UserRole.EMPLOYEE);
+      const fee = await makeFee(e.tenantId, 100, e.locationId); // no trainerId
+      await request(server)
+        .post(`/fees/${fee.id}/payments`)
+        .set('Authorization', `Bearer ${e.accessToken}`)
+        .set('X-Tenant-Id', e.tenantId)
+        .send({ amount: 50, paidAt: '2026-03-15' })
+        .expect(404);
     });
 
     it('returns 400 for amount = 0', async () => {

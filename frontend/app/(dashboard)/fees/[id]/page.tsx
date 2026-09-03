@@ -31,6 +31,10 @@ export default function FeeDetailPage() {
   // scopes this the same way it scopes reads (fees.service.ts's classAccessScope). Payments
   // and refunds stay ADMIN/SUPER_ADMIN only below (unchanged, not part of this request).
   const canEditFee = admin || user?.role === 'EMPLOYEE';
+  // TKT-0129: a trainer can also record a payment on a fee for a class they teach — the
+  // backend scopes this the same way (PaymentsService.record via assertFeeAccessible).
+  // Deleting a payment, and refunds entirely, stay ADMIN/SUPER_ADMIN only, below.
+  const canRecordPayment = admin || user?.role === 'EMPLOYEE';
   const router = useRouter();
   const params = useParams<{ id: string }>();
   const id = params.id;
@@ -396,7 +400,7 @@ export default function FeeDetailPage() {
                 </div>
               )}
 
-              {admin ? (
+              {canRecordPayment ? (
               <div>
                 <h3 className="mb-2 text-sm font-medium">{t('payments.addTitle')}</h3>
                 <form className="grid gap-3 sm:grid-cols-2" onSubmit={onAddPayment} noValidate>

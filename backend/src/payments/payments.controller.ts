@@ -38,7 +38,9 @@ export class PaymentsController {
 
   @ApiOperation({ summary: 'Record a payment. Refused above the balance that is due.' })
   @Post()
-  @Roles(UserRole.ADMIN)
+  // TKT-0129: an employee records payments only for a fee on a class they teach —
+  // assertFeeAccessible (called by PaymentsService.record) already scopes that.
+  @Roles(UserRole.ADMIN, UserRole.EMPLOYEE)
   @ResponseSchema('Payment', PaymentSchema)
   record(
     @TenantId() tenantId: string,
