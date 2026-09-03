@@ -672,8 +672,12 @@
       "children": "Children",
       "classes": "Classes",
       "sessions": "Sessions",
-      "fees": "Fees",
-      "paymentDetails": "Payment details"
+      "fees": "Fees"
+    },
+    "feesTabs": {
+      "label": "Fee sections",
+      "myFees": "My fees",
+      "payFees": "Pay fees"
     },
     "paymentDetails": {
       "title": "Payment details",

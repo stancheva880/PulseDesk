@@ -672,8 +672,12 @@
       "children": "Деца",
       "classes": "Класове",
       "sessions": "Тренировки",
-      "fees": "Такси",
-      "paymentDetails": "Данни за плащане"
+      "fees": "Такси"
+    },
+    "feesTabs": {
+      "label": "Секции на таксите",
+      "myFees": "Моите такси",
+      "payFees": "Плащане на такси"
     },
     "paymentDetails": {
       "title": "Данни за плащане",
