@@ -7,7 +7,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
 import { z } from 'zod';
-import { ArrowLeft, Loader2 } from 'lucide-react';
+import { ArrowLeft, Loader2, X } from 'lucide-react';
 import { useAuth } from '@/components/auth-provider';
 import { Topbar } from '@/components/topbar';
 import { Button } from '@/components/ui/button';
@@ -330,8 +330,16 @@ function AvatarUploader({
             {busy ? t('profile.details.avatar.uploading') : t('profile.details.avatar.change')}
           </Button>
           {profile.avatarUrl ? (
-            <Button type="button" variant="ghost" size="sm" disabled={busy} onClick={onRemove}>
-              {t('profile.details.avatar.remove')}
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="h-9 w-9"
+              disabled={busy}
+              onClick={onRemove}
+              aria-label={t('profile.details.avatar.remove')}
+            >
+              <X className="h-4 w-4" />
             </Button>
           ) : null}
         </div>
