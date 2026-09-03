@@ -68,9 +68,29 @@ describe('ProfilePage', () => {
     compressAvatarFile.mockReset();
   });
 
-  it('renders the current/new/confirm password fields', async () => {
+  // TKT-0128: one section at a time — a growing page of stacked cards meant an ever-longer
+  // scroll instead of a clean switch between them.
+  it('shows only the active tab, not every section stacked', async () => {
+    const user = userEvent.setup();
     mockFetch(() => jsonResponse(404, null));
     renderPage();
+
+    // Defaults to "Profile details" — the password fields are not on the page yet.
+    const passwordTab = await screen.findByRole('tab', { name: /Change password|Смяна на парола/ });
+    expect(
+      screen.queryByLabelText(/Current password|Текуща парола/),
+    ).not.toBeInTheDocument();
+
+    await user.click(passwordTab);
+
+    expect(await screen.findByLabelText(/Current password|Текуща парола/)).toBeInTheDocument();
+  });
+
+  it('renders the current/new/confirm password fields', async () => {
+    const user = userEvent.setup();
+    mockFetch(() => jsonResponse(404, null));
+    renderPage();
+    await user.click(await screen.findByRole('tab', { name: /Change password|Смяна на парола/ }));
     expect(await screen.findByLabelText(/Current password|Текуща парола/)).toBeInTheDocument();
     expect(screen.getByLabelText(/^New password$|^Нова парола$/)).toBeInTheDocument();
     expect(
@@ -92,6 +112,7 @@ describe('ProfilePage', () => {
     });
     renderPage();
 
+    await user.click(await screen.findByRole('tab', { name: /Change password|Смяна на парола/ }));
     await user.type(await screen.findByLabelText(/Current password|Текуща парола/), 'OldPass123!');
     await user.type(screen.getByLabelText(/^New password$|^Нова парола$/), 'BrandNew123!');
     await user.type(
@@ -118,6 +139,7 @@ describe('ProfilePage', () => {
     });
     renderPage();
 
+    await user.click(await screen.findByRole('tab', { name: /Change password|Смяна на парола/ }));
     await user.type(await screen.findByLabelText(/Current password|Текуща парола/), 'WrongPass!');
     await user.type(screen.getByLabelText(/^New password$|^Нова парола$/), 'BrandNew123!');
     await user.type(
@@ -138,6 +160,7 @@ describe('ProfilePage', () => {
     const fetchSpy = mockFetch(() => jsonResponse(404, null));
     renderPage();
 
+    await user.click(await screen.findByRole('tab', { name: /Change password|Смяна на парола/ }));
     await user.type(await screen.findByLabelText(/Current password|Текуща парола/), 'OldPass123!');
     await user.type(screen.getByLabelText(/^New password$|^Нова парола$/), 'BrandNew123!');
     await user.type(
@@ -391,12 +414,13 @@ describe('ProfilePage — club payment details', () => {
     });
     renderPage();
 
+    await user.click(
+      await screen.findByRole('tab', { name: /Club payment details|Данни за плащане на клуба/ }),
+    );
     const iban = await screen.findByLabelText('IBAN');
     expect(iban).toHaveValue('BG80BNBG96611020345678');
 
     await user.type(screen.getByLabelText(/Revolut/), '@club');
-    // GET /users/me 404s (unmocked), so ProfileDetailsCard never renders — this is the only
-    // Save button on the page (ChangePasswordCard's own submit reads "Change password").
     await user.click(screen.getByRole('button', { name: /^Save$|^Запазване$/ }));
 
     await vi.waitFor(() => expect(patchBody).not.toBeNull());

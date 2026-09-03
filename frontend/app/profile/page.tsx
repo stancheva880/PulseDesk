@@ -22,6 +22,8 @@ import { AvatarImageError, compressAvatarFile } from '@/lib/avatar-image';
 import { broadcastAvatarChanged } from '@/lib/avatar-context';
 import { useRequireRole } from '@/lib/use-require-role';
 
+type ProfileTab = 'details' | 'password' | 'clubPayment';
+
 // Reachable by every signed-in role — no dashboard sidebar or portal nav, since neither
 // shell fits a page that isn't scoped to a role or a club. `useRequireRole(true, ...)`
 // still bounces an anonymous visitor to /login; the `true` just means every role passes.
@@ -32,6 +34,19 @@ export default function ProfilePage() {
 
   const [profile, setProfile] = useState<OwnProfile | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  // One section visible at a time — TKT-0128: a growing list of stacked cards (profile
+  // details, password, and now the club's payment default) meant an ever-longer page to
+  // scroll through instead of a clean switch between them.
+  const [tab, setTab] = useState<ProfileTab>('details');
+
+  const isManager = user?.role === 'ADMIN' || user?.role === 'SUPER_ADMIN';
+  const tabs: Array<{ key: ProfileTab; label: string }> = [
+    { key: 'details', label: t('profile.details.title') },
+    { key: 'password', label: t('profile.changePassword.title') },
+    ...(isManager ? [{ key: 'clubPayment' as const, label: t('profile.clubPaymentDetails.title') }] : []),
+  ];
+  // A role switch (or the tab losing its section) must not leave the page on a hidden tab.
+  const effectiveTab = tabs.some((tb) => tb.key === tab) ? tab : 'details';
 
   useEffect(() => {
     if (!ready) return;
@@ -52,19 +67,34 @@ export default function ProfilePage() {
             <p className="text-sm text-muted-foreground">{user?.email}</p>
           </div>
 
+          <div role="tablist" className="flex flex-wrap gap-2">
+            {tabs.map((tb) => (
+              <Button
+                key={tb.key}
+                type="button"
+                role="tab"
+                aria-selected={tb.key === effectiveTab}
+                variant={tb.key === effectiveTab ? 'default' : 'outline'}
+                onClick={() => setTab(tb.key)}
+              >
+                {tb.label}
+              </Button>
+            ))}
+          </div>
+
           {loadError ? <p className="text-sm text-destructive">{loadError}</p> : null}
 
-          {profile ? (
-            <ProfileDetailsCard profile={profile} onSaved={setProfile} />
-          ) : !loadError ? (
-            <p className="text-sm text-muted-foreground">{t('common.loading')}</p>
+          {effectiveTab === 'details' ? (
+            profile ? (
+              <ProfileDetailsCard profile={profile} onSaved={setProfile} />
+            ) : !loadError ? (
+              <p className="text-sm text-muted-foreground">{t('common.loading')}</p>
+            ) : null
           ) : null}
 
-          <ChangePasswordCard />
+          {effectiveTab === 'password' ? <ChangePasswordCard /> : null}
 
-          {user?.role === 'ADMIN' || user?.role === 'SUPER_ADMIN' ? (
-            <ClubPaymentDetailsCard />
-          ) : null}
+          {effectiveTab === 'clubPayment' && isManager ? <ClubPaymentDetailsCard /> : null}
         </div>
       </main>
     </div>
