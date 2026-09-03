@@ -26,3 +26,13 @@ export const TenantSummaryListSchema = z.array(TenantSummarySchema);
 export const CreatedTenantSchema = TenantSummarySchema.extend({
   notificationSent: z.boolean(),
 });
+
+// GET/PATCH /tenants/payment-details — the club's shared default. Every Location falls back
+// to these fields when its own (same-named) column is null; see locations.schema.ts.
+export const TenantPaymentDetailsSchema = z.object({
+  bankIban: z.string().nullable(),
+  bankAccountHolder: z.string().nullable(),
+  revolutHandle: z.string().nullable(),
+  paypalEmail: z.string().nullable(),
+  cashNote: z.string().nullable(),
+});

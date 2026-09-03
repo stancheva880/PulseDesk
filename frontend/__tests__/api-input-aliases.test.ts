@@ -17,7 +17,9 @@ import { describe, expect, it } from 'vitest';
 // waitlist — named in the approved tech plan) — same terms.
 // Approved TEST CHANGE REQUEST, 2026-08-23: 26 → 27 for ClaimWaitlistInput (TKT-0114,
 // claim-mode promotion — named in the approved tech plan) — same terms.
-const INPUT_TYPE_COUNT = 27;
+// Approved TEST CHANGE REQUEST, 2026-09-03: 27 → 29 for UpdateLocationPaymentDetailsInput and
+// UpdateTenantPaymentDetailsInput (TKT-0128, location/club payment details) — same terms.
+const INPUT_TYPE_COUNT = 29;
 
 const read = (...segments: string[]): string =>
   readFileSync(path.resolve(process.cwd(), ...segments), 'utf8');

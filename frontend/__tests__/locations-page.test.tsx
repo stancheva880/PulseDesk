@@ -93,14 +93,16 @@ describe('LocationsListPage', () => {
     expect(container.querySelector('a[href="/locations/loc-2/edit"]')).not.toBeNull();
   });
 
-  it('hides the new, edit and delete controls from an ADMIN', async () => {
+  // TKT-0128: an ADMIN can now open a row (to reach its payment-details section), but not
+  // create or delete a location — that stays SUPER_ADMIN-only.
+  it('shows the edit link but hides new/delete from an ADMIN', async () => {
     signIn('ADMIN');
     const { container } = renderPage();
 
     expect(await screen.findByText('Main Hall')).toBeInTheDocument();
     expect(container.querySelector('a[href="/locations/new"]')).toBeNull();
-    expect(container.querySelector('a[href="/locations/loc-1/edit"]')).toBeNull();
-    expect(container.querySelector('a[href="/locations/loc-2/edit"]')).toBeNull();
+    expect(container.querySelector('a[href="/locations/loc-1/edit"]')).not.toBeNull();
+    expect(container.querySelector('a[href="/locations/loc-2/edit"]')).not.toBeNull();
     expect(screen.queryAllByRole('button', { name: /Delete|Изтриване/ })).toHaveLength(0);
   });
 

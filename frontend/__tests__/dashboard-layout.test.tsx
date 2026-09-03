@@ -153,20 +153,22 @@ describe('DashboardLayout route guards', () => {
     vi.restoreAllMocks();
   });
 
-  // Location writes are SUPER_ADMIN-only on the API (locations.controller.ts:52,58,68),
-  // so an ADMIN must not reach either write route even by direct URL.
-  it('redirects an ADMIN away from the location write routes', async () => {
+  // Creating a location is still SUPER_ADMIN-only on the API (locations.controller.ts), so
+  // an ADMIN must not reach that route even by direct URL.
+  it('redirects an ADMIN away from the location create route', async () => {
     renderLayout('ADMIN', '/locations/new');
 
     await waitFor(() => expect(nav.replace).toHaveBeenCalledWith('/locations'));
     expect(screen.queryByText(CHILD)).not.toBeInTheDocument();
   });
 
-  it('redirects an ADMIN away from a location edit route', async () => {
+  // TKT-0128: an ADMIN can now open a location's edit route — location-form.tsx itself
+  // narrows what they see there to the payment-details section.
+  it('lets an ADMIN open a location edit route', async () => {
     renderLayout('ADMIN', '/locations/loc-1/edit');
 
-    await waitFor(() => expect(nav.replace).toHaveBeenCalledWith('/locations'));
-    expect(screen.queryByText(CHILD)).not.toBeInTheDocument();
+    expect(await screen.findByText(CHILD)).toBeInTheDocument();
+    expect(nav.replace).not.toHaveBeenCalled();
   });
 
   it('leaves the location list reachable for an ADMIN', async () => {

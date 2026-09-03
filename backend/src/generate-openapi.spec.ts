@@ -63,7 +63,11 @@ const HTTP_METHODS = ['get', 'post', 'put', 'patch', 'delete'];
 // Approved TEST CHANGE REQUEST, 2026-09-02: 86 → 87 for GET /me/trainees (portal "Деца"/
 // "Класове" tabs). Same terms: still exact, the route carries its own @ResponseSchema
 // (CustomerTraineeEntryList).
-const ROUTE_COUNT = 87;
+// Approved TEST CHANGE REQUEST, 2026-09-02: 87 → 91 for the payment-details feature — PATCH
+// /locations/:id/payment-details, GET /me/locations, GET+PATCH /tenants/payment-details.
+// Same terms: still exact, all four carry their own @ResponseSchema (Location,
+// CustomerLocationPaymentEntryList, TenantPaymentDetails ×2).
+const ROUTE_COUNT = 91;
 // Approved TEST CHANGE REQUEST, 2026-08-23: 8 → 9 for the WaitlistMode enum (TKT-0112 —
 // named in the approved tech plan). Same terms: still exact.
 const ENUM_COUNT = 9;
@@ -512,13 +516,18 @@ describe('generate-openapi', () => {
       string,
       { properties?: Record<string, { properties?: Record<string, unknown> }> }
     >;
-    // The full row publishes all seven columns...
+    // The full row publishes all twelve columns...
     expect(Object.keys(schemas.Location?.properties ?? {}).sort()).toEqual([
       'address',
+      'bankAccountHolder',
+      'bankIban',
+      'cashNote',
       'createdAt',
       'id',
       'isActive',
       'name',
+      'paypalEmail',
+      'revolutHandle',
       'tenantId',
       'updatedAt',
     ]);

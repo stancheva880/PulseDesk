@@ -114,6 +114,9 @@ type CreatedTenant = components['schemas']['CreatedTenant'];
 // that exist to recover from it (tenant-context.guard.ts:56 rejects a header naming a club the
 // server does not have). Never copy this flag onto a route whose authorization depends on the
 // per-tenant role: the guard's role swap reads the header it would drop.
+export type TenantPaymentDetails = components['schemas']['TenantPaymentDetails'];
+type UpdateTenantPaymentDetailsInput = components['schemas']['UpdateTenantPaymentDetailsDto'];
+
 export const Tenants = {
   list: () => apiRequest<TenantSummary[]>('/tenants', { omitTenantHeader: true }),
   // Onboards a club with its first location and its first administrator, in one call.
@@ -124,6 +127,14 @@ export const Tenants = {
       method: 'POST',
       body: input,
       omitTenantHeader: true,
+    }),
+  // Unlike list/create above, these ARE tenant-scoped (ADMIN or SUPER_ADMIN acting in a club)
+  // — the standard X-Tenant-Id attaches normally, no omitTenantHeader.
+  getPaymentDetails: () => apiRequest<TenantPaymentDetails>('/tenants/payment-details'),
+  updatePaymentDetails: (input: UpdateTenantPaymentDetailsInput) =>
+    apiRequest<TenantPaymentDetails>('/tenants/payment-details', {
+      method: 'PATCH',
+      body: input,
     }),
 };
 
@@ -223,6 +234,13 @@ export const Users = {
     }),
 };
 
+type UpdateLocationPaymentDetailsInput = components['schemas']['UpdateLocationPaymentDetailsDto'];
+// GET /me/locations — the portal's Payment details tab. Each location's own fields are
+// already resolved against the club's shared default server-side, so a null here means
+// neither the location nor the club has set that method, not "check elsewhere".
+export type CustomerLocationPaymentEntry =
+  components['schemas']['CustomerLocationPaymentEntryList'][number];
+
 export const Locations = {
   list: (params: PageParams = {}) =>
     apiRequest<PaginatedResult<Location>>(`/locations${buildQuery({ ...params })}`),
@@ -231,7 +249,10 @@ export const Locations = {
     apiRequest<Location>('/locations', { method: 'POST', body: input }),
   update: (id: string, input: UpdateLocationInput) =>
     apiRequest<Location>(`/locations/${id}`, { method: 'PATCH', body: input }),
+  updatePaymentDetails: (id: string, input: UpdateLocationPaymentDetailsInput) =>
+    apiRequest<Location>(`/locations/${id}/payment-details`, { method: 'PATCH', body: input }),
   remove: (id: string) => apiRequest<void>(`/locations/${id}`, { method: 'DELETE' }),
+  myPaymentDetails: () => apiRequest<CustomerLocationPaymentEntry[]>('/me/locations'),
 };
 
 // Filter sets, shaped like FeeListFilters above: hand-written because they describe query params,

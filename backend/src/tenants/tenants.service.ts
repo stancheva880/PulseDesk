@@ -6,6 +6,7 @@ import { MailService } from '@/mail/mail.service';
 import { trySend } from '@/mail/try-send';
 import { PrismaService } from '@/prisma/prisma.service';
 import type { CreateTenantDto } from './dto/create-tenant.dto';
+import type { UpdateTenantPaymentDetailsDto } from './dto/update-tenant-payment-details.dto';
 import type { CreatedTenant, TenantSummary } from './tenants.controller';
 
 @Injectable()
@@ -133,5 +134,30 @@ export class TenantsService {
     }
 
     return { ...tenant, notificationSent };
+  }
+
+  private static readonly PAYMENT_DETAILS_SELECT = {
+    bankIban: true,
+    bankAccountHolder: true,
+    revolutHandle: true,
+    paypalEmail: true,
+    cashNote: true,
+  } as const;
+
+  // TKT-0128: the club's shared default — every Location falls back to these fields when its
+  // own column is null (locations.service.ts's listPaymentDetailsForCustomer).
+  getPaymentDetails(tenantId: string) {
+    return this.prisma.tenant.findUniqueOrThrow({
+      where: { id: tenantId },
+      select: TenantsService.PAYMENT_DETAILS_SELECT,
+    });
+  }
+
+  updatePaymentDetails(tenantId: string, dto: UpdateTenantPaymentDetailsDto) {
+    return this.prisma.tenant.update({
+      where: { id: tenantId },
+      data: dto,
+      select: TenantsService.PAYMENT_DETAILS_SELECT,
+    });
   }
 }

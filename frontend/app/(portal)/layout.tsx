@@ -10,15 +10,16 @@ import { Topbar } from '@/components/topbar';
 import { cn } from '@/lib/utils';
 import { useActiveTenant, useRequireRole } from '@/lib/use-require-role';
 
-// The four tabs a customer's family view is organised into. "Деца" confirms who is actually
+// The five tabs a customer's family view is organised into. "Деца" confirms who is actually
 // linked to the account (a trainee with no fees/cards/sessions yet still appears there); the
-// other three are per-topic views over the same family. Every one of them is scoped
-// server-side to the signed-in customer's own trainees, so there is nothing to hide per tab.
+// rest are per-topic views over the same family. Every one of them is scoped server-side to
+// the signed-in customer's own trainees, so there is nothing to hide per tab.
 const PORTAL_TABS = [
   { href: '/portal/children', labelKey: 'portal.tabs.children' },
   { href: '/portal/classes', labelKey: 'portal.tabs.classes' },
   { href: '/portal/schedule', labelKey: 'portal.tabs.sessions' },
   { href: '/portal/fees', labelKey: 'portal.tabs.fees' },
+  { href: '/portal/payment-details', labelKey: 'portal.tabs.paymentDetails' },
 ] as const;
 
 export default function PortalLayout({ children }: { children: ReactNode }) {

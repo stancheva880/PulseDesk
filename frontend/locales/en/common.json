@@ -271,6 +271,10 @@
         "length": "Password must be at least 8 characters.",
         "match": "Passwords do not match."
       }
+    },
+    "clubPaymentDetails": {
+      "title": "Club payment details",
+      "subtitle": "The shared default for every location, unless a location sets its own."
     }
   },
   "dashboard": {
@@ -289,10 +293,22 @@
       "name": "Name",
       "address": "Address",
       "status": "Status",
-      "active": "Active"
+      "active": "Active",
+      "bankIban": "IBAN",
+      "bankAccountHolder": "Account holder",
+      "revolutHandle": "Revolut (username or link)",
+      "paypalEmail": "PayPal email",
+      "cashNote": "Cash payment note"
+    },
+    "paymentDetails": {
+      "title": "Payment details",
+      "hint": "Leave this empty to use the club's shared default (Profile → Club payment details).",
+      "add": "+ Add payment details for this location",
+      "remove": "Remove this location's own details"
     },
     "errors": {
-      "duplicate": "A location with this name already exists."
+      "duplicate": "A location with this name already exists.",
+      "paypalEmail": "Enter a valid email address."
     }
   },
   "classes": {
@@ -655,7 +671,24 @@
       "children": "Children",
       "classes": "Classes",
       "sessions": "Sessions",
-      "fees": "Fees"
+      "fees": "Fees",
+      "paymentDetails": "Payment details"
+    },
+    "paymentDetails": {
+      "title": "Payment details",
+      "subtitle": "How to pay fees — for every location your family trains at.",
+      "empty": "No trainees are linked to your account yet.",
+      "noneSet": "No payment details are set for this location yet.",
+      "methods": {
+        "bank": "Bank transfer (IBAN)",
+        "revolut": "Revolut",
+        "paypal": "PayPal",
+        "cash": "Cash on-site"
+      },
+      "fields": {
+        "iban": "IBAN",
+        "accountHolder": "Account holder"
+      }
     },
     "children": {
       "title": "Children",

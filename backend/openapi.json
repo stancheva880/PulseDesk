@@ -926,6 +926,98 @@
         ]
       }
     },
+    "/api/locations/{id}/payment-details": {
+      "patch": {
+        "operationId": "LocationsController_updatePaymentDetails",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Tenant the caller acts in. A tenant-bound user must name one of their own tenants (403 otherwise); a SUPER_ADMIN may name any active tenant (404 otherwise).",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateLocationPaymentDetailsDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Location"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Change where customers send money for this location. ADMIN or SUPER_ADMIN.",
+        "tags": [
+          "Locations"
+        ]
+      }
+    },
+    "/api/me/locations": {
+      "get": {
+        "operationId": "CustomerLocationsController_list",
+        "parameters": [
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Tenant the caller acts in. A tenant-bound user must name one of their own tenants (403 otherwise); a SUPER_ADMIN may name any active tenant (404 otherwise).",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerLocationPaymentEntryList"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List the family's locations with payment details, for the portal.",
+        "tags": [
+          "CustomerLocations"
+        ]
+      }
+    },
     "/api/classes": {
       "get": {
         "operationId": "ClassesController_list",
@@ -4214,6 +4306,88 @@
           "Tenants"
         ]
       }
+    },
+    "/api/tenants/payment-details": {
+      "get": {
+        "operationId": "TenantsController_getPaymentDetails",
+        "parameters": [
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Tenant the caller acts in. A tenant-bound user must name one of their own tenants (403 otherwise); a SUPER_ADMIN may name any active tenant (404 otherwise).",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantPaymentDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Read the club's shared default payment details.",
+        "tags": [
+          "Tenants"
+        ]
+      },
+      "patch": {
+        "operationId": "TenantsController_updatePaymentDetails",
+        "parameters": [
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "description": "Tenant the caller acts in. A tenant-bound user must name one of their own tenants (403 otherwise); a SUPER_ADMIN may name any active tenant (404 otherwise).",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateTenantPaymentDetailsDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantPaymentDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Change the club's shared default payment details.",
+        "tags": [
+          "Tenants"
+        ]
+      }
     }
   },
   "info": {
@@ -4233,7 +4407,7 @@
     },
     {
       "name": "Tenants",
-      "description": "Clubs and schools. SUPER_ADMIN only, reads included."
+      "description": "Clubs and schools. SUPER_ADMIN only, except the club's own shared payment-details pair, which ADMIN runs too."
     },
     {
       "name": "Users",
@@ -4241,7 +4415,7 @@
     },
     {
       "name": "Locations",
-      "description": "Venues within a tenant. Writes are SUPER_ADMIN only."
+      "description": "Venues within a tenant. Writes are SUPER_ADMIN only, except the payment-details pair, which ADMIN runs too, scoped to their own assigned locations."
     },
     {
       "name": "Classes",
@@ -4254,6 +4428,10 @@
     {
       "name": "CustomerTrainees",
       "description": "A family's own trainees (children or self), with the classes each is enrolled in — for the portal."
+    },
+    {
+      "name": "CustomerLocations",
+      "description": "The family's own locations, with payment details resolved against the club's shared default — for the portal."
     },
     {
       "name": "Contacts",
@@ -4559,6 +4737,36 @@
           },
           "isActive": {
             "type": "boolean"
+          }
+        }
+      },
+      "UpdateLocationPaymentDetailsDto": {
+        "type": "object",
+        "properties": {
+          "bankIban": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 50
+          },
+          "bankAccountHolder": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 120
+          },
+          "revolutHandle": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 120
+          },
+          "paypalEmail": {
+            "type": "string",
+            "nullable": true,
+            "format": "email"
+          },
+          "cashNote": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 500
           }
         }
       },
@@ -5407,6 +5615,36 @@
           "adminEmail"
         ]
       },
+      "UpdateTenantPaymentDetailsDto": {
+        "type": "object",
+        "properties": {
+          "bankIban": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 50
+          },
+          "bankAccountHolder": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 120
+          },
+          "revolutHandle": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 120
+          },
+          "paypalEmail": {
+            "type": "string",
+            "nullable": true,
+            "format": "email"
+          },
+          "cashNote": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 500
+          }
+        }
+      },
       "Health": {
         "type": "object",
         "properties": {
@@ -6018,6 +6256,56 @@
                 },
                 "updatedAt": {
                   "type": "string"
+                },
+                "bankIban": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "bankAccountHolder": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "revolutHandle": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "paypalEmail": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "cashNote": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
                 }
               },
               "required": [
@@ -6027,7 +6315,12 @@
                 "address",
                 "isActive",
                 "createdAt",
-                "updatedAt"
+                "updatedAt",
+                "bankIban",
+                "bankAccountHolder",
+                "revolutHandle",
+                "paypalEmail",
+                "cashNote"
               ],
               "additionalProperties": false
             }
@@ -6084,6 +6377,56 @@
           },
           "updatedAt": {
             "type": "string"
+          },
+          "bankIban": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "bankAccountHolder": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "revolutHandle": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "paypalEmail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "cashNote": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
@@ -6093,9 +6436,88 @@
           "address",
           "isActive",
           "createdAt",
-          "updatedAt"
+          "updatedAt",
+          "bankIban",
+          "bankAccountHolder",
+          "revolutHandle",
+          "paypalEmail",
+          "cashNote"
         ],
         "additionalProperties": false
+      },
+      "CustomerLocationPaymentEntryList": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "bankIban": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "bankAccountHolder": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "revolutHandle": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "paypalEmail": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "cashNote": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "id",
+            "name",
+            "bankIban",
+            "bankAccountHolder",
+            "revolutHandle",
+            "paypalEmail",
+            "cashNote"
+          ],
+          "additionalProperties": false
+        }
       },
       "PaginatedClassRow": {
         "type": "object",
@@ -7102,6 +7524,56 @@
                 },
                 "updatedAt": {
                   "type": "string"
+                },
+                "bankIban": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "bankAccountHolder": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "revolutHandle": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "paypalEmail": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "cashNote": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
                 }
               },
               "required": [
@@ -7111,7 +7583,12 @@
                 "address",
                 "isActive",
                 "createdAt",
-                "updatedAt"
+                "updatedAt",
+                "bankIban",
+                "bankAccountHolder",
+                "revolutHandle",
+                "paypalEmail",
+                "cashNote"
               ],
               "additionalProperties": false
             }
@@ -10763,6 +11240,69 @@
           "name",
           "isActive",
           "notificationSent"
+        ],
+        "additionalProperties": false
+      },
+      "TenantPaymentDetails": {
+        "type": "object",
+        "properties": {
+          "bankIban": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "bankAccountHolder": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "revolutHandle": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "paypalEmail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "cashNote": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "bankIban",
+          "bankAccountHolder",
+          "revolutHandle",
+          "paypalEmail",
+          "cashNote"
         ],
         "additionalProperties": false
       }

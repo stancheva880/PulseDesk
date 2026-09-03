@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
-import { TenantSummaryListSchema, TenantSummarySchema } from './tenants.schema';
+import {
+  TenantPaymentDetailsSchema,
+  TenantSummaryListSchema,
+  TenantSummarySchema,
+} from './tenants.schema';
 
 // GET /tenants fills the SUPER_ADMIN tenant selector and answers before any tenant is active,
 // so its shape is what TKT-0039's select-tenant panel renders against.
@@ -43,5 +47,32 @@ describe('TenantSummaryListSchema', () => {
     const parsed = TenantSummaryListSchema.parse([runtimeTenant]);
     expect(Array.isArray(parsed)).toBe(true);
     expect(parsed[0]!.slug).toBe('ace-tennis');
+  });
+});
+
+describe('TenantPaymentDetailsSchema', () => {
+  it('declares exactly the five payment fields, all nullable', () => {
+    const published = Object.keys(
+      (z.toJSONSchema(TenantPaymentDetailsSchema, { io: 'output' }).properties ?? {}) as Record<
+        string,
+        unknown
+      >,
+    );
+    expect(published.sort()).toEqual([
+      'bankAccountHolder',
+      'bankIban',
+      'cashNote',
+      'paypalEmail',
+      'revolutHandle',
+    ]);
+    const parsed = TenantPaymentDetailsSchema.parse({
+      bankIban: null,
+      bankAccountHolder: null,
+      revolutHandle: '@club',
+      paypalEmail: null,
+      cashNote: null,
+    });
+    expect(parsed.bankIban).toBeNull();
+    expect(parsed.revolutHandle).toBe('@club');
   });
 });

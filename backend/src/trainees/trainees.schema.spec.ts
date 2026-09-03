@@ -47,6 +47,12 @@ const runtimeLocation = {
   isActive: true,
   createdAt: new Date('2026-08-01T09:00:00.000Z'),
   updatedAt: new Date('2026-08-01T09:00:00.000Z'),
+  // TKT-0128: fixture completion for Location's new payment columns; no assertion changed.
+  bankIban: null,
+  bankAccountHolder: null,
+  revolutHandle: null,
+  paypalEmail: null,
+  cashNote: null,
 };
 
 const runtimeClass = {
@@ -149,10 +155,15 @@ describe('TraineeDetailSchema', () => {
     ]);
     expect(Object.keys(parsed.locations[0]!).sort()).toEqual([
       'address',
+      'bankAccountHolder',
+      'bankIban',
+      'cashNote',
       'createdAt',
       'id',
       'isActive',
       'name',
+      'paypalEmail',
+      'revolutHandle',
       'tenantId',
       'updatedAt',
     ]);

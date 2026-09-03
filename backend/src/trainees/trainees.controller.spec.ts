@@ -367,10 +367,15 @@ describe('TraineesController (e2e-ish)', () => {
       expect(res.body.contacts[0].relationship).toBe('PARENT');
       expect(Object.keys(res.body.locations[0]).sort()).toEqual([
         'address',
+        'bankAccountHolder',
+        'bankIban',
+        'cashNote',
         'createdAt',
         'id',
         'isActive',
         'name',
+        'paypalEmail',
+        'revolutHandle',
         'tenantId',
         'updatedAt',
       ]);

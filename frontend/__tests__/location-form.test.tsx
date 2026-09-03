@@ -97,6 +97,11 @@ describe('location form pages', () => {
   });
 
   it('edit: prefills from the record and sends isActive on save', async () => {
+    // The full name/address/isActive form is SUPER_ADMIN's — an ADMIN gets a narrower view,
+    // covered separately below.
+    setAccessToken(
+      buildJwt({ sub: 'u', email: 'a@b', role: 'SUPER_ADMIN', tenantId: 't', exp: Math.floor(Date.now() / 1000) + 600 }),
+    );
     const { container } = renderWithProviders(<EditLocationPage />);
 
     const name = await waitFor(() => {
@@ -121,6 +126,99 @@ describe('location form pages', () => {
     expect(await screen.findByText(/Запазено|^Saved$/)).toBeInTheDocument();
     expect(replace).not.toHaveBeenCalled();
     expect(container.querySelector<HTMLInputElement>('#name')!.value).toBe('Renamed Hall');
+  });
+
+  // TKT-0128: an ADMIN reaches the edit route but only for payment details — name/address/
+  // isActive stay a SUPER_ADMIN concern.
+  it('edit as ADMIN: shows only payment details, collapsed by default, and saves via its own PATCH', async () => {
+    let paymentPatchBody: Record<string, unknown> | null = null;
+    vi.spyOn(globalThis, 'fetch').mockImplementation((input, init) => {
+      const url = typeof input === 'string' ? input : (input as Request).url;
+      const method = init?.method ?? 'GET';
+      if (url.includes('/locations/loc-1/payment-details') && method === 'PATCH') {
+        paymentPatchBody = init?.body ? JSON.parse(init.body as string) : null;
+        return Promise.resolve(jsonResponse(200, { ...LOCATION, revolutHandle: '@studio' }));
+      }
+      if (url.includes('/locations/loc-1')) return Promise.resolve(jsonResponse(200, LOCATION));
+      return Promise.resolve(jsonResponse(200, {}));
+    });
+    const { container } = renderWithProviders(<EditLocationPage />);
+
+    expect(await screen.findByText('Main Hall')).toBeInTheDocument();
+    expect(container.querySelector('#name')).toBeNull();
+    expect(container.querySelector('#revolutHandle')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: /Add payment details|Добавяне на собствени/ }));
+    fireEvent.change(container.querySelector('#revolutHandle')!, { target: { value: '@studio' } });
+    fireEvent.click(container.querySelector('button[type="submit"]')!);
+
+    await waitFor(() => {
+      expect(paymentPatchBody).not.toBeNull();
+      expect(paymentPatchBody!.revolutHandle).toBe('@studio');
+      expect(patchBody).toBeNull(); // the general PATCH /locations/:id never fires for ADMIN
+    });
+  });
+
+  // A location that already has its own override shows the fields expanded, not behind the
+  // "+ Add" button — there is nothing left to reveal.
+  it('edit: payment fields start expanded when the location already has an override', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
+      const url = typeof input === 'string' ? input : (input as Request).url;
+      if (url.includes('/locations/loc-1')) {
+        return Promise.resolve(jsonResponse(200, { ...LOCATION, revolutHandle: '@studio' }));
+      }
+      return Promise.resolve(jsonResponse(200, {}));
+    });
+    const { container } = renderWithProviders(<EditLocationPage />);
+
+    const revolut = await waitFor(() => {
+      const el = container.querySelector<HTMLInputElement>('#revolutHandle');
+      if (!el) throw new Error('not rendered yet');
+      return el;
+    });
+    expect(revolut.value).toBe('@studio');
+    expect(
+      screen.queryByRole('button', { name: /Add payment details|Добавяне на собствени/ }),
+    ).not.toBeInTheDocument();
+  });
+
+  // SUPER_ADMIN gets both: the full location form and the payment-details section, saved with
+  // one submit.
+  it('edit as SUPER_ADMIN: saving with payment details open sends both PATCH calls', async () => {
+    setAccessToken(
+      buildJwt({ sub: 'u', email: 'a@b', role: 'SUPER_ADMIN', tenantId: 't', exp: Math.floor(Date.now() / 1000) + 600 }),
+    );
+    let paymentPatchBody: Record<string, unknown> | null = null;
+    vi.spyOn(globalThis, 'fetch').mockImplementation((input, init) => {
+      const url = typeof input === 'string' ? input : (input as Request).url;
+      const method = init?.method ?? 'GET';
+      if (url.includes('/locations/loc-1/payment-details') && method === 'PATCH') {
+        paymentPatchBody = init?.body ? JSON.parse(init.body as string) : null;
+        return Promise.resolve(jsonResponse(200, LOCATION));
+      }
+      if (url.includes('/locations/loc-1') && method === 'PATCH') {
+        patchBody = init?.body ? JSON.parse(init.body as string) : null;
+        return Promise.resolve(jsonResponse(200, LOCATION));
+      }
+      if (url.includes('/locations/loc-1')) return Promise.resolve(jsonResponse(200, LOCATION));
+      return Promise.resolve(jsonResponse(200, {}));
+    });
+    const { container } = renderWithProviders(<EditLocationPage />);
+
+    await waitFor(() => {
+      if (container.querySelector<HTMLInputElement>('#name')!.value !== 'Main Hall') {
+        throw new Error('not prefilled yet');
+      }
+    });
+    fireEvent.click(screen.getByRole('button', { name: /Add payment details|Добавяне на собствени/ }));
+    fireEvent.change(container.querySelector('#bankIban')!, { target: { value: 'BG80BNBG96611020345678' } });
+    fireEvent.click(container.querySelector('button[type="submit"]')!);
+
+    await waitFor(() => {
+      expect(patchBody).not.toBeNull();
+      expect(paymentPatchBody).not.toBeNull();
+      expect(paymentPatchBody!.bankIban).toBe('BG80BNBG96611020345678');
+    });
   });
 
   // TKT-0090: a failed field says what is wrong in words, wired for assistive tech.

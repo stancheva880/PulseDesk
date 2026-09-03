@@ -1,13 +1,19 @@
-import { Body, Controller, Get, Post } from '@nestjs/common';
+import { Body, Controller, Get, Patch, Post } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { UserRole } from '@prisma/client';
 import { Roles } from '@/auth/decorators/roles.decorator';
+import { TenantId } from '@/auth/decorators/tenant-id.decorator';
 import { DEFAULT_LIST_TAKE } from '@/common/dto/paginated-result';
 import { ResponseSchema } from '@/common/response-schema';
 import { PrismaService } from '@/prisma/prisma.service';
 import { CreateTenantDto } from './dto/create-tenant.dto';
+import { UpdateTenantPaymentDetailsDto } from './dto/update-tenant-payment-details.dto';
 import { TenantsService } from './tenants.service';
-import { CreatedTenantSchema, TenantSummaryListSchema } from './tenants.schema';
+import {
+  CreatedTenantSchema,
+  TenantPaymentDetailsSchema,
+  TenantSummaryListSchema,
+} from './tenants.schema';
 
 export interface TenantSummary {
   id: string;
@@ -24,6 +30,9 @@ export interface CreatedTenant extends TenantSummary {
 // SUPER_ADMIN-only read-only endpoint that powers the frontend tenant selector.
 // The RolesGuard's SUPER_ADMIN bypass means this is also reachable by SUPER_ADMIN
 // without further annotation; ADMIN/EMPLOYEE/CUSTOMER are rejected with 403.
+// TKT-0128 carves out one exception: the payment-details pair is ADMIN's to run day to day
+// too (the club's own shared bank/Revolut/PayPal/cash default), so those two routes override
+// with their own, wider @Roles().
 @ApiBearerAuth()
 @Controller('tenants')
 @Roles(UserRole.SUPER_ADMIN)
@@ -51,5 +60,24 @@ export class TenantsController {
   @ResponseSchema('CreatedTenant', CreatedTenantSchema)
   create(@Body() dto: CreateTenantDto): Promise<CreatedTenant> {
     return this.tenants.create(dto);
+  }
+
+  @ApiOperation({ summary: "Read the club's shared default payment details." })
+  @Get('payment-details')
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @ResponseSchema('TenantPaymentDetails', TenantPaymentDetailsSchema)
+  getPaymentDetails(@TenantId() tenantId: string) {
+    return this.tenants.getPaymentDetails(tenantId);
+  }
+
+  @ApiOperation({ summary: "Change the club's shared default payment details." })
+  @Patch('payment-details')
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @ResponseSchema('TenantPaymentDetails', TenantPaymentDetailsSchema)
+  updatePaymentDetails(
+    @TenantId() tenantId: string,
+    @Body() dto: UpdateTenantPaymentDetailsDto,
+  ) {
+    return this.tenants.updatePaymentDetails(tenantId, dto);
   }
 }

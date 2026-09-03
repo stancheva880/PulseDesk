@@ -7,15 +7,19 @@ import { useAuth } from '@/components/auth-provider';
 import { DataTable, type DataTableColumn } from '@/components/data-table';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { isManager } from '@/lib/auth-storage';
 import { Locations, type Location } from '@/lib/api-resources';
 import { useCrudList } from '@/lib/use-crud-list';
 
 export default function LocationsListPage() {
   const { t } = useTranslation();
   const { user } = useAuth();
-  // Not isManager(): location writes are SUPER_ADMIN-only on the API, since the tenant's
-  // location footprint is a system-administrator concern (locations.controller.ts:52,58,68).
+  // Creating/deleting a location is still a system-administrator concern
+  // (locations.controller.ts) — SUPER_ADMIN only.
   const canWrite = user?.role === 'SUPER_ADMIN';
+  // TKT-0128: an ADMIN can now open a row too, to reach its payment-details section
+  // (location-form.tsx hides the rest of the form from them).
+  const canOpen = isManager(user?.role);
   const { rows, setPage, pageInfo, error, pendingDelete, setPendingDelete, busy, onDelete } =
     useCrudList(Locations, { deletedName: (loc) => loc.name });
 
@@ -74,23 +78,25 @@ export default function LocationsListPage() {
         rows={rows}
         rowKey={(loc) => loc.id}
         emptyText={t('locations.empty')}
-        // Location edits are SUPER_ADMIN-only and the layout bounces everyone else off the
-        // route (layout.tsx DENY_RULES) — an inert row is honest, a bounce is not (TKT-0088).
-        rowHref={canWrite ? (loc) => `/locations/${loc.id}/edit` : undefined}
+        // An EMPLOYEE cannot open a row at all — the layout bounces them off the edit route
+        // (layout.tsx DENY_RULES) — an inert row is honest, a bounce is not (TKT-0088).
+        rowHref={canOpen ? (loc) => `/locations/${loc.id}/edit` : undefined}
         actions={(loc) =>
-          canWrite ? (
+          canOpen ? (
             <>
               <Button asChild variant="ghost" size="sm">
                 <Link href={`/locations/${loc.id}/edit`}>{t('common.edit')}</Link>
               </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="ml-1 text-destructive hover:bg-destructive/10 hover:text-destructive"
-                onClick={() => setPendingDelete(loc)}
-              >
-                {t('common.delete')}
-              </Button>
+              {canWrite ? (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="ml-1 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                  onClick={() => setPendingDelete(loc)}
+                >
+                  {t('common.delete')}
+                </Button>
+              ) : null}
             </>
           ) : null
         }

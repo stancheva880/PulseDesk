@@ -13,6 +13,17 @@ import {
 import { PrismaService } from '@/prisma/prisma.service';
 import type { CreateLocationDto } from './dto/create-location.dto';
 import type { UpdateLocationDto } from './dto/update-location.dto';
+import type { UpdateLocationPaymentDetailsDto } from './dto/update-location-payment-details.dto';
+
+const CUSTOMER_PAYMENT_SELECT = {
+  id: true,
+  name: true,
+  bankIban: true,
+  bankAccountHolder: true,
+  revolutHandle: true,
+  paypalEmail: true,
+  cashNote: true,
+} as const;
 
 @Injectable()
 export class LocationsService {
@@ -101,6 +112,74 @@ export class LocationsService {
       }
       throw e;
     }
+  }
+
+  /**
+   * TKT-0128: where customers send money for this location. Split from `update()` (name/
+   * address/isActive) because it has its own, wider role floor — ADMIN edits this day to day,
+   * unlike the rest of a location, which stays SUPER_ADMIN-only (locations.controller.ts).
+   * An ADMIN is scoped to their own assigned locations, same guard `assertLocationsAllowed`
+   * already gives every other ADMIN-scoped write; a SUPER_ADMIN is unrestricted.
+   */
+  async updatePaymentDetails(
+    tenantId: string,
+    id: string,
+    dto: UpdateLocationPaymentDetailsDto,
+    actor: AuthenticatedUser,
+  ): Promise<Location> {
+    const existing = await this.prisma.location.findFirst({ where: { id, tenantId } });
+    if (!existing) throw new NotFoundException(`Location ${id} not found`);
+    await this.scope.assertLocationsAllowed(actor, tenantId, [id]);
+    return this.prisma.location.update({ where: { id }, data: dto });
+  }
+
+  // Read-only list for the customer portal's Payment details tab: the locations assigned to
+  // the customer's own trainees (their own record, or a guarded child's) — same ownership
+  // rule as fees/sessions/cards/trainees. Deliberately sourced from `Trainee.locations`, not
+  // from Fee (a Fee carries no reliable location — see the TKT-0128 tech plan) or from
+  // Class.locations (many-to-many, so a class can span locations a given trainee never
+  // actually attends).
+  //
+  // Each location's own (possibly-null) fields win; a null one falls back to the club's
+  // shared default (Tenant's own same-named columns) — the portal always gets a single
+  // resolved answer per location, never has to know a location was inheriting.
+  async listPaymentDetailsForCustomer(tenantId: string, customerUserId: string) {
+    const [tenant, locations] = await Promise.all([
+      this.prisma.tenant.findUniqueOrThrow({
+        where: { id: tenantId },
+        select: {
+          bankIban: true,
+          bankAccountHolder: true,
+          revolutHandle: true,
+          paypalEmail: true,
+          cashNote: true,
+        },
+      }),
+      this.prisma.location.findMany({
+        where: {
+          tenantId,
+          trainees: {
+            some: {
+              OR: [
+                { userId: customerUserId },
+                { guardians: { some: { id: customerUserId } } },
+              ],
+            },
+          },
+        },
+        select: CUSTOMER_PAYMENT_SELECT,
+        orderBy: { name: 'asc' },
+      }),
+    ]);
+    return locations.map((loc) => ({
+      id: loc.id,
+      name: loc.name,
+      bankIban: loc.bankIban ?? tenant.bankIban,
+      bankAccountHolder: loc.bankAccountHolder ?? tenant.bankAccountHolder,
+      revolutHandle: loc.revolutHandle ?? tenant.revolutHandle,
+      paypalEmail: loc.paypalEmail ?? tenant.paypalEmail,
+      cashNote: loc.cashNote ?? tenant.cashNote,
+    }));
   }
 
   async delete(tenantId: string, id: string): Promise<void> {

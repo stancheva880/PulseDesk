@@ -30,11 +30,12 @@ const DENY_RULES: Array<{
     matches: (p) => p === '/schedules/new' || /^\/schedules\/[^/]+\/edit$/.test(p),
     redirectTo: '/schedules',
   },
-  // Location writes are SUPER_ADMIN-only (locations.controller.ts:52,58,68). Matched
-  // exactly rather than by prefix, so /locations itself stays reachable for an ADMIN.
+  // Creating a location is still SUPER_ADMIN-only (locations.controller.ts). The edit route
+  // stays reachable for an ADMIN too — TKT-0128 opened its payment-details section to them;
+  // location-form.tsx itself hides name/address/isActive from anyone but a SUPER_ADMIN.
   {
     role: 'ADMIN',
-    matches: (p) => p === '/locations/new' || /^\/locations\/[^/]+\/edit$/.test(p),
+    matches: (p) => p === '/locations/new',
     redirectTo: '/locations',
   },
   // Creating a club is SUPER_ADMIN-only (tenants.controller.ts is @Roles(SUPER_ADMIN)).

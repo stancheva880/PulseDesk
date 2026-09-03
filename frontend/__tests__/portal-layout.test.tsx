@@ -107,9 +107,9 @@ describe('PortalLayout active-tenant gate', () => {
     expect(readTenantContext()).toBe('left-over');
   });
 
-  // The front-facing family view: four tabs, always in the header, each scoped server-side
+  // The front-facing family view: five tabs, always in the header, each scoped server-side
   // to the signed-in customer's own trainees.
-  it('shows the brand mark and the four family tabs', async () => {
+  it('shows the brand mark and the five family tabs', async () => {
     writeStoredMemberships(MEMBERSHIPS);
 
     renderPortal();
@@ -135,5 +135,8 @@ describe('PortalLayout active-tenant gate', () => {
       'href',
       '/portal/fees',
     );
+    expect(
+      screen.getByRole('link', { name: /^Payment details$|^Данни за плащане$/ }),
+    ).toHaveAttribute('href', '/portal/payment-details');
   });
 });

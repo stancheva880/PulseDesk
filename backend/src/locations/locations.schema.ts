@@ -12,6 +12,13 @@ export const LocationSchema = z.object({
   isActive: z.boolean(),
   createdAt: isoDate,
   updatedAt: isoDate,
+  // Where customers send money for a fee here. All independently optional — a club fills
+  // in whichever it actually offers.
+  bankIban: z.string().nullable(),
+  bankAccountHolder: z.string().nullable(),
+  revolutHandle: z.string().nullable(),
+  paypalEmail: z.string().nullable(),
+  cashNote: z.string().nullable(),
 });
 
 export const PaginatedLocationSchema = paginatedSchema(LocationSchema);
@@ -27,3 +34,18 @@ export const PaginatedLocationSchema = paginatedSchema(LocationSchema);
  * not a published component.
  */
 export const LocationRefSchema = z.object({ id: z.string(), name: z.string() });
+
+// GET /me/locations (locations.service.ts's listPaymentDetailsForCustomer) — the portal's
+// Payment details tab. Narrowed by `select`, not the full LocationSchema: the portal has no
+// use for tenantId/address/isActive/timestamps, only the identity + the payment fields.
+export const CustomerLocationPaymentEntrySchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  bankIban: z.string().nullable(),
+  bankAccountHolder: z.string().nullable(),
+  revolutHandle: z.string().nullable(),
+  paypalEmail: z.string().nullable(),
+  cashNote: z.string().nullable(),
+});
+
+export const CustomerLocationPaymentEntryListSchema = z.array(CustomerLocationPaymentEntrySchema);

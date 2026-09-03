@@ -355,3 +355,75 @@ describe('ProfilePage', () => {
     });
   });
 });
+
+// Own describe: the club payment-details card is ADMIN/SUPER_ADMIN only, where the rest of
+// this file uses EMPLOYEE throughout.
+describe('ProfilePage — club payment details', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    clearStoredTokens();
+  });
+
+  function signIn(role: 'ADMIN' | 'SUPER_ADMIN' | 'EMPLOYEE' | 'CUSTOMER'): void {
+    const exp = Math.floor(Date.now() / 1000) + 600;
+    setAccessToken(buildJwt({ sub: 'u1', email: 'a@x.com', role, tenantId: 't', exp }));
+  }
+
+  const DETAILS = {
+    bankIban: 'BG80BNBG96611020345678',
+    bankAccountHolder: 'Club EOOD',
+    revolutHandle: null,
+    paypalEmail: null,
+    cashNote: null,
+  };
+
+  it('loads and lets an ADMIN save the club default', async () => {
+    const user = userEvent.setup();
+    signIn('ADMIN');
+    let patchBody: unknown = null;
+    mockFetch((url, init) => {
+      if (url.endsWith('/tenants/payment-details') && init?.method === 'PATCH') {
+        patchBody = JSON.parse(init.body as string);
+        return jsonResponse(200, { ...DETAILS, revolutHandle: '@club' });
+      }
+      if (url.endsWith('/tenants/payment-details')) return jsonResponse(200, DETAILS);
+      return jsonResponse(404, null);
+    });
+    renderPage();
+
+    const iban = await screen.findByLabelText('IBAN');
+    expect(iban).toHaveValue('BG80BNBG96611020345678');
+
+    await user.type(screen.getByLabelText(/Revolut/), '@club');
+    // GET /users/me 404s (unmocked), so ProfileDetailsCard never renders — this is the only
+    // Save button on the page (ChangePasswordCard's own submit reads "Change password").
+    await user.click(screen.getByRole('button', { name: /^Save$|^Запазване$/ }));
+
+    await vi.waitFor(() => expect(patchBody).not.toBeNull());
+    expect((patchBody as { revolutHandle: string }).revolutHandle).toBe('@club');
+  });
+
+  it('is visible for SUPER_ADMIN too', async () => {
+    signIn('SUPER_ADMIN');
+    mockFetch((url) => {
+      if (url.endsWith('/tenants/payment-details')) return jsonResponse(200, DETAILS);
+      return jsonResponse(404, null);
+    });
+    renderPage();
+
+    expect(
+      await screen.findByText(/Club payment details|Данни за плащане на клуба/),
+    ).toBeInTheDocument();
+  });
+
+  it('is hidden for EMPLOYEE and CUSTOMER', async () => {
+    signIn('EMPLOYEE');
+    mockFetch(() => jsonResponse(404, null));
+    renderPage();
+
+    await screen.findByText(/^My profile$|^Моят профил$/);
+    expect(
+      screen.queryByText(/Club payment details|Данни за плащане на клуба/),
+    ).not.toBeInTheDocument();
+  });
+});

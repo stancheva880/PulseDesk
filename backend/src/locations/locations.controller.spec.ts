@@ -472,6 +472,82 @@ describe('LocationsController (e2e-ish)', () => {
     });
   });
 
+  describe('PATCH /locations/:id/payment-details', () => {
+    it('super_admin can set payment details', async () => {
+      const tenant = await newTenant();
+      const created = await prisma.location.create({ data: { tenantId: tenant.id, name: 'Studio' } });
+      const su = await setupSuperAdmin();
+      const res = await request(server)
+        .patch(`/locations/${created.id}/payment-details`)
+        .set('Authorization', `Bearer ${su.accessToken}`)
+        .set('X-Tenant-Id', tenant.id)
+        .send({ bankIban: 'BG80BNBG96611020345678', bankAccountHolder: 'Studio EOOD' })
+        .expect(200);
+      expect(res.body.bankIban).toBe('BG80BNBG96611020345678');
+      expect(res.body.bankAccountHolder).toBe('Studio EOOD');
+    });
+
+    it('admin assigned to the location can set payment details', async () => {
+      const admin = await setupTenantActor(UserRole.ADMIN);
+      const created = await prisma.location.create({
+        data: { tenantId: admin.tenantId!, name: 'Studio' },
+      });
+      await prisma.user.update({
+        where: { id: admin.userId },
+        data: { locations: { connect: [{ id: created.id }] } },
+      });
+      const res = await request(server)
+        .patch(`/locations/${created.id}/payment-details`)
+        .set('Authorization', `Bearer ${admin.accessToken}`)
+        .set('X-Tenant-Id', admin.tenantId!)
+        .send({ revolutHandle: '@studio' })
+        .expect(200);
+      expect(res.body.revolutHandle).toBe('@studio');
+    });
+
+    it('admin outside the location gets 403', async () => {
+      const admin = await setupTenantActor(UserRole.ADMIN);
+      const created = await prisma.location.create({
+        data: { tenantId: admin.tenantId!, name: 'Studio' },
+      });
+      await request(server)
+        .patch(`/locations/${created.id}/payment-details`)
+        .set('Authorization', `Bearer ${admin.accessToken}`)
+        .set('X-Tenant-Id', admin.tenantId!)
+        .send({ revolutHandle: '@studio' })
+        .expect(403);
+    });
+
+    it('employee gets 403', async () => {
+      const employee = await setupTenantActor(UserRole.EMPLOYEE);
+      const created = await prisma.location.create({
+        data: { tenantId: employee.tenantId!, name: 'Studio' },
+      });
+      await prisma.user.update({
+        where: { id: employee.userId },
+        data: { locations: { connect: [{ id: created.id }] } },
+      });
+      await request(server)
+        .patch(`/locations/${created.id}/payment-details`)
+        .set('Authorization', `Bearer ${employee.accessToken}`)
+        .set('X-Tenant-Id', employee.tenantId!)
+        .send({ revolutHandle: '@studio' })
+        .expect(403);
+    });
+
+    it('rejects a malformed paypalEmail with 400', async () => {
+      const tenant = await newTenant();
+      const created = await prisma.location.create({ data: { tenantId: tenant.id, name: 'Studio' } });
+      const su = await setupSuperAdmin();
+      await request(server)
+        .patch(`/locations/${created.id}/payment-details`)
+        .set('Authorization', `Bearer ${su.accessToken}`)
+        .set('X-Tenant-Id', tenant.id)
+        .send({ paypalEmail: 'not-an-email' })
+        .expect(400);
+    });
+  });
+
   describe('DELETE /locations/:id', () => {
     it('super_admin can delete a location (returns 204)', async () => {
       const tenant = await newTenant();

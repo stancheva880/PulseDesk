@@ -19,6 +19,13 @@ const runtimeLocation = {
   isActive: true,
   createdAt: new Date('2026-05-01T09:00:00.000Z'),
   updatedAt: new Date('2026-05-02T09:00:00.000Z'),
+  // TKT-0128: where customers send money for this location — null when it inherits the
+  // club's shared default instead (see Tenant's own payment-detail columns).
+  bankIban: null,
+  bankAccountHolder: null,
+  revolutHandle: null,
+  paypalEmail: null,
+  cashNote: null,
 };
 
 const publishedNames = (schema: z.ZodType): string[] =>
@@ -27,13 +34,18 @@ const publishedNames = (schema: z.ZodType): string[] =>
   );
 
 describe('LocationSchema', () => {
-  it('declares exactly the seven Location fields', () => {
+  it('declares exactly the twelve Location fields', () => {
     expect(publishedNames(LocationSchema).sort()).toEqual([
       'address',
+      'bankAccountHolder',
+      'bankIban',
+      'cashNote',
       'createdAt',
       'id',
       'isActive',
       'name',
+      'paypalEmail',
+      'revolutHandle',
       'tenantId',
       'updatedAt',
     ]);

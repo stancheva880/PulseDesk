@@ -96,6 +96,14 @@ model Tenant {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  // The club's shared default for where customers send money — every Location falls back to
+  // these when its own (same-named) column is null. Independently optional, same as Location's.
+  bankIban          String?
+  bankAccountHolder String?
+  revolutHandle     String?
+  paypalEmail       String?
+  cashNote          String?
+
   memberships    Membership[]
   locations      Location[]
   classes        Class[]
@@ -226,6 +234,14 @@ model Location {
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  // Where customers send money for a fee at this location. All optional — a club fills in
+  // whichever it actually offers; the portal only renders a tab for a populated one.
+  bankIban          String?
+  bankAccountHolder String?
+  revolutHandle     String?
+  paypalEmail       String?
+  cashNote          String?
 
   trainers       User[]          @relation("UserLocations")
   trainees       Trainee[]       @relation("TraineeLocations")

@@ -137,6 +137,102 @@ describe('TenantsController (e2e-ish)', () => {
     await request(server).get('/tenants').expect(401);
   });
 
+  describe('GET/PATCH /tenants/payment-details', () => {
+    async function newTenantActor(role: UserRole) {
+      const tenant = await prisma.tenant.create({
+        data: { slug: `t-${randomUUID()}`, name: 'Test Tenant' },
+      });
+      tenantIds.push(tenant.id);
+      const user = await createTestUser(prisma, {
+        email: `${randomUUID()}@x.local`,
+        passwordHash: await auth.hashPassword(PASSWORD),
+        role,
+        tenantId: tenant.id,
+      });
+      userIds.push(user.id);
+      const tokens = await auth.login(user);
+      return { tenantId: tenant.id, accessToken: tokens.accessToken };
+    }
+
+    it('ADMIN can set and read back the club default', async () => {
+      const admin = await newTenantActor(UserRole.ADMIN);
+      const patched = await request(server)
+        .patch('/tenants/payment-details')
+        .set('Authorization', `Bearer ${admin.accessToken}`)
+        .set('X-Tenant-Id', admin.tenantId)
+        .send({ bankIban: 'BG80BNBG96611020345678', bankAccountHolder: 'Club EOOD' })
+        .expect(200);
+      expect(patched.body).toEqual({
+        bankIban: 'BG80BNBG96611020345678',
+        bankAccountHolder: 'Club EOOD',
+        revolutHandle: null,
+        paypalEmail: null,
+        cashNote: null,
+      });
+
+      const read = await request(server)
+        .get('/tenants/payment-details')
+        .set('Authorization', `Bearer ${admin.accessToken}`)
+        .set('X-Tenant-Id', admin.tenantId)
+        .expect(200);
+      expect(read.body.bankIban).toBe('BG80BNBG96611020345678');
+    });
+
+    it('SUPER_ADMIN can set it too, for any active tenant they select', async () => {
+      const tenant = await prisma.tenant.create({
+        data: { slug: `t-${randomUUID()}`, name: 'Test Tenant' },
+      });
+      tenantIds.push(tenant.id);
+      const token = await newSuperAdmin();
+      await request(server)
+        .patch('/tenants/payment-details')
+        .set('Authorization', `Bearer ${token}`)
+        .set('X-Tenant-Id', tenant.id)
+        .send({ revolutHandle: '@club' })
+        .expect(200);
+      const stored = await prisma.tenant.findUniqueOrThrow({ where: { id: tenant.id } });
+      expect(stored.revolutHandle).toBe('@club');
+    });
+
+    it('EMPLOYEE gets 403', async () => {
+      const employee = await newTenantActor(UserRole.EMPLOYEE);
+      await request(server)
+        .patch('/tenants/payment-details')
+        .set('Authorization', `Bearer ${employee.accessToken}`)
+        .set('X-Tenant-Id', employee.tenantId)
+        .send({ cashNote: 'x' })
+        .expect(403);
+    });
+
+    it('clears a field with an explicit null, leaves an omitted one untouched', async () => {
+      const admin = await newTenantActor(UserRole.ADMIN);
+      await request(server)
+        .patch('/tenants/payment-details')
+        .set('Authorization', `Bearer ${admin.accessToken}`)
+        .set('X-Tenant-Id', admin.tenantId)
+        .send({ bankIban: 'BG80BNBG96611020345678', paypalEmail: 'club@x.com' })
+        .expect(200);
+      const cleared = await request(server)
+        .patch('/tenants/payment-details')
+        .set('Authorization', `Bearer ${admin.accessToken}`)
+        .set('X-Tenant-Id', admin.tenantId)
+        .send({ bankIban: null })
+        .expect(200);
+      expect(cleared.body.bankIban).toBeNull();
+      expect(cleared.body.paypalEmail).toBe('club@x.com');
+    });
+
+    it('rejects a malformed paypalEmail with 400', async () => {
+      const admin = await newTenantActor(UserRole.ADMIN);
+      await request(server)
+        .patch('/tenants/payment-details')
+        .set('Authorization', `Bearer ${admin.accessToken}`)
+        .set('X-Tenant-Id', admin.tenantId)
+        .send({ paypalEmail: 'not-an-email' })
+        .expect(400);
+    });
+  });
+
   describe('POST /tenants', () => {
     function payload(over: Record<string, unknown> = {}) {
       const unique = randomUUID();
