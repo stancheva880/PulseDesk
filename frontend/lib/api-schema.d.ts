@@ -1327,7 +1327,7 @@ export interface components {
             locationName: string;
             locationAddress?: string;
             /** Format: email */
-            adminEmail: string;
+            adminEmail?: string;
             adminFirstName?: string;
             adminLastName?: string;
         };

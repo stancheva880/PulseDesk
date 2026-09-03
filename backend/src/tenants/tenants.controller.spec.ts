@@ -290,6 +290,34 @@ describe('TenantsController (e2e-ish)', () => {
       expect(admin!.passwordHash).toBeNull();
     });
 
+    // TKT-0133: adminEmail is optional — a club can be onboarded with nobody administering it
+    // yet, and an administrator assigned later from Users.
+    it('creates the club and its first location with no administrator when adminEmail is omitted', async () => {
+      const token = await newSuperAdmin();
+      const { adminEmail: _drop1, adminFirstName: _drop2, adminLastName: _drop3, ...rest } =
+        payload();
+
+      const res = await request(server)
+        .post('/tenants')
+        .set('Authorization', `Bearer ${token}`)
+        .send(rest)
+        .expect(201);
+      tenantIds.push(res.body.id);
+
+      expect(res.body).toEqual({
+        id: expect.any(String) as string,
+        slug: rest.slug,
+        name: rest.name,
+        isActive: true,
+        notificationSent: true,
+      });
+      const location = await prisma.location.findFirst({ where: { tenantId: res.body.id } });
+      expect(location?.name).toBe('Central Hall');
+      expect(await prisma.membership.count({ where: { tenantId: res.body.id } })).toBe(0);
+      expect(mailMock.sendInvite).not.toHaveBeenCalled();
+      expect(mailMock.sendClubAccess).not.toHaveBeenCalled();
+    });
+
     // Replaces `lets the administrator sign in with the password they were given` (approved TEST
     // CHANGE REQUEST, 2026-08-19). There is no password to be given any more, and an admin who
     // knows another person's credential is the defect PRD-0010 exists to close.

@@ -37,7 +37,9 @@ const schema = z.object({
     .min(2, 'common.errors.required')
     .max(120, 'common.errors.tooLong'),
   locationAddress: z.string().trim().max(200, 'common.errors.tooLong').optional(),
-  adminEmail: z.string().email('login.errors.email'),
+  // TKT-0133: a club can be created with no administrator yet, and one assigned later from
+  // Users — so this is optional, same shape as locationAddress above.
+  adminEmail: z.union([z.string().trim().email('login.errors.email'), z.literal('')]).optional(),
   adminFirstName: z.string().trim().max(120, 'common.errors.tooLong').optional(),
   adminLastName: z.string().trim().max(120, 'common.errors.tooLong').optional(),
 });
@@ -69,11 +71,11 @@ export default function NewTenantPage() {
         slug: values.slug,
         locationName: values.locationName,
         locationAddress: values.locationAddress || undefined,
-        adminEmail: values.adminEmail,
+        adminEmail: values.adminEmail || undefined,
         adminFirstName: values.adminFirstName || undefined,
         adminLastName: values.adminLastName || undefined,
       });
-      if (!created.notificationSent) {
+      if (!created.notificationSent && values.adminEmail) {
         // Navigating away would take the only notice of the failure with it, and the
         // administrator cannot sign in until someone re-sends the invite.
         setUndeliveredInvite({ id: created.id, email: values.adminEmail, name: created.name });

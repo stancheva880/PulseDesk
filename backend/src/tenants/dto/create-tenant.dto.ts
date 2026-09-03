@@ -44,8 +44,11 @@ export class CreateTenantDto {
   // TKT-0062: no password is accepted here. The administrator is invited and sets their own,
   // so nobody but them ever knows it. forbidNonWhitelisted turns a payload still carrying
   // adminPassword into a 400 by this field's absence alone.
+  // TKT-0133: optional — a club can be onboarded with no administrator yet and one assigned
+  // later from Users. Omitted entirely skips the admin step (see tenants.service.ts's create()).
+  @IsOptional()
   @IsEmail()
-  adminEmail!: string;
+  adminEmail?: string;
 
   @IsOptional()
   @IsString()

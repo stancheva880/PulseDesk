@@ -21,10 +21,11 @@ export class TenantsService {
   ) {}
 
   /**
-   * Onboards a club: the tenant, its first location, and its first ADMIN with a membership and
-   * that location assigned — all in one transaction, so a failure at any step leaves nothing
-   * behind. An email that already exists gains a membership instead of a second account (one
-   * login across clubs, PRD-0001).
+   * Onboards a club: the tenant and its first location always; its first ADMIN only if
+   * `dto.adminEmail` is given (TKT-0133 — a club can be created with nobody administering it
+   * yet, and an administrator assigned later from Users). All of it in one transaction, so a
+   * failure at any step leaves nothing behind. An email that already exists gains a membership
+   * instead of a second account (one login across clubs, PRD-0001).
    *
    * TKT-0062: no password is chosen here. The administrator is mailed after the transaction
    * commits — an invite if they have no password yet, a club-access notice if they already do.
@@ -32,10 +33,12 @@ export class TenantsService {
    * database lock is worse than an unnotified administrator, whose invite can be re-sent.
    */
   async create(dto: CreateTenantDto): Promise<CreatedTenant> {
-    const existing = await this.prisma.user.findUnique({
-      where: { email: dto.adminEmail },
-      select: { id: true, isActive: true, isSuperAdmin: true, passwordHash: true },
-    });
+    const existing = dto.adminEmail
+      ? await this.prisma.user.findUnique({
+          where: { email: dto.adminEmail },
+          select: { id: true, isActive: true, isSuperAdmin: true, passwordHash: true },
+        })
+      : null;
     if (existing?.isSuperAdmin) {
       // A SUPER_ADMIN already reaches every club; a membership would mean nothing.
       throw new ConflictException({
@@ -53,7 +56,7 @@ export class TenantsService {
     }
 
     let tenant: TenantSummary;
-    let adminId: string;
+    let adminId: string | null;
     try {
       ({ tenant, adminId } = await this.prisma.$transaction(async (tx) => {
         const created = await tx.tenant.create({
@@ -68,6 +71,8 @@ export class TenantsService {
           },
           select: { id: true },
         });
+        if (!dto.adminEmail) return { tenant: created, adminId: null };
+
         const membership = { create: { tenantId: created.id, role: UserRole.ADMIN } };
         const assignment = { connect: [{ id: location.id }] };
 
@@ -105,6 +110,11 @@ export class TenantsService {
       throw e;
     }
 
+    // No admin was asked for, so there is no mail to send and nothing that could have failed
+    // to send — `notificationSent: true` reads as "no unresolved notification", which is
+    // exactly what lets the frontend skip its undelivered-invite recovery screen.
+    if (!adminId) return { ...tenant, notificationSent: true };
+
     // Which mail goes out is decided by whether a password exists, not merely by whether the
     // account did: an account that was invited elsewhere and never accepted still has none, so
     // telling it to "sign in as usual" would leave that person with no way in at all.
@@ -119,7 +129,7 @@ export class TenantsService {
         () =>
           this.mail.sendClubAccess({
             // The persisted club name, never dto.name, so the mail cannot name another club.
-            to: dto.adminEmail,
+            to: dto.adminEmail!,
             clubName: tenant.name,
             role: UserRole.ADMIN,
           }),
@@ -127,7 +137,7 @@ export class TenantsService {
     } else {
       // issueInvite reports delivery rather than throwing, so the log line is for the operator
       // and the boolean is for the caller.
-      notificationSent = await this.auth.issueInvite({ id: adminId, email: dto.adminEmail });
+      notificationSent = await this.auth.issueInvite({ id: adminId, email: dto.adminEmail! });
       if (!notificationSent) {
         this.logger.error(`Failed to send onboarding invite (userId=${adminId})`);
       }

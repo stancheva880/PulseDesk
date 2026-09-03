@@ -109,6 +109,35 @@ describe('NewTenantPage', () => {
     expect(hardNavigate).toHaveBeenCalledWith('/dashboard');
   });
 
+  // TKT-0133: adminEmail is optional — a club can be created with nobody administering it
+  // yet, and an administrator assigned later from Users.
+  it('creates the club with no administrator and enters it directly, when adminEmail is left blank', async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(jsonResponse(201, CREATED));
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.type(screen.getByLabelText(/Име на клуба|Club name/), 'Sofia Judo');
+    await user.type(screen.getByLabelText(/Идентификатор|Identifier/), 'sofia-judo');
+    await user.type(screen.getByLabelText(/Първа локация|First location/), 'Central Hall');
+    await user.click(screen.getByRole('button', { name: /Запазване|Save/ }));
+
+    const call = await vi.waitFor(() => {
+      const found = fetchSpy.mock.calls.find(
+        ([, init]) => (init as RequestInit | undefined)?.method === 'POST',
+      );
+      expect(found).toBeDefined();
+      return found!;
+    });
+    const body = JSON.parse(String((call[1] as RequestInit).body)) as Record<string, unknown>;
+    expect(body).not.toHaveProperty('adminEmail');
+
+    // notificationSent: true (nothing to send) — enters the club directly, no recovery screen.
+    await vi.waitFor(() => expect(writeTenantContext).toHaveBeenCalledWith('tenant-new'));
+    expect(hardNavigate).toHaveBeenCalledWith('/dashboard');
+  });
+
   // The invite is the new administrator's only way in — they have no password. A failed send
   // used to be invisible: the response was still 201 and the page navigated away, so the club
   // read as onboarded while nobody could reach it.
@@ -251,7 +280,27 @@ describe('NewTenantPage', () => {
     const nameError = messages.find((m) => m.id === 'name-error');
     expect(nameError).toBeDefined();
     expect(nameError).toHaveAttribute('role', 'alert');
-    // The email rule carries its own message.
+  });
+
+  // TKT-0133: adminEmail is optional (a SUPER_ADMIN can assign one later from Users), but a
+  // value that is present and malformed is still rejected.
+  it('rejects a malformed administrator email without calling the API', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(jsonResponse(201, CREATED));
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.type(screen.getByLabelText(/Име на клуба|Club name/), 'Sofia Judo');
+    await user.type(screen.getByLabelText(/Идентификатор|Identifier/), 'sofia-judo');
+    await user.type(screen.getByLabelText(/Първа локация|First location/), 'Central Hall');
+    await user.type(
+      screen.getByLabelText(/Имейл на администратора|Administrator email/),
+      'not-an-email',
+    );
+    await user.click(screen.getByRole('button', { name: /Запазване|^Save$/ }));
+
     expect(screen.getByText('Въведете валиден имейл адрес.')).toBeInTheDocument();
+    expect(
+      fetchSpy.mock.calls.some(([, init]) => (init as RequestInit | undefined)?.method === 'POST'),
+    ).toBe(false);
   });
 });
