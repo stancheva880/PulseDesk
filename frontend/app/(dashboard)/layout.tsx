@@ -41,6 +41,9 @@ const DENY_RULES: Array<{
   // Creating a club is SUPER_ADMIN-only (tenants.controller.ts is @Roles(SUPER_ADMIN)).
   { role: 'ADMIN', matches: (p) => p.startsWith('/tenants'), redirectTo: '/dashboard' },
   { role: 'EMPLOYEE', matches: (p) => p.startsWith('/tenants'), redirectTo: '/dashboard' },
+  // TKT-0131: the club's payment details are ADMIN/SUPER_ADMIN only (tenants.controller.ts's
+  // payment-details routes). The nav already hides the item from EMPLOYEE.
+  { role: 'EMPLOYEE', matches: (p) => p.startsWith('/payment-details'), redirectTo: '/dashboard' },
   // TKT-0122: platform maintenance is SUPER_ADMIN-only (waitlist-sweep.controller.ts). The nav
   // already hides it; this stops a deep link landing on a page whose only button would 403.
   { role: 'ADMIN', matches: (p) => p.startsWith('/maintenance'), redirectTo: '/dashboard' },

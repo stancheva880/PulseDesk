@@ -87,8 +87,9 @@ describe('MobileNav', () => {
 
   // AC #2 — same destinations, same order, same role filter as the sidebar.
   // Approved TEST CHANGE REQUEST, 2026-08-22: 8 → 9 for /cards (TKT-0106, visit cards).
-  // Same terms: exact set, exact order.
-  it('renders all 9 destinations for an admin, in NAV_ITEMS order', async () => {
+  // Approved TEST CHANGE REQUEST, 2026-09-03: 9 → 10 for /payment-details (TKT-0131, club
+  // payment details moved off /profile into the menu). Same terms: exact set, exact order.
+  it('renders all 10 destinations for an admin, in NAV_ITEMS order', async () => {
     renderNav('ADMIN');
     await screen.findByText('authenticated:ADMIN');
     await userEvent.click(trigger());
@@ -110,6 +111,7 @@ describe('MobileNav', () => {
       '/fees',
       '/cards',
       '/users',
+      '/payment-details',
     ]);
   });
 

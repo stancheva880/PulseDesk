@@ -37,6 +37,7 @@
     "fees": "Fees",
     "cards": "Cards",
     "users": "Users",
+    "paymentDetails": "Payment details",
     "maintenance": "Maintenance",
     "profile": "Profile",
     "editProfile": "Edit profile",
@@ -272,11 +273,12 @@
         "length": "Password must be at least 8 characters.",
         "match": "Passwords do not match."
       }
-    },
-    "clubPaymentDetails": {
-      "title": "Club payment details",
-      "subtitle": "The shared default for every location, unless a location sets its own."
     }
+  },
+  "clubPaymentDetails": {
+    "title": "Club payment details",
+    "subtitle": "The active club's shared default for every location, unless a location sets its own.",
+    "formTitle": "Payment details"
   },
   "dashboard": {
     "title": "Dashboard",

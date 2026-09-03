@@ -12,19 +12,18 @@ import { useAuth } from '@/components/auth-provider';
 import { Topbar } from '@/components/topbar';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { FieldError, SubmitError } from '@/components/ui/field-error';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { PasswordInput } from '@/components/ui/password-input';
 import { apiErrorMessage } from '@/lib/api';
 import { showToast } from '@/components/toast';
 import { landingRoute } from '@/lib/auth-storage';
-import { Tenants, Users, type OwnProfile } from '@/lib/api-resources';
+import { Users, type OwnProfile } from '@/lib/api-resources';
 import { AvatarImageError, compressAvatarFile } from '@/lib/avatar-image';
 import { broadcastAvatarChanged } from '@/lib/avatar-context';
 import { useRequireRole } from '@/lib/use-require-role';
 
-type ProfileTab = 'details' | 'password' | 'clubPayment';
+type ProfileTab = 'details' | 'password';
 
 // Reachable by every signed-in role — no dashboard sidebar or portal nav, since neither
 // shell fits a page that isn't scoped to a role or a club. `useRequireRole(true, ...)`
@@ -37,18 +36,14 @@ export default function ProfilePage() {
   const [profile, setProfile] = useState<OwnProfile | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   // One section visible at a time — TKT-0128: a growing list of stacked cards (profile
-  // details, password, and now the club's payment default) meant an ever-longer page to
-  // scroll through instead of a clean switch between them.
+  // details and password) meant an ever-longer page to scroll through instead of a clean
+  // switch between them.
   const [tab, setTab] = useState<ProfileTab>('details');
 
-  const isManager = user?.role === 'ADMIN' || user?.role === 'SUPER_ADMIN';
   const tabs: Array<{ key: ProfileTab; label: string }> = [
     { key: 'details', label: t('profile.details.title') },
     { key: 'password', label: t('profile.changePassword.title') },
-    ...(isManager ? [{ key: 'clubPayment' as const, label: t('profile.clubPaymentDetails.title') }] : []),
   ];
-  // A role switch (or the tab losing its section) must not leave the page on a hidden tab.
-  const effectiveTab = tabs.some((tb) => tb.key === tab) ? tab : 'details';
 
   useEffect(() => {
     if (!ready) return;
@@ -85,8 +80,8 @@ export default function ProfilePage() {
                 key={tb.key}
                 type="button"
                 role="tab"
-                aria-selected={tb.key === effectiveTab}
-                variant={tb.key === effectiveTab ? 'default' : 'outline'}
+                aria-selected={tb.key === tab}
+                variant={tb.key === tab ? 'default' : 'outline'}
                 onClick={() => setTab(tb.key)}
               >
                 {tb.label}
@@ -96,7 +91,7 @@ export default function ProfilePage() {
 
           {loadError ? <p className="text-sm text-destructive">{loadError}</p> : null}
 
-          {effectiveTab === 'details' ? (
+          {tab === 'details' ? (
             profile ? (
               <ProfileDetailsCard profile={profile} onSaved={setProfile} />
             ) : !loadError ? (
@@ -104,9 +99,7 @@ export default function ProfilePage() {
             ) : null
           ) : null}
 
-          {effectiveTab === 'password' ? <ChangePasswordCard /> : null}
-
-          {effectiveTab === 'clubPayment' && isManager ? <ClubPaymentDetailsCard /> : null}
+          {tab === 'password' ? <ChangePasswordCard /> : null}
         </div>
       </main>
     </div>
@@ -498,129 +491,3 @@ function ChangePasswordCard() {
   );
 }
 
-const paymentDetailsSchema = z.object({
-  bankIban: z.string().trim().max(50).optional(),
-  bankAccountHolder: z.string().trim().max(120).optional(),
-  revolutHandle: z.string().trim().max(120).optional(),
-  myposLink: z.union([z.string().trim().url('locations.errors.myposLink'), z.literal('')]).optional(),
-  cashNote: z.string().trim().max(500).optional(),
-});
-type PaymentDetailsFormValues = z.infer<typeof paymentDetailsSchema>;
-
-// ADMIN or SUPER_ADMIN only (gated by the caller). The club's shared default — every
-// location falls back to these fields when it has not set its own (locations/location-form.tsx).
-function ClubPaymentDetailsCard() {
-  const { t } = useTranslation();
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const [submitError, setSubmitError] = useState<string | null>(null);
-  const [loaded, setLoaded] = useState(false);
-
-  const {
-    register,
-    handleSubmit,
-    reset,
-    formState: { errors, isSubmitting },
-  } = useForm<PaymentDetailsFormValues>({
-    resolver: zodResolver(paymentDetailsSchema),
-    defaultValues: {
-      bankIban: '',
-      bankAccountHolder: '',
-      revolutHandle: '',
-      myposLink: '',
-      cashNote: '',
-    },
-  });
-
-  useEffect(() => {
-    Tenants.getPaymentDetails()
-      .then((d) => {
-        reset({
-          bankIban: d.bankIban ?? '',
-          bankAccountHolder: d.bankAccountHolder ?? '',
-          revolutHandle: d.revolutHandle ?? '',
-          myposLink: d.myposLink ?? '',
-          cashNote: d.cashNote ?? '',
-        });
-        setLoaded(true);
-      })
-      .catch((e: unknown) => setLoadError(apiErrorMessage(e)));
-  }, [reset]);
-
-  const onSubmit = async (values: PaymentDetailsFormValues) => {
-    setSubmitError(null);
-    try {
-      const asNullable = (v: string | undefined) => (v ? v : null);
-      await Tenants.updatePaymentDetails({
-        bankIban: asNullable(values.bankIban),
-        bankAccountHolder: asNullable(values.bankAccountHolder),
-        revolutHandle: asNullable(values.revolutHandle),
-        myposLink: asNullable(values.myposLink),
-        cashNote: asNullable(values.cashNote),
-      });
-      showToast({ text: t('common.savedToast'), variant: 'success' });
-    } catch (e) {
-      setSubmitError(apiErrorMessage(e));
-    }
-  };
-
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-base">{t('profile.clubPaymentDetails.title')}</CardTitle>
-        <p className="text-sm text-muted-foreground">{t('profile.clubPaymentDetails.subtitle')}</p>
-      </CardHeader>
-      <CardContent>
-        {loadError ? <p className="text-sm text-destructive">{loadError}</p> : null}
-        {!loaded && !loadError ? (
-          <p className="text-sm text-muted-foreground">{t('common.loading')}</p>
-        ) : null}
-        {loaded ? (
-          <form className="space-y-4" onSubmit={handleSubmit(onSubmit)} noValidate>
-            <div className="space-y-1.5">
-              <Label htmlFor="club-bankIban">{t('locations.fields.bankIban')}</Label>
-              <Input id="club-bankIban" {...register('bankIban')} />
-              <FieldError id="club-bankIban-error" messageKey={errors.bankIban?.message} />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="club-bankAccountHolder">
-                {t('locations.fields.bankAccountHolder')}
-              </Label>
-              <Input id="club-bankAccountHolder" {...register('bankAccountHolder')} />
-              <FieldError
-                id="club-bankAccountHolder-error"
-                messageKey={errors.bankAccountHolder?.message}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="club-revolutHandle">{t('locations.fields.revolutHandle')}</Label>
-              <Input id="club-revolutHandle" {...register('revolutHandle')} />
-              <FieldError
-                id="club-revolutHandle-error"
-                messageKey={errors.revolutHandle?.message}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="club-myposLink">{t('locations.fields.myposLink')}</Label>
-              <Input
-                id="club-myposLink"
-                type="url"
-                placeholder="https://www.mypos.com/..."
-                {...register('myposLink')}
-              />
-              <FieldError id="club-myposLink-error" messageKey={errors.myposLink?.message} />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="club-cashNote">{t('locations.fields.cashNote')}</Label>
-              <Input id="club-cashNote" {...register('cashNote')} />
-              <FieldError id="club-cashNote-error" messageKey={errors.cashNote?.message} />
-            </div>
-            <SubmitError message={submitError} />
-            <Button type="submit" disabled={isSubmitting}>
-              {isSubmitting ? t('common.saving') : t('common.save')}
-            </Button>
-          </form>
-        ) : null}
-      </CardContent>
-    </Card>
-  );
-}

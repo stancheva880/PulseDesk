@@ -6,6 +6,7 @@ import {
   CreditCard,
   Dumbbell,
   LayoutDashboard,
+  Landmark,
   MapPin,
   Receipt,
   UserCog,
@@ -41,6 +42,15 @@ export const NAV_ITEMS: NavItem[] = [
   { href: '/fees', labelKey: 'nav.fees', icon: Receipt },
   { href: '/cards', labelKey: 'nav.cards', icon: CreditCard },
   { href: '/users', labelKey: 'nav.users', icon: UserCog, roles: ['SUPER_ADMIN', 'ADMIN'] },
+  // TKT-0131: moved off /profile — a club-wide setting belongs in the menu, not an admin's
+  // personal settings page. Follows the active tenant (Topbar's selector), so a SUPER_ADMIN
+  // running several clubs sets different payment details per club.
+  {
+    href: '/payment-details',
+    labelKey: 'nav.paymentDetails',
+    icon: Landmark,
+    roles: ['SUPER_ADMIN', 'ADMIN'],
+  },
   // TKT-0122: platform maintenance actions. SUPER_ADMIN-only, and layout.tsx DENY_RULES
   // bounces anyone else who deep-links the route.
   { href: '/maintenance', labelKey: 'nav.maintenance', icon: Wrench, roles: ['SUPER_ADMIN'] },

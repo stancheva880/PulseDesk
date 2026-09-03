@@ -228,6 +228,29 @@ describe('DashboardLayout route guards', () => {
     expect(await screen.findByText(CHILD)).toBeInTheDocument();
     expect(nav.replace).not.toHaveBeenCalled();
   });
+
+  // TKT-0131: the club payment-details page moved off /profile into the menu. It's
+  // ADMIN/SUPER_ADMIN, same floor as the endpoint (tenants.controller.ts).
+  it('redirects an EMPLOYEE away from /payment-details', async () => {
+    renderLayout('EMPLOYEE', '/payment-details');
+
+    await waitFor(() => expect(nav.replace).toHaveBeenCalledWith('/dashboard'));
+    expect(screen.queryByText(CHILD)).not.toBeInTheDocument();
+  });
+
+  it('lets an ADMIN open /payment-details', async () => {
+    renderLayout('ADMIN', '/payment-details');
+
+    expect(await screen.findByText(CHILD)).toBeInTheDocument();
+    expect(nav.replace).not.toHaveBeenCalled();
+  });
+
+  it('lets a SUPER_ADMIN open /payment-details', async () => {
+    renderLayout('SUPER_ADMIN', '/payment-details');
+
+    expect(await screen.findByText(CHILD)).toBeInTheDocument();
+    expect(nav.replace).not.toHaveBeenCalled();
+  });
 });
 
 // TKT-0039: with no active tenant every tenant-scoped route answers 400 (SUPER_ADMIN) or
