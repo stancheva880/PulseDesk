@@ -101,6 +101,7 @@ describe('FeesController (e2e-ish)', () => {
     tenantId: string,
     traineeIds: string[] = [],
     locationId?: string,
+    trainerIds: string[] = [],
   ) {
     return prisma.class.create({
       data: {
@@ -112,6 +113,7 @@ describe('FeesController (e2e-ish)', () => {
           ? { connect: traineeIds.map((id) => ({ id })) }
           : undefined,
         locations: locationId ? { connect: [{ id: locationId }] } : undefined,
+        trainers: trainerIds.length ? { connect: trainerIds.map((id) => ({ id })) } : undefined,
       },
     });
   }
@@ -541,6 +543,58 @@ describe('FeesController (e2e-ish)', () => {
     });
   });
 
+  // TKT-0129: PATCH opened to EMPLOYEE, scoped to fees whose class they teach.
+  describe('PATCH /fees/:id — EMPLOYEE scope', () => {
+    it('an employee can edit a fee for a class they teach', async () => {
+      const e = await setupActor(UserRole.EMPLOYEE);
+      const tr = await newTrainee(e.tenantId);
+      const cls = await newMonthlyClass(e.tenantId, [tr.id], e.locationId, [e.userId]);
+      const fee = await prisma.fee.create({
+        data: {
+          tenantId: e.tenantId,
+          classId: cls.id,
+          traineeId: tr.id,
+          periodStart: new Date('2026-05-01'),
+          periodEnd: new Date('2026-05-31'),
+          amount: 100,
+        },
+      });
+
+      const res = await request(server)
+        .patch(`/fees/${fee.id}`)
+        .set('Authorization', `Bearer ${e.accessToken}`)
+        .set('X-Tenant-Id', e.tenantId)
+        .send({ notes: 'Paid in cash at the front desk' })
+        .expect(200);
+      expect(res.body.notes).toBe('Paid in cash at the front desk');
+    });
+
+    it('an employee gets 404 editing a fee for a class they do not teach', async () => {
+      const e = await setupActor(UserRole.EMPLOYEE);
+      const tr = await newTrainee(e.tenantId);
+      // No trainerIds — the class exists at the employee's own location, but nobody
+      // connected them as its trainer.
+      const cls = await newMonthlyClass(e.tenantId, [tr.id], e.locationId);
+      const fee = await prisma.fee.create({
+        data: {
+          tenantId: e.tenantId,
+          classId: cls.id,
+          traineeId: tr.id,
+          periodStart: new Date('2026-05-01'),
+          periodEnd: new Date('2026-05-31'),
+          amount: 100,
+        },
+      });
+
+      await request(server)
+        .patch(`/fees/${fee.id}`)
+        .set('Authorization', `Bearer ${e.accessToken}`)
+        .set('X-Tenant-Id', e.tenantId)
+        .send({ notes: 'Should not land' })
+        .expect(404);
+    });
+  });
+
   describe('GET /fees — period filter validation', () => {
     it('rejects an unparseable periodStartFrom (400)', async () => {
       const a = await setupActor(UserRole.ADMIN);
@@ -635,7 +689,7 @@ describe('FeesController (e2e-ish)', () => {
     async function seedFee(
       a: TestActor,
       trainee: { firstName: string; lastName: string; email?: string },
-      opts: { status?: FeeStatus; locationId?: string } = {},
+      opts: { status?: FeeStatus; locationId?: string; trainerId?: string } = {},
     ) {
       const tr = await prisma.trainee.create({
         data: {
@@ -646,7 +700,12 @@ describe('FeesController (e2e-ish)', () => {
           dateOfBirth: new Date('2000-01-01'),
         },
       });
-      const cls = await newMonthlyClass(a.tenantId, [tr.id], opts.locationId ?? a.locationId);
+      const cls = await newMonthlyClass(
+        a.tenantId,
+        [tr.id],
+        opts.locationId ?? a.locationId,
+        opts.trainerId ? [opts.trainerId] : [],
+      );
       const fee = await prisma.fee.create({
         data: {
           tenantId: a.tenantId,
@@ -727,18 +786,16 @@ describe('FeesController (e2e-ish)', () => {
       expect(idsOf(res)).toEqual([unpaid.id]);
     });
 
-    it("does not return a fee outside the caller's location scope, with or without search", async () => {
+    // TKT-0129: EMPLOYEE is scoped by which classes they teach, not by location — a location
+    // can host classes taught by other trainers too.
+    it("does not return a fee outside the caller's class scope, with or without search", async () => {
       const a = await setupActor(UserRole.EMPLOYEE);
-      // Same tenant, second location the employee is NOT assigned to.
-      const other = await prisma.location.create({
-        data: { tenantId: a.tenantId, name: `Other-${randomUUID()}` },
-      });
-      const hidden = await seedFee(
+      const hidden = await seedFee(a, { firstName: 'Скрит', lastName: 'Иванов' });
+      const visible = await seedFee(
         a,
-        { firstName: 'Скрит', lastName: 'Иванов' },
-        { locationId: other.id },
+        { firstName: 'Видим', lastName: 'Иванов' },
+        { trainerId: a.userId },
       );
-      const visible = await seedFee(a, { firstName: 'Видим', lastName: 'Иванов' });
 
       const unfiltered = await listWith(a, '').expect(200);
       expect(idsOf(unfiltered)).toEqual([visible.fee.id]);

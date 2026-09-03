@@ -36,17 +36,40 @@ export class TraineesService {
     private readonly scope: LocationScopeService,
   ) {}
 
+  // TKT-0129: EMPLOYEE is scoped to trainees enrolled in a class they actually teach — as a
+  // class trainer, or as a trainer on one of its sessions (the same substitute-session case
+  // ClassesService already covers) — not merely to their assigned locations. A location can
+  // host classes taught by other trainers. ADMIN/SUPER_ADMIN keep the location-based scope.
+  private async scopedWhere(
+    user: AuthenticatedUser,
+    tenantId: string,
+  ): Promise<Prisma.TraineeWhereInput> {
+    if (user.role === UserRole.EMPLOYEE) {
+      return {
+        classes: {
+          some: {
+            OR: [
+              { trainers: { some: { id: user.id } } },
+              { sessions: { some: { trainers: { some: { id: user.id } } } } },
+            ],
+          },
+        },
+      };
+    }
+    return this.scope.locationsWhere(user, tenantId);
+  }
+
   async list(
     tenantId: string,
     user: AuthenticatedUser,
     pagination?: PaginationInput,
     filters?: TraineeListFilters,
   ): Promise<PaginatedResult<Trainee>> {
-    // The search clause goes in `AND`, so it narrows the location scope rather than replacing it.
+    // The search clause goes in `AND`, so it narrows the scope rather than replacing it.
     const search = searchVariants(filters?.search ?? '');
     const where: Prisma.TraineeWhereInput = {
       tenantId,
-      ...(await this.scope.locationsWhere(user, tenantId)),
+      ...(await this.scopedWhere(user, tenantId)),
       ...(search.length > 0
         ? {
             AND: [
@@ -79,7 +102,7 @@ export class TraineesService {
       where: {
         id,
         tenantId,
-        ...(await this.scope.locationsWhere(user, tenantId)),
+        ...(await this.scopedWhere(user, tenantId)),
       },
       include: {
         contacts: true,

@@ -21,6 +21,7 @@ const PASSWORD = 'TestPass123!';
 
 interface TestActor {
   tenantId: string;
+  userId: string;
   locationId: string;
   accessToken: string;
 }
@@ -93,7 +94,12 @@ describe('TraineesController (e2e-ish)', () => {
         : {}),
     });
     const tokens = await auth.login(user);
-    return { tenantId: tenant.id, locationId: location.id, accessToken: tokens.accessToken };
+    return {
+      tenantId: tenant.id,
+      userId: user.id,
+      locationId: location.id,
+      accessToken: tokens.accessToken,
+    };
   }
 
   describe('POST /trainees — under-18 rule (PRD)', () => {
@@ -386,6 +392,17 @@ describe('TraineesController (e2e-ish)', () => {
   describe('Role gating', () => {
     it('lets an employee read a trainee with the guardian contacts', async () => {
       const e = await setupActor(UserRole.EMPLOYEE);
+      // TKT-0129: a trainer reads trainees enrolled in a class they teach, not merely
+      // trainees at their own location.
+      const cls = await prisma.class.create({
+        data: {
+          tenantId: e.tenantId,
+          name: `Cls-${randomUUID()}`,
+          billingMode: BillingMode.PER_SESSION,
+          sessionPrice: 10,
+          trainers: { connect: [{ id: e.userId }] },
+        },
+      });
       const trainee = await prisma.trainee.create({
         data: {
           tenantId: e.tenantId,
@@ -393,8 +410,7 @@ describe('TraineesController (e2e-ish)', () => {
           lastName: 'Smith',
           dateOfBirth: new Date(minorDobIso),
           phone: '555-9999',
-          // TKT-0054: a trainer reads their own locations, so the fixture shares theirs.
-          locations: { connect: [{ id: e.locationId }] },
+          classes: { connect: [{ id: cls.id }] },
           contacts: {
             create: [
               {
@@ -422,10 +438,26 @@ describe('TraineesController (e2e-ish)', () => {
       expect(res.body.contacts[0].phone).toBe('555-1234');
     });
 
-    it('hides a trainee at a location the trainer is not assigned to', async () => {
+    // TKT-0129: EMPLOYEE is scoped by which classes they teach, not by location — a location
+    // can host classes taught by other trainers too.
+    it('hides a trainee not enrolled in any class the trainer teaches', async () => {
       const e = await setupActor(UserRole.EMPLOYEE);
-      const other = await prisma.location.create({
-        data: { tenantId: e.tenantId, name: `Annex-${randomUUID()}` },
+      const myClass = await prisma.class.create({
+        data: {
+          tenantId: e.tenantId,
+          name: `Cls-${randomUUID()}`,
+          billingMode: BillingMode.PER_SESSION,
+          sessionPrice: 10,
+          trainers: { connect: [{ id: e.userId }] },
+        },
+      });
+      const otherClass = await prisma.class.create({
+        data: {
+          tenantId: e.tenantId,
+          name: `Cls-${randomUUID()}`,
+          billingMode: BillingMode.PER_SESSION,
+          sessionPrice: 10,
+        },
       });
       const mine = await prisma.trainee.create({
         data: {
@@ -433,7 +465,7 @@ describe('TraineesController (e2e-ish)', () => {
           firstName: 'Mine',
           lastName: 'Smith',
           dateOfBirth: new Date(adultDobIso),
-          locations: { connect: [{ id: e.locationId }] },
+          classes: { connect: [{ id: myClass.id }] },
         },
       });
       const theirs = await prisma.trainee.create({
@@ -442,7 +474,7 @@ describe('TraineesController (e2e-ish)', () => {
           firstName: 'Theirs',
           lastName: 'Jones',
           dateOfBirth: new Date(adultDobIso),
-          locations: { connect: [{ id: other.id }] },
+          classes: { connect: [{ id: otherClass.id }] },
         },
       });
 

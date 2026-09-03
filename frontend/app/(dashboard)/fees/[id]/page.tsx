@@ -27,6 +27,10 @@ export default function FeeDetailPage() {
   const { t } = useTranslation();
   const { user } = useAuth();
   const admin = isManager(user?.role);
+  // TKT-0129: a trainer edits the amount/notes of a fee for a class they teach — the backend
+  // scopes this the same way it scopes reads (fees.service.ts's classAccessScope). Payments
+  // and refunds stay ADMIN/SUPER_ADMIN only below (unchanged, not part of this request).
+  const canEditFee = admin || user?.role === 'EMPLOYEE';
   const router = useRouter();
   const params = useParams<{ id: string }>();
   const id = params.id;
@@ -271,7 +275,7 @@ export default function FeeDetailPage() {
                     min="0"
                     value={editAmount}
                     onChange={(e) => setEditAmount(e.target.value)}
-                    disabled={!admin}
+                    disabled={!canEditFee}
                   />
                 </div>
                 <div className="space-y-1.5">
@@ -293,13 +297,13 @@ export default function FeeDetailPage() {
                     rows={3}
                     value={editNotes}
                     onChange={(e) => setEditNotes(e.target.value)}
-                    disabled={!admin}
+                    disabled={!canEditFee}
                   />
                 </div>
                 {editError ? (
                   <p className="text-sm text-destructive sm:col-span-2">{editError}</p>
                 ) : null}
-                {admin ? (
+                {canEditFee ? (
                   <div className="sm:col-span-2">
                     <Button type="submit" disabled={editBusy}>
                       {editBusy ? t('common.saving') : t('common.save')}

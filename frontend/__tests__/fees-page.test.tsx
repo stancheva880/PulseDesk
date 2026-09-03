@@ -479,8 +479,8 @@ describe('FeesListPage', () => {
   });
 });
 
-// TKT-0088 AC #5: fees passes `actions: undefined` for non-admins — no actions column at all —
-// and a non-admin must still open a fee by activating its row.
+// TKT-0088 AC #5: fees passes `actions: undefined` for a role with no edit/delete rights at all
+// (e.g. CUSTOMER never reaches this page) — no actions column, so the row itself must open it.
 describe('FeesListPage — row navigation', () => {
   afterEach(() => {
     vi.restoreAllMocks();
@@ -515,5 +515,43 @@ describe('FeesListPage — row navigation', () => {
     fireEvent.click(await screen.findByText('Ada Lovelace'));
 
     expect(push).toHaveBeenCalledWith('/fees/f1');
+  });
+});
+
+// TKT-0129: a trainer can edit fees for classes they teach (scoped server-side), so the list
+// now shows them an Edit action too — but never Delete, which stays admin-only.
+describe('FeesListPage — actions column by role', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    push.mockReset();
+  });
+
+  function signInAndMock(role: string) {
+    const exp = Math.floor(Date.now() / 1000) + 600;
+    setAccessToken(buildJwt({ sub: 'u', email: 'a@b', role, tenantId: 't', exp }));
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = typeof input === 'string' ? input : (input as Request).url;
+      if (url.includes('/trainees')) return jsonResponse(200, paged(TRAINEES));
+      if (url.includes('/classes')) return jsonResponse(200, paged(CLASSES));
+      if (url.includes('/fees')) return jsonResponse(200, paged(FEES));
+      return jsonResponse(200, {});
+    });
+  }
+
+  it('an employee sees an Edit action but not Delete', async () => {
+    signInAndMock('EMPLOYEE');
+    renderPage();
+
+    const editLinks = await screen.findAllByRole('link', { name: 'Редактиране' });
+    expect(editLinks.length).toBeGreaterThan(0);
+    expect(screen.queryByText('Изтриване')).not.toBeInTheDocument();
+  });
+
+  it('an admin sees both Edit and Delete', async () => {
+    signInAndMock('ADMIN');
+    renderPage();
+
+    expect((await screen.findAllByRole('link', { name: 'Редактиране' })).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText('Изтриване')).length).toBeGreaterThan(0);
   });
 });

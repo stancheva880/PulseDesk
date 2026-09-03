@@ -87,9 +87,11 @@ export class FeesController {
     return this.fees.create(tenantId, dto, user);
   }
 
+  // TKT-0129: EMPLOYEE may edit a fee too, scoped the same as reads (fees.service.ts's
+  // classAccessScope) — findById() inside update() answers 404 for a class they don't teach.
   @ApiOperation({ summary: 'Change one fee. The amount cannot go below what is already paid.' })
   @Patch(':id')
-  @Roles(UserRole.ADMIN)
+  @Roles(UserRole.ADMIN, UserRole.EMPLOYEE)
   @ResponseSchema('Fee', FeeSchema)
   update(
     @TenantId() tenantId: string,

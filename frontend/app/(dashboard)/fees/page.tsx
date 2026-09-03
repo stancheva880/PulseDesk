@@ -50,6 +50,9 @@ function FeesList({ initialMonth }: { initialMonth: string }) {
   const { t } = useTranslation();
   const { user } = useAuth();
   const admin = isManager(user?.role);
+  // TKT-0129: a trainer can now open a row to edit a fee for a class they teach — scoped
+  // server-side, so a row outside their classes never even appears in this list.
+  const canEditFee = admin || user?.role === 'EMPLOYEE';
 
   // Filters live in URL-style state but we keep it local for now.
   const [statusFilter, setStatusFilter] = useState<FeeStatusFilter | ''>('');
@@ -413,20 +416,22 @@ function FeesList({ initialMonth }: { initialMonth: string }) {
         sort={sort}
         onSortToggle={onSortToggle}
         actions={
-          admin
+          canEditFee
             ? (row) => (
                 <div className="flex justify-end gap-1">
                   <Button asChild variant="ghost" size="sm">
                     <Link href={`/fees/${row.fee.id}`}>{t('common.edit')}</Link>
                   </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="text-destructive hover:bg-destructive/10 hover:text-destructive"
-                    onClick={() => setPendingDelete(row.fee)}
-                  >
-                    {t('common.delete')}
-                  </Button>
+                  {admin ? (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                      onClick={() => setPendingDelete(row.fee)}
+                    >
+                      {t('common.delete')}
+                    </Button>
+                  ) : null}
                 </div>
               )
             : undefined

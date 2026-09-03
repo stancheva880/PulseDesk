@@ -602,3 +602,78 @@ describe('FeeDetailPage — payment ledger flow', () => {
     });
   });
 });
+
+// TKT-0129: a trainer can edit the amount/notes of a fee for a class they teach — scoped
+// server-side — but payments/refunds stay admin-only, unlike an admin's full ledger access.
+describe('FeeDetailPage — employee edit rights', () => {
+  beforeEach(() => {
+    const exp = Math.floor(Date.now() / 1000) + 600;
+    setAccessToken(buildJwt({ sub: 'u', email: 'coach@x', role: 'EMPLOYEE', tenantId: 't', exp }));
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('lets an employee edit and save the fee amount and notes', async () => {
+    const user = userEvent.setup();
+    let patched: Record<string, unknown> | null = null;
+    vi.spyOn(globalThis, 'fetch').mockImplementation((input, init) => {
+      const url = typeof input === 'string' ? input : (input as Request).url;
+      const method = init?.method ?? 'GET';
+      if (url.endsWith('/fees/f1') && method === 'PATCH') {
+        patched = JSON.parse(init!.body as string);
+        return Promise.resolve(jsonResponse(200, FEE_DETAIL_BASE));
+      }
+      if (url.endsWith('/fees/f1')) return Promise.resolve(jsonResponse(200, FEE_DETAIL_BASE));
+      return Promise.resolve(jsonResponse(404, null));
+    });
+
+    renderPage();
+    const amount = (await screen.findByLabelText(
+      /Amount|Сума/,
+    )) as HTMLInputElement;
+    expect(amount).not.toBeDisabled();
+
+    await user.clear(amount);
+    await user.type(amount, '80');
+    await user.click(screen.getByRole('button', { name: /^Save$|^Запазване$/ }));
+
+    await vi.waitFor(() => expect(patched).not.toBeNull());
+    expect(patched).toMatchObject({ amount: 80 });
+  });
+
+  it('does not offer the payments ledger add-form or delete actions to an employee', async () => {
+    const paidFee = {
+      ...FEE_DETAIL_BASE,
+      status: 'PARTIAL',
+      payments: [
+        {
+          id: 'p1',
+          tenantId: 't',
+          feeId: 'f1',
+          amount: '40.00',
+          paidAt: '2026-03-15T00:00:00.000Z',
+          method: 'cash',
+          notes: null,
+          recordedById: 'u',
+          recordedByEmailSnapshot: 'admin@x',
+          recordedByNameSnapshot: null,
+          createdAt: '',
+        },
+      ],
+    };
+    vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
+      const url = typeof input === 'string' ? input : (input as Request).url;
+      if (url.endsWith('/fees/f1')) return Promise.resolve(jsonResponse(200, paidFee));
+      return Promise.resolve(jsonResponse(404, null));
+    });
+
+    renderPage();
+    await screen.findByText(/Yoga 101/);
+
+    // The existing payment row shows, but with no delete action and no add-payment form.
+    expect(screen.getByText('cash')).toBeInTheDocument();
+    expect(screen.queryByText('Изтриване')).not.toBeInTheDocument();
+    expect(document.getElementById('p-amount')).toBeNull();
+  });
+});

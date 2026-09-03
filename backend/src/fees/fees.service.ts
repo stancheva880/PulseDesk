@@ -7,6 +7,7 @@ import {
   BillingMode,
   FeeStatus,
   Prisma,
+  UserRole,
   type Fee,
 } from '@prisma/client';
 
@@ -64,6 +65,27 @@ export class FeesService {
     private readonly scope: LocationScopeService,
   ) {}
 
+  // TKT-0129: EMPLOYEE is scoped to the classes they actually teach — as a class trainer, or
+  // as a trainer on one of its sessions (the same substitute-session case ClassesService
+  // already covers) — not merely to their assigned locations. A location can host classes
+  // taught by other trainers, and the old location-only scope let a trainer see and (once
+  // PATCH opened up) edit fees for every class at their hall, not just their own.
+  // ADMIN/SUPER_ADMIN keep the existing location-based scope unchanged.
+  private async classAccessScope(
+    user: AuthenticatedUser,
+    tenantId: string,
+  ): Promise<Prisma.ClassWhereInput> {
+    if (user.role === UserRole.EMPLOYEE) {
+      return {
+        OR: [
+          { trainers: { some: { id: user.id } } },
+          { sessions: { some: { trainers: { some: { id: user.id } } } } },
+        ],
+      };
+    }
+    return this.scope.locationsWhere(user, tenantId);
+  }
+
   async list(
     tenantId: string,
     filters: FeeListFilters = {},
@@ -108,17 +130,17 @@ export class FeesService {
       ];
     }
 
-    const scoped = await this.scope.locationsWhere(user, tenantId);
-    if (scoped.locations) {
-      // TKT-0106: class-less (card purchase) fees are tenant-level money — the location
-      // scope narrows class fees but must not hide class-less ones. Goes in AND so it
-      // composes with the search clause instead of widening it.
-      const locationScope: Prisma.FeeWhereInput = {
+    const scoped = await this.classAccessScope(user, tenantId);
+    if (Object.keys(scoped).length > 0) {
+      // TKT-0106: class-less (card purchase) fees are tenant-level money — the scope narrows
+      // class fees but must not hide class-less ones. Goes in AND so it composes with the
+      // search clause instead of widening it.
+      const classScope: Prisma.FeeWhereInput = {
         OR: [{ classId: null }, { class: scoped }],
       };
       where.AND = where.AND
-        ? [...(where.AND as Prisma.FeeWhereInput[]), locationScope]
-        : [locationScope];
+        ? [...(where.AND as Prisma.FeeWhereInput[]), classScope]
+        : [classScope];
     }
 
     const p = normalizePagination(pagination);
@@ -151,9 +173,9 @@ export class FeesService {
 
   async findById(tenantId: string, id: string, user: AuthenticatedUser) {
     const where: Prisma.FeeWhereInput = { id, tenantId };
-    const scoped = await this.scope.locationsWhere(user, tenantId);
-    // TKT-0106: class-less fees stay visible to every admin of the tenant.
-    if (scoped.locations) where.OR = [{ classId: null }, { class: scoped }];
+    const scoped = await this.classAccessScope(user, tenantId);
+    // TKT-0106: class-less fees stay visible to every scoped reader of the tenant.
+    if (Object.keys(scoped).length > 0) where.OR = [{ classId: null }, { class: scoped }];
     const fee = await this.prisma.fee.findFirst({
       where,
       include: {
@@ -167,29 +189,30 @@ export class FeesService {
     return fee;
   }
 
-  // Tenant-bound + ADMIN-location-scoped via the fee's class; SUPER_ADMIN passes through.
-  // Shared gate for the fee's sub-ledgers (payments, refunds — TKT-0105 moved it here).
-  // TKT-0106: class-less (card purchase) fees stay visible to every admin of the tenant.
+  // Tenant-bound + class-scoped (ADMIN/EMPLOYEE via classAccessScope); SUPER_ADMIN passes
+  // through. Shared gate for the fee's sub-ledgers (payments, refunds — TKT-0105 moved it here).
+  // TKT-0106: class-less (card purchase) fees stay visible to every scoped reader of the tenant.
   async assertFeeAccessible(
     tenantId: string,
     feeId: string,
     user: AuthenticatedUser,
   ): Promise<void> {
     const where: Prisma.FeeWhereInput = { id: feeId, tenantId };
-    const scoped = await this.scope.locationsWhere(user, tenantId);
-    if (scoped.locations) where.OR = [{ classId: null }, { class: scoped }];
+    const scoped = await this.classAccessScope(user, tenantId);
+    if (Object.keys(scoped).length > 0) where.OR = [{ classId: null }, { class: scoped }];
     const found = await this.prisma.fee.count({ where });
     if (!found) throw new NotFoundException(`Fee ${feeId} not found`);
   }
 
-  // Validates that an ADMIN can access fees for the given class. Used by create/update.
+  // Validates that the actor can access fees for the given class. Used by create/update
+  // (ADMIN) and by the unbilled-gap paths (ADMIN and EMPLOYEE).
   private async assertClassAccessible(
     user: AuthenticatedUser,
     tenantId: string,
     classId: string,
   ): Promise<void> {
-    const scoped = await this.scope.locationsWhere(user, tenantId);
-    if (!scoped.locations) return;
+    const scoped = await this.classAccessScope(user, tenantId);
+    if (Object.keys(scoped).length === 0) return;
     const ok = await this.prisma.class.count({
       where: { id: classId, tenantId, ...scoped },
     });
@@ -293,7 +316,7 @@ export class FeesService {
         ...(dto.classId ? { id: dto.classId } : {}),
         // Skip classes without a monthlyAmount — they have no fee to charge.
         monthlyAmount: { not: null },
-        ...(await this.scope.locationsWhere(user, tenantId)),
+        ...(await this.classAccessScope(user, tenantId)),
       },
       include: {
         trainees: { select: { id: true, firstName: true, lastName: true } },
